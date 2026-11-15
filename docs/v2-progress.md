@@ -9,3 +9,4 @@ Ph0b · main run 43700532978 red (api25 snapshot hang) · 64bc35e · fixing on b
 Ph0b · all green on attempt 1 after B11/B12 · 7eadd7c · android 43704071449 · fast-forward main again
 Ph0b · main fast-forwarded · 6f16f1e · main android 43704843235 green (all 4, attempt 1) · DONE
 Ph1 · ferry.py 2.0.0 + all §2.13/§2.14 tests, pc 4/4 + app-build green · 9931a4e · pc 43715028378, android 43715028407 · [emu] run on branch, then fast-forward main
+Ph1 · emulator suites green against ferry.py 2.0 (dispatched) · d7ec0a9 · android 43715299033 · fast-forward main
