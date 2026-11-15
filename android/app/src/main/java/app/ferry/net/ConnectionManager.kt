@@ -58,13 +58,18 @@ class ConnectionManager(
     private val _state = MutableStateFlow<ConnectionState>(ConnectionState.Looking)
     val state: StateFlow<ConnectionState> = _state
     private val lock = Mutex()
-    @Volatile private var generation = 0
+    /** Locates begun so far, and the number of the last one that finished (−1 = none). */
+    @Volatile private var started = 0
+    @Volatile private var lastFinished = -1
 
     init {
         scope.launch {
             network.chosen.map { it?.network }.distinctUntilChanged().drop(1).collect {
-                log("network changed → locate again")
-                relocate()
+                // Only once the app has started locating (activity start), never from the process start alone.
+                if (started > 0) {
+                    log("network changed → locate again")
+                    relocate()
+                }
             }
         }
     }
@@ -84,9 +89,12 @@ class ConnectionManager(
 
     /** Locates now (or waits for the locate in progress) and returns the PC's API, or null. */
     suspend fun relocate(): FerryApi? {
-        val seen = generation
+        val asked = started // a locate that begins from now on answers this request
         return lock.withLock {
-            if (generation != seen) return@withLock api() // a locate finished while we waited
+            // Ph4 CI (B41): only a locate that *began after* the request may answer it; one already running
+            // when the request came may have used old settings (e.g. before a test or the user set the address).
+            if (lastFinished >= asked) return@withLock api()
+            val me = started++
             if (_state.value !is ConnectionState.Connected) _state.value = ConnectionState.Looking
             val r = try {
                 locator().locate()
@@ -109,7 +117,7 @@ class ConnectionManager(
                 else -> s.javaClass.simpleName
             })
             _state.value = s
-            generation++
+            lastFinished = me
             if (r is LocateResult.Found) checkUpdate(r.api)
             (s as? ConnectionState.Connected)?.api
         }
