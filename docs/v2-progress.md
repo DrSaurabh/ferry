@@ -22,3 +22,4 @@ Ph3a · server, downloads, update, log; all jobs incl. three emulator suites gre
 Ph3a · main fast-forwarded · 1005e37 · main android 43742299970 green (all 6 jobs) · DONE
 Ph3b · discovery + cast + tests green (core-jvm ×2, app-build, emulator-api25) · 86794a7 · android 43744835236 · all-emulator run, fast-forward main
 Ph3b · main fast-forwarded · d0da3d5 · main android 43747308064 green (all 6 jobs) · DONE
+Ph4 · app skeleton, connection, settings, manifest/APK checks, package + dist jobs; all jobs incl. three emulator suites green · ea01b1f · android 43754052469 · fast-forward main, check package + dist
