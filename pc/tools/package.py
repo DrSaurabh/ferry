@@ -36,7 +36,7 @@ def read(name):
         data = f.read()
     if name in CRLF:
         data = data.replace(b"\r\n", b"\n").replace(b"\n", b"\r\n")
-    elif name.endswith((".py", ".sh", ".svg")):
+    elif name.endswith((".py", ".sh")):          # (.gitattributes keeps these LF on every checkout)
         assert b"\r\n" not in data, name
     return data
 

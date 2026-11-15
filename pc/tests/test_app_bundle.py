@@ -141,7 +141,7 @@ def test_warmup_thread(tmp_path):
         "import ferry\n"
         "real = ferry.sha256_file\n"
         "def counted(p):\n"
-        "    open(%r, 'a').write('hash\\n')\n"
+        "    with open(%r, 'a') as f: f.write('hash\\n')\n"
         "    return real(p)\n"
         "ferry.sha256_file = counted\n"
         "sys.argv = ['ferry.py'] + sys.argv[1:]\n"
@@ -150,7 +150,7 @@ def test_warmup_thread(tmp_path):
                             script=str(launcher))
     try:
         deadline = time.time() + 5
-        while time.time() < deadline and not marker.exists():
+        while time.time() < deadline and not (marker.exists() and "hash" in marker.read_text()):
             time.sleep(0.05)
         assert marker.exists() and marker.read_text().count("hash") == 1    # before any request
         st, j = p.json("GET", "/api/v1/app")
