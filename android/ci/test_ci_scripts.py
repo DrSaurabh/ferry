@@ -123,3 +123,18 @@ def test_shots_from_log_round_trip(tmp_path):
     f.write_text("".join(log))
     assert shots_from_log.main(["x", str(f), str(tmp_path / "out")]) == 0
     assert (tmp_path / "out" / "screenshots" / "tv" / "launch.png").read_bytes() == png
+
+
+def test_junit_summary(tmp_path):
+    import junit_summary
+    d = tmp_path / "test-results" / "test"
+    d.mkdir(parents=True)
+    (d / "TEST-app.ferry.core.it.ClientAgainstFerryPyTest.xml").write_text(
+        '<testsuite name="x"><testcase name="a" classname="app.ferry.core.it.ClientAgainstFerryPyTest" time="1.5"/>'
+        '<testcase name="b" classname="app.ferry.core.it.ClientAgainstFerryPyTest" time="0"><skipped/></testcase>'
+        '<testcase name="c" classname="app.ferry.core.HostPortTest" time="0.1"><failure message="m">t</failure>'
+        '</testcase></testsuite>')
+    rows, total = junit_summary.summarise([str(tmp_path)])
+    assert total == "junit: 1 passed, 1 skipped, 1 failed"
+    assert rows[0].startswith("passed") and rows[0].endswith("ClientAgainstFerryPyTest.a")
+    assert rows[2].startswith("FAILED") and rows[2].endswith("HostPortTest.c")

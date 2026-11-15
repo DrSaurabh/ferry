@@ -6,20 +6,29 @@ import android.os.Build
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import app.ferry.MainActivity
-import org.json.JSONObject
+import app.ferry.core.HostPort
+import app.ferry.core.net.FerryClient
+import app.ferry.core.net.FerryHttp
+import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 
-/** Ph0b: the emulator reaches the host's ferry.py at 10.0.2.2 with the real HTTP stack; one screenshot. */
+/**
+ * Ph0b: the emulator reaches the host's ferry.py at 10.0.2.2 with the real HTTP stack; one screenshot.
+ * Ph2a: the request goes through `:core` (`FerryClient.info()`), the first real `:core` code on the
+ * API 25 (Fire OS 6) level [A3].
+ */
 @RunWith(AndroidJUnit4::class)
 class HostReachProbe {
     @Test
-    fun infoAnswersThroughOkHttp() {
-        val info = JSONObject(Probe.get("/api/v1/info"))
-        Probe.record("host_reach", "app=${info.optString("app")} version=${info.optString("version")} sdk=${Build.VERSION.SDK_INT}")
-        assertEquals("ferry", info.getString("app"))
+    fun infoAnswersThroughCoreFerryClient() {
+        val client = FerryClient(FerryHttp.newClient(null, "CI probe ’📱"), HostPort.parse(Probe.pc)!!)
+        val info = runBlocking { client.info() }
+        Probe.record("host_reach", "app=${info.app} version=${info.version} protocol=${info.protocol} sdk=${Build.VERSION.SDK_INT}")
+        assertEquals("ferry", info.app)
+        assertEquals(2, info.protocol)
     }
 
     @Test
