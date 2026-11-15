@@ -66,6 +66,7 @@ fun TvHomeScreen(vm: TvViewModel, conn: ConnectionState.Connected) {
     val apps = files.filter { it.kind == "apk" }
     val other = files.filter { it.kind != "video_playable" && it.kind != "image" && it.kind != "apk" }
 
+    val slideshowLabel = stringResource(R.string.tv_slideshow_card, photos.size)
     LazyColumn(verticalArrangement = Arrangement.spacedBy(20.dp), modifier = Modifier.testTag("tv-home")) {
         item { UpdateBanner(update, onClick = { comingSoon(ctx) }) }
         item {
@@ -79,7 +80,7 @@ fun TvHomeScreen(vm: TvViewModel, conn: ConnectionState.Connected) {
         }
         if (videos.isNotEmpty()) item { TvRow("videos", stringResource(R.string.tv_row_videos), null, videos.map { it.name to Format.size(it.size) }) { comingSoon(ctx) } }
         if (photos.isNotEmpty()) {
-            val cards = listOf(stringResource(R.string.tv_slideshow_card, photos.size) to "") + photos.map { it.name to Format.size(it.size) }
+            val cards = listOf(slideshowLabel to "") + photos.map { it.name to Format.size(it.size) }
             item { TvRow("photos", stringResource(R.string.tv_row_photos), null, cards) { comingSoon(ctx) } }
         }
         if (apps.isNotEmpty()) item { TvRow("apps", stringResource(R.string.tv_row_apps), null, apps.map { it.name to Format.size(it.size) }) { comingSoon(ctx) } }

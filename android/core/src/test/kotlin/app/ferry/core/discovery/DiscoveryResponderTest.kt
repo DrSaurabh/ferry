@@ -66,6 +66,9 @@ class DiscoveryResponderTest {
         s.receive(p)
         val peer = DiscoveryCodec.parseReply(p.data, p.length, "0123abcd", p.address)
         assertEquals("tv", peer!!.deviceType)
+        // The counter is bumped after the send (Ph4 CI saw it read as 0 right after the receive): wait briefly.
+        val until = System.currentTimeMillis() + 2_000
+        while (responder.replies < 1 && System.currentTimeMillis() < until) Thread.sleep(10)
         assertEquals(1, responder.replies)
     }
 
