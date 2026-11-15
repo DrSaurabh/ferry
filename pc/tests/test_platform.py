@@ -153,7 +153,8 @@ def test_launchers_static():
     assert "if errorlevel 1 pause" in text and "sys.version_info>=(3,8)" in text
     sh = open(os.path.join(ROOT, "ferry.sh"), "rb").read()
     assert b"\r" not in sh and sh.startswith(b"#!/usr/bin/env bash")
-    assert subprocess.run(["bash", "-n", os.path.join(ROOT, "ferry.sh")]).returncode == 0
+    if not ferry.IS_WIN:      # "bash" on a Windows runner is the WSL stub; the Linux legs check the syntax
+        assert subprocess.run(["bash", "-n", os.path.join(ROOT, "ferry.sh")]).returncode == 0
     assert os.access(os.path.join(ROOT, "ferry.sh"), os.X_OK)
     # the line endings above only survive a Windows checkout because of these two rules
     rules = open(os.path.join(os.path.dirname(ROOT), ".gitattributes"), encoding="utf-8").read().split("\n")
