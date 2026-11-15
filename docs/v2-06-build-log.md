@@ -19,3 +19,17 @@ Short resume lines (one per green sub-step) are in `docs/v2-progress.md` (plan �
 - Then: fast-forward `main` to `ph0a` and check the `main` run (below).
 - `main` fast-forwarded to b5b3463: `main` runs pc 43690413274 **green**, android 43690413300 **green**. **Ph0a done** 2026-11-15. (This closing note is a docs-only commit, fast-forwarded the same way; docs-only pushes trigger no workflow.)
 - Left for later: nothing for Ph0a. Plan §2.13's other rows (browser retirement, `Srv` → `helpers.py`) belong to Ph1.
+
+## Ph0b — Android CI foundation, emulator and release-build spike
+
+- Started 2026-11-15T07:36Z on branch `ph0b` from `main` @ e630840.
+- Setup note: the clone had no fetch refspec, so `origin/main` did not exist; added `remote.origin.fetch = +refs/heads/main:refs/remotes/origin/main`.
+- Emulator-runner tag check (§0.3 [PA7]): `git ls-remote --tags … v2.33.0` → exists (9b78b33); `@v2.33.0` is used.
+- Release cert SHA-256 (from `keytool -list -v` on `ferry-release.jks`) written to `android/signing/cert-sha256.txt`.
+- Fixtures: `android/ci/make_fixtures.py` run locally (Pillow 12.3, ffmpeg) → `gps.jpg` (`exif_gps_status == "present"`), `photo1..5.jpg`, `broken.jpg` (JPEG signature + garbage, undecodable), `small.mp4` (6 s 640×360 H.264/AAC); ≈ 1.9 MB total. `make_big_video.sh` checked locally: 230.6 MB, 300 s, 33 s to generate.
+- Step 1 (commit below): `app/build.gradle.kts` (release signing from `signing/signing.properties`, version from `FERRY_RELEASE`/`FERRY_RUN_NUMBER`, `buildConfig`, lint `NewApi` only, test runner, §0.3 deps for Compose ui/foundation/material3, media3-exoplayer/-datasource-okhttp, okhttp, androidTest deps); manifest with `INTERNET`, `usesCleartextTraffic`, `READ_MEDIA_IMAGES`, `ACCESS_MEDIA_LOCATION`; `player/FerryLoadErrorPolicy.kt` (§4.10, product code kept for Ph8b); probes `HostReachProbe` (+ transports + screenshot), `RedactionProbe` (two methods, run before/after `pm grant`), `LongPauseProbe`, helpers `Probe`, `Shots`; `android/ci/check_apk.py` + `test_ci_scripts.py`; `run_instrumented.sh` (v1 ferry.py from a temp copy, polls `/api/v1/info`, suite files, pass rule, `scan_media` trying the three §4.14 mechanisms and recording the winner, screenshot pull the CP16 way); `suites/{phone,tv,api25}.txt`; `android.yml` with final triggers/`if` rules and jobs `app-build`, `emulator-phone`, `emulator-tv`, `emulator-api25` (KVM, AVD cache, one retry).
+- Deviations / decisions so far:
+  - **B3** `core-jvm` and `package` jobs are not in `android.yml` yet: `:core` starts in Ph2a and `package.py` in Ph1/Ph4. `make_apk_json.py`/`check_manifest.py` likewise come with Ph4. The `ferry-apk` artifact holds only `Ferry.apk` for now.
+  - **B4** Library versions stay as plain strings in `app/build.gradle.kts`; `libs.versions.toml` is created by Ph2a, as its file list says.
+  - **B5** `LongPauseProbe` is stricter than "resume → playing": after resuming it must play past the position that was buffered before/while paused (+10 s). `DefaultLoadControl` stops loading at 50 s of buffer and only resumes below 15 s, so "playing" right after the resume would only play buffered data and not prove the reconnect. If the audio clock does not advance on the `-noaudio` emulator, the probe disables the audio track once and records it.
+  - **B6** `run_instrumented.sh` uninstalls `app.ferry`/`app.ferry.test` before installing, so the retry attempt starts without `ACCESS_MEDIA_LOCATION` from attempt 1. Artifacts of each attempt go to `ci-out/<suite>-try<n>/`.

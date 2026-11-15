@@ -15,3 +15,5 @@ pc/ferry-log*.txt
 pc/ferry-error.log
 pc/ferry-selftest.txt
 dist/
+ci-out/
+apks/

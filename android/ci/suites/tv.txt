@@ -1,0 +1,4 @@
+# TV suite (API 30 android-tv). Class | host steps before | host check after (plan CP6, §4.14)
+# Ph0b probes (throw-away):
+app.ferry.probe.HostReachProbe | |
+app.ferry.probe.LongPauseProbe | |
