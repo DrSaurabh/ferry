@@ -53,10 +53,11 @@ class StreamingBody(
             val t = held; held = spare; spare = t
             heldLen = n
         }
-        // Look ahead before the last bytes go out: any further byte means the file grew [PB1].
-        if (readSource { input.read() } >= 0) throw FerryException.SourceChanged()
-        if (heldLen > 0) send(sink, held, heldLen) else onProgress(0) // heldLen is 0 only when size == 0
+        // ACCEPTANCE PROBE (Ph2b, reverted in the next commit): look-ahead switched OFF — the naive
+        // "send everything, then look for more" order that plan §3.2 [PB1] forbids.
+        if (heldLen > 0) send(sink, held, heldLen) else onProgress(0)
         sink.flush()
+        if (readSource { input.read() } >= 0) throw FerryException.SourceChanged()
         bodyFullySent = true
     }
 
