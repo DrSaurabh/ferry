@@ -4,6 +4,7 @@ import app.ferry.core.Clock
 import app.ferry.core.model.OutFile
 import app.ferry.core.net.FerryApi
 import app.ferry.core.net.FerryException
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.TestScope
@@ -17,6 +18,7 @@ import java.util.Collections
 import kotlin.random.Random
 
 /** `DownloadQueue` against [FakeDownloadApi] in virtual time (plan §3.7, design §4.5). */
+@OptIn(ExperimentalCoroutinesApi::class)
 class DownloadQueueTest {
     private class Env(scope: TestScope, rediscover: suspend () -> FerryApi? = { null }) {
         val clock = Clock { scope.testScheduler.currentTime }
@@ -204,7 +206,7 @@ class DownloadQueueTest {
         env.fake.plans += hold
         env.queue.enqueue(a, env.factory)
         env.queue.enqueue(b, env.factory)
-        env.await(1) { it is DownloadStatus.Running && it.got >= 128 * 1024 }
+        env.await(1) { it is DownloadStatus.Running && it.got > 0 } // body started (progress is throttled to 250 ms)
         env.queue.cancel(1)
         assertEquals(DownloadStatus.Cancelled, env.awaitEnd(1))
         val s = env.sinksOf("a.mp4").single()
@@ -221,7 +223,7 @@ class DownloadQueueTest {
         val hold = FakeDownloadApi.Plan(holdAt = 64 * 1024)
         env.fake.plans += hold
         for (f in files) env.queue.enqueue(f, env.factory)
-        env.await(1) { it is DownloadStatus.Running }
+        env.await(1) { it is DownloadStatus.Running && it.got > 0 } // the fake has taken the "hold" plan
         env.queue.cancel(2)
         assertEquals(DownloadStatus.Cancelled, env.queue.state.value[2])
         env.queue.cancelAll()
