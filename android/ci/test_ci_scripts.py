@@ -44,6 +44,16 @@ def test_cert_per_sdk_range_signer_lines_accepted():
     assert check_apk.check_cert(out, expected_cert()) == []
 
 
+def test_cert_real_apksigner_37_output_accepted():
+    # observed on ubuntu-latest, build-tools 37.0.0, minSdk 25 (v2 scheme only)
+    out = ("Verifies\nV2 Signer: certificate DN: CN=Ferry, O=Saurabh, C=IN\n"
+           "V2 Signer: certificate SHA-256 digest: %s\n"
+           "V2 Signer: certificate SHA-1 digest: 0123456789abcdef0123456789abcdef01234567\n"
+           % check_apk.normalise_fp(expected_cert()))
+    assert check_apk.parse_apksigner(out) == [check_apk.normalise_fp(expected_cert())]
+    assert check_apk.check_cert(out, expected_cert()) == []
+
+
 def test_cert_mismatch_and_missing_are_reported():
     other = "Signer #1 certificate SHA-256 digest: %s\n" % ("ab" * 32)
     assert check_apk.check_cert(other, expected_cert())

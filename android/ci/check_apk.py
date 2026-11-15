@@ -31,7 +31,7 @@ def normalise_fp(text):
 def parse_apksigner(text):
     """SHA-256 digests of the signer certificates in `apksigner verify --print-certs` output."""
     return [normalise_fp(m) for m in
-            re.findall(r"^Signer\b[^\n]*?certificate SHA-256 digest:\s*([0-9a-fA-F:]+)\s*$", text, re.M)]
+            re.findall(r"^(?:V\d+ )?Signer\b[^\n]*?certificate SHA-256 digest:\s*([0-9a-fA-F:]+)\s*$", text, re.M)]
 
 
 def check_cert(apksigner_output, expected):
