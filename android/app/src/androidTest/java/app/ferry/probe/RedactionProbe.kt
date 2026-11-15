@@ -28,9 +28,10 @@ class RedactionProbe {
     private fun hasLocationPermission() =
         Probe.context.checkSelfPermission(Manifest.permission.ACCESS_MEDIA_LOCATION) == PackageManager.PERMISSION_GRANTED
 
-    /** Polls MediaStore up to 30 s for the pushed file; returns its URI and OWNER_PACKAGE_NAME. */
+    /** Polls MediaStore up to 60 s for the pushed file; returns its URI and OWNER_PACKAGE_NAME. */
     private fun findRow(): Pair<Uri, String?> {
-        val deadline = System.currentTimeMillis() + 30_000
+        val deadline = System.currentTimeMillis() + 60_000
+        val started = System.currentTimeMillis()
         while (true) {
             cr.query(
                 MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
@@ -39,13 +40,31 @@ class RedactionProbe {
             )?.use { c ->
                 if (c.moveToFirst()) {
                     val uri = ContentUris.withAppendedId(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, c.getLong(0))
+                    Probe.record("redaction_row_visible_after_ms", System.currentTimeMillis() - started)
                     return uri to c.getString(1)
                 }
             }
-            check(System.currentTimeMillis() < deadline) { "$name never appeared in MediaStore" }
+            if (System.currentTimeMillis() >= deadline) {
+                Probe.record("redaction_row_missing", "visible incl. pending/trashed: ${diagnose()}")
+                error("$name never appeared in MediaStore")
+            }
             Thread.sleep(500)
         }
     }
+
+    /** Is the row there but pending or trashed (hidden from other apps)? API 30+ query args. */
+    private fun diagnose(): String = runCatching {
+        val args = android.os.Bundle().apply {
+            putString(android.content.ContentResolver.QUERY_ARG_SQL_SELECTION, "${MediaStore.MediaColumns.DISPLAY_NAME} = ?")
+            putStringArray(android.content.ContentResolver.QUERY_ARG_SQL_SELECTION_ARGS, arrayOf(name))
+            putInt(MediaStore.QUERY_ARG_MATCH_PENDING, MediaStore.MATCH_INCLUDE)
+            putInt(MediaStore.QUERY_ARG_MATCH_TRASHED, MediaStore.MATCH_INCLUDE)
+        }
+        cr.query(MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+            arrayOf(MediaStore.MediaColumns.IS_PENDING, MediaStore.MediaColumns.IS_TRASHED), args, null)?.use { c ->
+            if (c.moveToFirst()) "yes (is_pending=${c.getInt(0)} is_trashed=${c.getInt(1)})" else "no"
+        } ?: "null cursor"
+    }.getOrElse { "query failed: $it" }
 
     private fun readPlain(uri: Uri): ByteArray = cr.openInputStream(uri)!!.use { it.readBytes() }
 

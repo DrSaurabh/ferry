@@ -54,15 +54,21 @@ start_pc() {
 }
 
 # ---------- host steps usable in suite files ----------
-grant() { adb shell pm grant "$PKG" "android.permission.$1"; log "granted $1"; }
+grant() {
+  local err
+  if err=$(adb shell pm grant "$PKG" "android.permission.$1" 2>&1 | tr -d '\r') && [ -z "$err" ]; then log "granted $1"
+  else log "grant $1 refused: $(echo "$err" | grep -m1 -i exception)"; fi
+}
 push_media() { adb push "$CI/fixtures/$1" "$2" > /dev/null && log "pushed $1 -> $2"; }
 
 # Media shown to Ferry must be created and indexed by the shell user, never by Ferry (plan §4.14).
 # Tries, in order: (1) nothing, (2) content call scan_volume, (3) MEDIA_SCANNER_SCAN_FILE broadcast; the
-# first that makes the row visible (with its owner) is recorded.
+# first that makes the row visible to the shell (with its owner) is recorded. Ph0b: on an emulator booted
+# from the AVD snapshot, (1) showed the row to the shell but not to Ferry for > 30 s, so scan_volume
+# (synchronous) is always run as well.
 media_row() {
   # one string: the device shell must see the SQL quotes
-  adbs "content query --uri content://media/external/images/media --projection _display_name:owner_package_name --where \"_display_name='$(basename "$1")'\"" 2>&1 | grep -m1 'Row:'
+  adbs "content query --uri content://media/external/images/media --projection _display_name:owner_package_name:is_pending --where \"_display_name='$(basename "$1")'\"" 2>&1 | grep -m1 'Row:'
 }
 scan_media() {
   local path=$1 row="" how=""
@@ -79,6 +85,10 @@ scan_media() {
   done
   if [ -n "$row" ]; then log "scan_media: $path visible after mechanism '$how': $row"
   else log "scan_media: $path not visible to 'content query' after all three mechanisms"; fi
+  if [ "$how" = none ]; then
+    adbs content call --uri content://media --method scan_volume --arg external_primary > /dev/null 2>&1
+    log "scan_media: then scan_volume: $(media_row "$path")"
+  fi
 }
 
 # Host check after RedactionProbe#withoutPermission: what did the redacted copy keep?
