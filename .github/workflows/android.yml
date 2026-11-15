@@ -95,7 +95,7 @@ jobs:
           path: |
             ~/.android/avd/*
             ~/.android/adb*
-          key: avd-34-google_apis-x86_64-v1
+          key: avd-34-google_apis-x86_64-v2
       - name: Create AVD snapshot
         if: steps.avd-cache.outputs.cache-hit != 'true'
         uses: reactivecircus/android-emulator-runner@v2.33.0
@@ -107,7 +107,7 @@ jobs:
           force-avd-creation: false
           disable-animations: false
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
-          script: echo "AVD snapshot created"
+          script: sleep 45 && echo "AVD snapshot created (after 45 s to settle)"
       - name: Phone suite (attempt 1)
         id: try1
         continue-on-error: true
@@ -133,7 +133,7 @@ jobs:
           profile: pixel_6
           force-avd-creation: false
           disable-animations: true
-          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -no-snapshot-save
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -no-snapshot-save -no-snapshot-load
           script: bash android/ci/run_instrumented.sh phone 2
       - name: Result
         if: steps.try1.outcome == 'failure' && steps.try2.outcome != 'success'
@@ -184,7 +184,7 @@ jobs:
           path: |
             ~/.android/avd/*
             ~/.android/adb*
-          key: avd-30-android-tv-x86-v1
+          key: avd-30-android-tv-x86-v2
       - name: Create AVD snapshot
         if: steps.avd-cache.outputs.cache-hit != 'true'
         uses: reactivecircus/android-emulator-runner@v2.33.0
@@ -196,7 +196,7 @@ jobs:
           force-avd-creation: false
           disable-animations: false
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
-          script: echo "AVD snapshot created"
+          script: sleep 45 && echo "AVD snapshot created (after 45 s to settle)"
       - name: TV suite (attempt 1)
         id: try1
         continue-on-error: true
@@ -222,7 +222,7 @@ jobs:
           profile: tv_1080p
           force-avd-creation: false
           disable-animations: true
-          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -no-snapshot-save
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -no-snapshot-save -no-snapshot-load
           script: bash android/ci/run_instrumented.sh tv 2
       - name: Result
         if: steps.try1.outcome == 'failure' && steps.try2.outcome != 'success'
@@ -266,7 +266,7 @@ jobs:
           path: |
             ~/.android/avd/*
             ~/.android/adb*
-          key: avd-25-default-x86-v1
+          key: avd-25-default-x86-v2
       - name: Create AVD snapshot
         if: steps.avd-cache.outputs.cache-hit != 'true'
         uses: reactivecircus/android-emulator-runner@v2.33.0
@@ -277,7 +277,7 @@ jobs:
           force-avd-creation: false
           disable-animations: false
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
-          script: echo "AVD snapshot created"
+          script: sleep 45 && echo "AVD snapshot created (after 45 s to settle)"
       - name: API 25 suite (attempt 1)
         id: try1
         continue-on-error: true
@@ -301,7 +301,7 @@ jobs:
           arch: x86
           force-avd-creation: false
           disable-animations: true
-          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -no-snapshot-save
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -no-snapshot-save -no-snapshot-load
           script: bash android/ci/run_instrumented.sh api25 2
       - name: Result
         if: steps.try1.outcome == 'failure' && steps.try2.outcome != 'success'
