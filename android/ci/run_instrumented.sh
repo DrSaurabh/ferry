@@ -158,14 +158,35 @@ while IFS='|' read -r cls before after <&3; do
 done 3< "$CI/suites/$suite.txt"
 
 # ---------- collect ----------
-if adb pull "$EXT/screenshots" "$OUT/" > /dev/null 2>&1; then
-  log "screenshots: adb pull $EXT/screenshots OK ($(find "$OUT/screenshots" -name '*.png' | wc -l) png)"
+# pull_ext SUBDIR DEST: copy $EXT/SUBDIR to DEST/SUBDIR. Tries plain `adb pull` [CP16], then the
+# /storage/emulated/0 path, then `run-as` + tar (debug APK) and records which way worked.
+pull_ext() {
+  local sub=$1 dest=$2 err
+  if err=$(adb pull "$EXT/$sub" "$dest/" 2>&1); then echo "adb pull $EXT/$sub"; return 0; fi
+  echo "  (adb pull $EXT/$sub: $err)" >&2
+  if err=$(adb pull "/storage/emulated/0/Android/data/$PKG/files/$sub" "$dest/" 2>&1); then
+    echo "adb pull /storage/emulated/0/Android/data/$PKG/files/$sub"; return 0; fi
+  echo "  (adb pull /storage/emulated/0/…/$sub: $err)" >&2
+  if adb exec-out run-as "$PKG" sh -c "cd /storage/emulated/0/Android/data/$PKG/files && tar -cf - $sub" 2>/dev/null \
+      | tar -xf - -C "$dest" 2>/dev/null && [ -e "$dest/$sub" ]; then
+    echo "adb exec-out run-as $PKG tar (external files dir)"; return 0; fi
+  return 1
+}
+if how=$(pull_ext screenshots "$OUT"); then
+  log "screenshots: $how OK ($(find "$OUT/screenshots" -name '*.png' | wc -l) png)"
 else
-  log "screenshots: adb pull $EXT/screenshots FAILED"
+  log "screenshots: every pull way FAILED"
   FAILED=1
 fi
-adb pull "$EXT/probe/results.txt" "$OUT/probe-results.txt" > /dev/null 2>&1 || true
+if how=$(pull_ext probe "$OUT"); then cp "$OUT/probe/results.txt" "$OUT/probe-results.txt" 2>/dev/null; fi
 adb logcat -d > "$OUT/logcat.txt" 2>&1 || true
+echo "----- FERRY_PROBE lines in logcat ($suite) -----"
+grep 'FERRY_PROBE' "$OUT/logcat.txt" | sed 's/^.*FERRY_PROBE[^:]*: //'
+# Artifacts can't be downloaded into the agent workspace (proxy), so screenshots also go into the job
+# log as base64 between markers; android/ci/shots_from_log.py turns a saved job log back into PNGs.
+find "$OUT" -name '*.png' | sort | while read -r png; do
+  echo "FERRY_PNG_BEGIN ${png#$OUT/}"; base64 -w 0 "$png"; echo; echo "FERRY_PNG_END"
+done
 
 echo "----- probe results ($suite) -----"
 cat "$OUT/probe-results.txt" 2>/dev/null

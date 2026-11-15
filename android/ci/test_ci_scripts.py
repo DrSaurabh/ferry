@@ -108,3 +108,18 @@ def test_fixture_gps_jpeg_has_gps():
 def test_fixtures_present():
     for name in ["gps.jpg", "broken.jpg", "small.mp4"] + ["photo%d.jpg" % n for n in range(1, 6)]:
         assert os.path.getsize(os.path.join(FIX, name)) > 1000
+
+
+def test_shots_from_log_round_trip(tmp_path):
+    import base64
+    import shots_from_log
+    png = b"\x89PNG\r\n\x1a\n" + bytes(range(256)) * 3
+    log = ["2026-11-15T08:00:00.1234567Z noise\n",
+           "2026-11-15T08:00:01.0000000Z FERRY_PNG_BEGIN screenshots/tv/launch.png\n",
+           "2026-11-15T08:00:01.0000001Z %s\n" % base64.b64encode(png).decode(),
+           "2026-11-15T08:00:01.0000002Z FERRY_PNG_END\n"]
+    assert list(shots_from_log.extract(log)) == [("screenshots/tv/launch.png", png)]
+    f = tmp_path / "job.log"
+    f.write_text("".join(log))
+    assert shots_from_log.main(["x", str(f), str(tmp_path / "out")]) == 0
+    assert (tmp_path / "out" / "screenshots" / "tv" / "launch.png").read_bytes() == png
