@@ -26,3 +26,4 @@ Ph4 · app skeleton, connection, settings, manifest/APK checks, package + dist j
 Ph4 · main fast-forwarded · 7c9f876 · main android 43755657517 green (all 8 jobs incl. package + dist; Ferry-2.0.48 on branch dist) · DONE
 Ph5a · step 1 pushed (service, factory, coordinator, screen, tests) · 7ae60a2 · pending · wait for CI
 Ph5a · service + sending core + 3 phone tests green on branch · 913f655 · android 43772061781 · fast-forward main
+Ph5a · main run 43772946067 red (phone: test-rule frame clock crash, retry EACCES) → fixed B49/B50, branch green · e450b87 · android 43775378782 · fast-forward main again
