@@ -243,6 +243,8 @@ jobs:
           || contains(github.event.head_commit.message, '[emu:api25]')))
     runs-on: ubuntu-24.04
     timeout-minutes: 30
+    # No AVD snapshot for API 25 (B12): a cold boot takes ~15 s, while booting from a snapshot hung
+    # ("Timeout waiting for emulator to boot") twice in Ph0b.
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
@@ -259,25 +261,6 @@ jobs:
           sudo udevadm trigger --name-match=kvm
       - uses: actions/setup-python@v5
         with: { python-version: "3.13" }
-      - name: AVD cache
-        uses: actions/cache@v4
-        id: avd-cache
-        with:
-          path: |
-            ~/.android/avd/*
-            ~/.android/adb*
-          key: avd-25-default-x86-v2
-      - name: Create AVD snapshot
-        if: steps.avd-cache.outputs.cache-hit != 'true'
-        uses: reactivecircus/android-emulator-runner@v2.33.0
-        with:
-          api-level: 25
-          target: default
-          arch: x86
-          force-avd-creation: false
-          disable-animations: false
-          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
-          script: sleep 45 && echo "AVD snapshot created (after 45 s to settle)"
       - name: API 25 suite (attempt 1)
         id: try1
         continue-on-error: true
@@ -286,9 +269,8 @@ jobs:
           api-level: 25
           target: default
           arch: x86
-          force-avd-creation: false
           disable-animations: true
-          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -no-snapshot-save
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -no-snapshot
           script: bash android/ci/run_instrumented.sh api25 1
       - name: API 25 suite (attempt 2)
         id: try2
@@ -299,9 +281,8 @@ jobs:
           api-level: 25
           target: default
           arch: x86
-          force-avd-creation: false
           disable-animations: true
-          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -no-snapshot-save -no-snapshot-load
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -no-snapshot
           script: bash android/ci/run_instrumented.sh api25 2
       - name: Result
         if: steps.try1.outcome == 'failure' && steps.try2.outcome != 'success'
