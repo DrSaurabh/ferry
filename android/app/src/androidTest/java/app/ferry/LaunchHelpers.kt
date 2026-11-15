@@ -18,8 +18,9 @@ object LaunchHelpers {
     }
 
     /** MainActivity with the debug extras the suite asks for (`-e app.ferry.debug.NET any` on API 25 [PR2]). */
-    fun launch(): ActivityScenario<MainActivity> {
+    fun launch(open: String? = null): ActivityScenario<MainActivity> {
         val i = Intent(Probe.context, MainActivity::class.java)
+        if (open != null) i.putExtra(MainActivity.EXTRA_OPEN, open)
         Probe.arg(DeviceMode.EXTRA_NET, "").takeIf { it.isNotEmpty() }?.let { i.putExtra(DeviceMode.EXTRA_NET, it) }
         return ActivityScenario.launch(i)
     }

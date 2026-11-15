@@ -1,5 +1,6 @@
 package app.ferry.ui.phone
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -15,6 +16,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
@@ -22,6 +24,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -33,7 +36,10 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import app.ferry.AppGraph
 import app.ferry.BuildConfig
 import app.ferry.R
+import app.ferry.core.upload.Phase
 import app.ferry.net.ConnectionState
+import app.ferry.ui.common.TransferMath
+import app.ferry.ui.common.TransferWords
 import app.ferry.ui.common.StatusDot
 import app.ferry.ui.common.UpdateBanner
 import app.ferry.ui.common.comingSoon
@@ -44,7 +50,15 @@ import app.ferry.ui.nav.Screen
 class HomeViewModel : ViewModel() {
     val connection = AppGraph.connection.state
     val update = AppGraph.update
+    val transfer = AppGraph.transfers.state
+    val interrupted = AppGraph.interrupted
     fun tryAgain() = AppGraph.connection.refresh()
+
+    /** The user has seen the interrupted-transfer banner [A8]. */
+    fun dismissInterrupted() {
+        AppGraph.interrupted.value = 0
+        if (!AppGraph.transfers.busy) AppGraph.prefs.interruptedCount = 0
+    }
 }
 
 /**
@@ -56,6 +70,8 @@ fun HomeScreen(nav: Navigator, vm: HomeViewModel = viewModel()) {
     val ctx = LocalContext.current
     val conn by vm.connection.collectAsState()
     val update by vm.update.collectAsState()
+    val transfer by vm.transfer.collectAsState()
+    val interrupted by vm.interrupted.collectAsState()
     val later = BuildConfig.DEBUG
     Column(
         Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing).verticalScroll(rememberScrollState())
@@ -86,6 +102,30 @@ fun HomeScreen(nav: Navigator, vm: HomeViewModel = viewModel()) {
             }
         }
         UpdateBanner(update, onClick = { comingSoon(ctx) })
+        transfer?.let { t ->
+            // Ongoing (or last) transfer card → Transfer screen (design §4.1)
+            val words = remember(ctx) { TransferWords(ctx.resources) }
+            Card(Modifier.fillMaxWidth().clickable { nav.push(Screen.Transfer) }.testTag("home-transfer")) {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(words.headline(t), style = MaterialTheme.typography.titleMedium)
+                    if (t.phase != Phase.Finished) LinearProgressIndicator(progress = { TransferMath.fraction(t) }, Modifier.fillMaxWidth())
+                    Text(stringResource(R.string.transfer_card_open), color = MaterialTheme.colorScheme.primary)
+                }
+            }
+        }
+        if (interrupted > 0 && transfer == null) {
+            // After a kill: the vivo steps, prominently [A8]
+            Card(Modifier.fillMaxWidth().testTag("home-interrupted")) {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(stringResource(R.string.interrupted, interrupted), style = MaterialTheme.typography.titleMedium)
+                    Text(stringResource(R.string.vivo_steps), style = MaterialTheme.typography.bodyMedium)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedButton(onClick = { nav.push(Screen.Settings) }) { Text(stringResource(R.string.btn_settings)) }
+                        TextButton(onClick = vm::dismissInterrupted) { Text(stringResource(R.string.ok)) }
+                    }
+                }
+            }
+        }
         for (label in listOf(R.string.btn_send_photos, R.string.btn_send_files, R.string.btn_from_pc, R.string.btn_play_tv)) {
             Button(
                 onClick = { comingSoon(ctx) },

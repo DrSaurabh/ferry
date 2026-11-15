@@ -39,6 +39,28 @@
     <string name="summary_no_location">%1$d saved without location</string>
     <string name="interrupted">The last transfer was interrupted (%1$d files not sent). vivo may have stopped Ferry. Fix battery settings</string>
 
+    <!-- Transfer screen and notifications (Ph5a; wording pass in Ph10) -->
+    <string name="transfer_title">Sending to the PC</string>
+    <string name="transfer_sending">Sending %1$d of %2$d</string>
+    <string name="transfer_checking">Checking which files are already on %1$s…</string>
+    <string name="transfer_nothing">Nothing is being sent right now.</string>
+    <string name="notif_sending">Sending %1$d of %2$d to %3$s</string>
+    <string name="your_pc">your PC</string>
+    <string name="cancel">Cancel</string>
+    <string name="retry">Retry</string>
+    <string name="back">Back</string>
+    <string name="ok">OK</string>
+    <string name="cancel_confirm_title">Stop sending?</string>
+    <string name="cancel_confirm_text">Files already saved stay on the PC.</string>
+    <string name="cancel_confirm_yes">Stop sending</string>
+    <string name="cancel_confirm_no">Keep sending</string>
+    <string name="row_cancelled">Cancelled</string>
+    <string name="row_not_sent_disk">Not sent: PC disk is full</string>
+    <string name="row_not_sent_time">Not sent: time limit</string>
+    <string name="row_not_sent_old">Not sent: older Ferry on the PC</string>
+    <string name="time_limit">Android stopped this transfer after its time limit. Tap Retry later.</string>
+    <string name="transfer_card_open">Show transfer</string>
+
     <!-- Battery (P10) [A8]; the vivo steps stay in ONE string -->
     <string name="vivo_steps">1. Open Recents and lock Ferry (pull the Ferry card down or tap the lock). 2. Settings → Battery → Background power consumption → Ferry → Allow.</string>
     <string name="battery_ok">Android battery setting: OK</string>

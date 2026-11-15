@@ -41,6 +41,11 @@ class Prefs(ctx: Context) : PcStore {
         get() = sp.getInt(K_INTERRUPTED, 0)
         set(v) = sp.edit().putInt(K_INTERRUPTED, v).apply()
 
+    /** POST_NOTIFICATIONS asked once, when the first transfer starts [H23]. */
+    var notificationsAsked: Boolean
+        get() = sp.getBoolean(K_NOTIF, false)
+        set(v) = sp.edit().putBoolean(K_NOTIF, v).apply()
+
     var batteryAsked: Boolean
         get() = sp.getBoolean(K_BATTERY, false)
         set(v) = sp.edit().putBoolean(K_BATTERY, v).apply()
@@ -65,5 +70,6 @@ class Prefs(ctx: Context) : PcStore {
         const val K_WELCOME = "welcome_done"
         const val K_INTERRUPTED = "interrupted_count"
         const val K_BATTERY = "battery_asked"
+        const val K_NOTIF = "notifications_asked"
     }
 }

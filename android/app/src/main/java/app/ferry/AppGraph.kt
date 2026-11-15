@@ -7,9 +7,11 @@ import android.util.Log
 import app.ferry.core.SystemClock
 import app.ferry.core.log.RingLog
 import app.ferry.data.Prefs
+import app.ferry.media.UploadItemFactory
 import app.ferry.net.ConnectionManager
 import app.ferry.net.NetworkBinder
 import app.ferry.net.UpdateState
+import app.ferry.service.Transfers
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
@@ -34,6 +36,13 @@ object AppGraph {
         private set
     lateinit var connection: ConnectionManager
         private set
+
+    /** The upload queue (`AppGraph.transfer` of the plan is [Transfers.state]); driven by TransferService (Ph5a). */
+    lateinit var transfers: Transfers
+        private set
+
+    /** Files left unsent when the previous process died mid-transfer [A8]; 0 = no banner. */
+    val interrupted = MutableStateFlow(0)
 
     /** Startup cleanup (plan §4.2 [PB16]): downloads await it before creating their first sink (Ph7). */
     lateinit var cleanup: Deferred<Unit>
@@ -68,6 +77,13 @@ object AppGraph {
             update = update,
             log = { log("conn", it) },
         )
+        transfers = Transfers(
+            api = { connection.api() },
+            rediscover = { connection.relocate() },
+            sourceFor = { UploadItemFactory(app, { 0L }).sourceFor(it) },
+            log = { log("engine", it) },
+        )
+        interrupted.value = prefs.interruptedCount
         network.start()
         cleanup = scope.async(Dispatchers.IO) {
             File(app.filesDir, "apk").listFiles()?.forEach { it.delete() } // TV APK downloads [PB18]

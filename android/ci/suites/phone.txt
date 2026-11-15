@@ -2,7 +2,9 @@
 #   Class | host steps before it | host check after it
 # Ph4:
 app.ferry.PhoneLaunchTest | |
-# Ph0b probes (throw-away):
+# Ph0b probe (throw-away; RedactionProbe was replaced by the GPS tests in Ph5a):
 app.ferry.probe.HostReachProbe | |
-app.ferry.probe.RedactionProbe#withoutPermission | grant READ_MEDIA_IMAGES; push_media gps.jpg /sdcard/DCIM/Camera/IMG_20250101_120000.jpg; scan_media /sdcard/DCIM/Camera/IMG_20250101_120000.jpg | check_redacted
-app.ferry.probe.RedactionProbe#withPermission | grant ACCESS_MEDIA_LOCATION |
+# Ph5a: media classes. Run 1 without ACCESS_MEDIA_LOCATION (B1 negative control), then grant it.
+app.ferry.GpsNegativeControlTest | grant READ_MEDIA_IMAGES; grant READ_MEDIA_VIDEO; push_media gps.jpg /sdcard/DCIM/Camera/IMG_20250101_120000.jpg; scan_media /sdcard/DCIM/Camera/IMG_20250101_120000.jpg | check_negative
+app.ferry.GpsOriginalTest | grant ACCESS_MEDIA_LOCATION | check_original
+app.ferry.CancelAndWaitingTest | make_big_jpeg /sdcard/DCIM/Camera/BIG_300MB.jpg 300; scan_media /sdcard/DCIM/Camera/BIG_300MB.jpg | check_no_partials A

@@ -261,3 +261,70 @@ def test_manifest_real_xmltree_rules_can_fail():
         assert old in text, old
         problems = check_manifest.check(check_manifest.load(text.replace(old, new, 1)))
         assert any(word in p for p in problems), (word, problems)
+
+
+# ---------- verify_inbox.py (Ph5a) ----------
+import verify_inbox  # noqa: E402
+
+
+def _gps_fixture():
+    return os.path.join(FIX, "gps.jpg")
+
+
+def test_verify_identical_with_date(tmp_path):
+    p = tmp_path / "IMG.jpg"
+    p.write_bytes(open(_gps_fixture(), "rb").read())
+    os.utime(str(p), (1735732800, 1735732800))
+    ok, text = verify_inbox.check_identical(str(tmp_path), "IMG.jpg", _gps_fixture(), "1735732801")
+    assert ok, text
+    assert "identical, GPS present" in text
+    ok, text = verify_inbox.check_identical(str(tmp_path), "IMG.jpg", _gps_fixture(), "1735732900")
+    assert not ok and "WRONG" in text
+    assert not verify_inbox.check_identical(str(tmp_path), "missing.jpg", _gps_fixture())[0]
+
+
+def test_verify_identical_fails_on_other_bytes(tmp_path):
+    (tmp_path / "IMG.jpg").write_bytes(open(os.path.join(FIX, "photo1.jpg"), "rb").read())
+    assert not verify_inbox.check_identical(str(tmp_path), "IMG.jpg", _gps_fixture())[0]
+
+
+def test_verify_redacted_is_the_negative_control(tmp_path):
+    raw = open(_gps_fixture(), "rb").read()
+    (tmp_path / "IMG.jpg").write_bytes(raw)
+    ok, text = verify_inbox.check_redacted(str(tmp_path), "IMG.jpg", _gps_fixture())
+    assert not ok and "inconclusive" in text
+    # what Android serves without the permission: same size, GPS zeroed (simulated: different bytes)
+    (tmp_path / "IMG.jpg").write_bytes(raw[:-1] + b"\x00")
+    ok, text = verify_inbox.check_redacted(str(tmp_path), "IMG.jpg", _gps_fixture())
+    assert ok, text
+
+
+def test_verify_no_partials(tmp_path):
+    (tmp_path / "a.jpg").write_bytes(b"x")
+    assert verify_inbox.check_no_partials(str(tmp_path))[0]
+    (tmp_path / ".ferry-abc.part").write_bytes(b"x")
+    assert not verify_inbox.check_no_partials(str(tmp_path))[0]
+
+
+def test_verify_uploads_reads_ferry_request_log(tmp_path):
+    log = tmp_path / "ferry-log.txt"
+    rows = [
+        ["2026-11-15 10:00:00.000", "10.0.2.16", "vivo", "POST", "/api/v1/upload?name=IMG.jpg", "", "200", "10", "5", "saved IMG.jpg", ""],
+        ["2026-11-15 10:00:01.000", "10.0.2.16", "vivo", "POST", "/api/v1/check-batch", "", "200", "10", "5", "checked 1 file", ""],
+        ["2026-11-15 10:00:02.000", "10.0.2.16", "vivo", "POST", "/api/v1/upload?name=other.jpg", "", "200", "10", "5", "saved other.jpg", ""],
+        ["2026-11-15 10:00:03.000", "10.0.2.16", "vivo", "POST", "/api/v1/upload?name=IMG.jpg", "", "200", "10", "5", "skipped IMG.jpg", ""],
+    ]
+    log.write_text("".join("\t".join(r) + "\n" for r in rows), encoding="utf-8")
+    assert verify_inbox.upload_outcomes(str(log), "IMG.jpg") == ["saved", "skipped"]
+    assert verify_inbox.check_uploads(str(log), "IMG.jpg", ["saved", "skipped"])[0]
+    assert not verify_inbox.check_uploads(str(log), "IMG.jpg", ["saved"])[0]
+
+
+def test_verify_uploads_matches_a_real_ferry_log_line(tmp_path):
+    import ferry
+    t = [1735732800.0]
+    rl = ferry.RequestLog(str(tmp_path), lambda m: None, clock=lambda: t[0], rotate_delays=(0, 0, 0))
+    rl.start()
+    rl.request("10.0.2.16", "vivo", "POST", "/api/v1/upload?name=IMG.jpg&size=5&mtime=1", "", 200, 5, 3, "saved IMG.jpg", "")
+    rl.stop()
+    assert verify_inbox.upload_outcomes(str(tmp_path / ferry.LOG_NAME), "IMG.jpg") == ["saved"]

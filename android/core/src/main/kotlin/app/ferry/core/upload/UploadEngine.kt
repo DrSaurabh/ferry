@@ -191,6 +191,13 @@ class UploadEngine(
 
     suspend fun awaitFinished(): Summary = finished.filterNotNull().first()
 
+    /**
+     * True from an [add] / [retry] / [sendAnyway] that started a run until that run has finished. Read without
+     * suspending, so `TransferService`'s idle check cannot mistake a run that has just been started (state not
+     * published yet) for a finished one [PB10] (Ph5a, B43).
+     */
+    val isRunning: Boolean get() = synchronized(lock) { runningLocked() }
+
     // ------------------------------------------------------------------ run
 
     private fun runningLocked() = runJob?.isActive == true && !finishedFlag

@@ -75,6 +75,20 @@ class UploadEngineTest {
     }
 
     @Test
+    fun isRunningFromAddUntilFinished() = runTest { // Ph5a B43: the service's idle check
+        val env = env()
+        assertTrue(!env.engine.isRunning)
+        env.engine.add(listOf(item("a.jpg")))
+        assertTrue("running at once, before any state is published", env.engine.isRunning)
+        env.engine.awaitFinished()
+        assertTrue(!env.engine.isRunning)
+        env.engine.retry() // nothing to retry: stays idle
+        assertTrue(!env.engine.isRunning)
+        env.engine.sendAnyway(listOf(12345L))
+        assertTrue(!env.engine.isRunning)
+    }
+
+    @Test
     fun duplicatesMarkedAlreadyOnPcBeforeSending() = runTest {
         val env = env()
         env.fake.onPc["b.jpg"] = 100_000

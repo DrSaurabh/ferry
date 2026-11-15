@@ -1,5 +1,6 @@
 package app.ferry
 
+import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -16,6 +17,8 @@ import app.ferry.ui.tv.TvRoot
  * Debug builds only: extras `app.ferry.debug.UI = tv|phone` and `app.ferry.debug.NET = any` [PR2] [B27].
  */
 class MainActivity : ComponentActivity() {
+    private var nav: Navigator? = null
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         if (BuildConfig.DEBUG && intent?.getStringExtra(DeviceMode.EXTRA_NET) == "any") {
@@ -30,6 +33,8 @@ class MainActivity : ComponentActivity() {
             else -> Screen.Welcome
         }
         val nav = Navigator(start)
+        this.nav = nav
+        if (savedInstanceState == null) openFrom(intent)
         if (tv) {
             setContent { TvTheme { TvRoot(nav) } }
         } else {
@@ -38,8 +43,28 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    /** singleTask: a notification tap while Ferry is open arrives here. */
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        openFrom(intent)
+    }
+
+    /** Extra `open = transfer` (from the notifications) pushes that screen (plan §4.2) [A24]. */
+    private fun openFrom(i: Intent?) {
+        if (AppGraph.isTv) return
+        when (i?.getStringExtra(EXTRA_OPEN)) {
+            OPEN_TRANSFER -> nav?.show(Screen.Transfer)
+        }
+    }
+
     override fun onStart() {
         super.onStart()
         AppGraph.connection.start()
+    }
+
+    companion object {
+        const val EXTRA_OPEN = "open"
+        const val OPEN_TRANSFER = "transfer"
     }
 }

@@ -95,19 +95,34 @@ scan_media() {
   fi
 }
 
-# Host check after RedactionProbe#withoutPermission: what did the redacted copy keep?
-check_redacted() {
-  local f=$OUT/redacted.jpg
-  if adb pull "$EXT/probe/redacted.jpg" "$f" > /dev/null 2>&1; then
-    log "redacted copy: $(PYTHONPATH="$ROOT/pc" "$PY" -c "
-import hashlib, sys, ferry
-b = open(sys.argv[1], 'rb').read()
-print('size=%d sha256=%s exif_gps_status=%s' % (len(b), hashlib.sha256(b).hexdigest(), ferry.exif_gps_status(b[:65536])))
-" "$f")"
-  else
-    log "redacted copy: could not pull"
-  fi
+# A big shell-owned photo (plan §4.14 class 6): a real JPEG with MB megabytes of padding after its end
+# (still a valid image for the media scanner), created by the shell user on the device.
+make_big_jpeg() {
+  local path=$1 mb=$2
+  adb push "$CI/fixtures/photo1.jpg" "$path" > /dev/null &&
+    adbs "dd if=/dev/zero bs=1048576 count=$mb >> $path" > /dev/null 2>&1
+  log "make_big_jpeg: $path $(adbs ls -l "$path" | awk '{print $5}') bytes"
 }
+
+# ---------- host checks after classes (Ph5a, verify_inbox.py) ----------
+verify() {
+  local out
+  if out=$(PYTHONPATH="$ROOT/pc" "$PY" "$CI/verify_inbox.py" "$@" 2>&1); then log "verify_inbox: $out"
+  else log "verify_inbox FAILED: $out"; FAILED=1; fi
+}
+date_modified() {
+  adbs "content query --uri content://media/external/images/media --projection date_modified --where \"_display_name='$1'\"" |
+    sed -n 's/.*date_modified=\([0-9]*\).*/\1/p' | head -1
+}
+# B1 negative control: PC-B's copy (sent without location) must not be the GPS original.
+check_negative() { verify redacted --inbox "$TMP/B/inbox" --name "$GPS_NAME" --fixture "$CI/fixtures/gps.jpg" --label PC-B; }
+# P2: PC-A's copy is the original (bytes, GPS, date); then the PC saw "saved" and the Send-anyway "skipped".
+check_original() {
+  sleep 1 # the PC writes its request log on a background thread
+  verify identical --inbox "$TMP/A/inbox" --name "$GPS_NAME" --fixture "$CI/fixtures/gps.jpg" --mtime-s "$(date_modified "$GPS_NAME")" --label PC-A
+  verify uploads --log "$TMP/A/data/ferry-log.txt" --name "$GPS_NAME" --expect saved,skipped --label PC-A
+}
+check_no_partials() { sleep 2; verify no-partials --inbox "$TMP/$1/inbox" --label "PC-$1"; }
 
 # ---------- one test class ----------
 # Pass rule (plan §4.14 [PA16]): INSTRUMENTATION_CODE: -1 and an "OK (" line, and none of the failure marks.
@@ -148,6 +163,7 @@ cat "$OUT/device.txt" >> "$RESULTS"
 
 case $suite in
   tv) start_pc T 18765 "${FERRY_BIG_VIDEO:-$HOME/big-video/big.mp4}" "$CI/fixtures/small.mp4" || exit 1 ;;
+  phone) { start_pc A 18765 && start_pc B 18766; } || exit 1 ;;
   *)  start_pc A 18765 || exit 1 ;;
 esac
 
@@ -155,7 +171,7 @@ GPS_NAME=IMG_20250101_120000.jpg
 GPS_SHA=$(sha256sum "$CI/fixtures/gps.jpg" | cut -d' ' -f1)
 # Where the app keeps screenshots/probe files [CP16]: the shell can't read Android/data on API 30 TV (Ph0b).
 case $suite in tv) STORE=internal ;; *) STORE=external ;; esac
-INST_ARGS=(-e pcA 10.0.2.2:18765 -e suite "$suite" -e store "$STORE" -e gpsName "$GPS_NAME" -e gpsSha "$GPS_SHA")
+INST_ARGS=(-e pcA 10.0.2.2:18765 -e pcB 10.0.2.2:18766 -e suite "$suite" -e store "$STORE" -e gpsName "$GPS_NAME" -e gpsSha "$GPS_SHA" -e bigName BIG_300MB.jpg)
 # API 25 image: its only network is reported as cellular, so the app uses the debug NET=any override [PR2].
 if [ "$suite" = api25 ]; then INST_ARGS+=(-e app.ferry.debug.NET any); fi
 

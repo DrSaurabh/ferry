@@ -8,6 +8,7 @@ sealed interface Screen {
     object Welcome : Screen
     object Home : Screen
     object Settings : Screen
+    object Transfer : Screen
     object TvHome : Screen
 }
 
@@ -27,6 +28,11 @@ class Navigator(start: Screen) {
         if (stack.size <= 1) return false
         stack.removeAt(stack.lastIndex)
         return true
+    }
+
+    /** Shows [s] on top, unless it is already the top screen (notification tap while it is open). */
+    fun show(s: Screen) {
+        if (current != s) push(s)
     }
 
     fun replaceAll(s: Screen) {

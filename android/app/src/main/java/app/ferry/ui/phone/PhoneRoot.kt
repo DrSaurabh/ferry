@@ -16,6 +16,7 @@ fun PhoneRoot(nav: Navigator) {
         when (nav.current) {
             Screen.Welcome -> WelcomeScreen(onDone = { nav.replaceAll(Screen.Home) })
             Screen.Settings -> SettingsScreen(nav)
+            Screen.Transfer -> TransferScreen(nav)
             else -> HomeScreen(nav)
         }
     }
