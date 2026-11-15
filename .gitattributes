@@ -1,0 +1,11 @@
+# Line endings must survive a Windows checkout (pc/tests/test_platform.py::test_launchers_static)
+*.sh text eol=lf
+android/gradlew text eol=lf
+*.bat text eol=crlf
+*.py text eol=lf
+# Binaries: never touch
+*.jks binary
+*.apk binary
+*.jpg binary
+*.png binary
+*.mp4 binary

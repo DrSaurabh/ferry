@@ -340,8 +340,9 @@ def test_exif_gps_detection():
 
 def test_second_bind_refused_and_probe(srv):
     with pytest.raises(ferry.FatalError) as ei:
-        ferry.bind_server(srv.port, None, exclusive=False, retry_seconds=0)
-    # a plain Linux socket with SO_REUSEADDR still can't bind a LISTENING port; probe finds Ferry
+        ferry.bind_server(srv.port, None, exclusive=ferry.IS_WIN, retry_seconds=0)
+    # Linux: SO_REUSEADDR still can't bind a LISTENING port. Windows: production uses SO_EXCLUSIVEADDRUSE
+    # (a plain SO_REUSEADDR socket would bind there). Either way the probe then finds Ferry.
     assert "already running" in str(ei.value)
 
 

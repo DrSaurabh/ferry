@@ -89,6 +89,7 @@ def args(**kw):
     return a
 
 
+@pytest.mark.skipif(ferry.IS_WIN, reason="Linux bytes-path / XDG decoding")
 def test_resolve_folders_linux(tmp_path):
     home = tmp_path / "home"
     (home / ".config").mkdir(parents=True)
@@ -154,6 +155,10 @@ def test_launchers_static():
     assert b"\r" not in sh and sh.startswith(b"#!/usr/bin/env bash")
     assert subprocess.run(["bash", "-n", os.path.join(ROOT, "ferry.sh")]).returncode == 0
     assert os.access(os.path.join(ROOT, "ferry.sh"), os.X_OK)
+    # the line endings above only survive a Windows checkout because of these two rules
+    rules = open(os.path.join(os.path.dirname(ROOT), ".gitattributes"), encoding="utf-8").read().split("\n")
+    rules = [" ".join(l.split()) for l in rules]
+    assert "*.sh text eol=lf" in rules and "*.bat text eol=crlf" in rules
 
 
 def test_selftest_runs(tmp_path, monkeypatch):
@@ -171,6 +176,13 @@ def test_main_starts_and_stops_quickly(tmp_path, monkeypatch):
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "cfg"))
     monkeypatch.setattr(ferry, "STATE_FILE", str(tmp_path / "state.json"))
     monkeypatch.setattr(ferry.State, "load", classmethod(lambda cls, path=None: cls(str(tmp_path / "state.json"))))
+    # Windows resolves the folders through SHGetKnownFolderPath, not HOME: point it at tmp_path too.
+    # resolve_folders binds win_known_folder as a default argument, so the fake is passed in explicitly.
+    def known(guid):
+        return str(tmp_path / ("Downloads" if guid == ferry.FOLDERID_DOWNLOADS else "Desktop"))
+    monkeypatch.setattr(ferry, "win_known_folder", known)
+    real_resolve = ferry.resolve_folders
+    monkeypatch.setattr(ferry, "resolve_folders", lambda a, st, **kw: real_resolve(a, st, **dict(kw, known=known)))
     import socket
     with socket.socket() as so:
         so.bind(("127.0.0.1", 0))

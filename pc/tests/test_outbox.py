@@ -1,6 +1,8 @@
 import os
 import time
 
+import pytest
+
 import ferry
 from ferry import Outbox
 
@@ -167,6 +169,7 @@ def test_arrival_time_windows_uses_ctime():
     _ = time
 
 
+@pytest.mark.skipif(ferry.IS_WIN, reason="Windows file names are Unicode; undecodable names cannot exist")
 def test_undecodable_name_is_not_offered(tmp_path):
     """Audit O3: one badly-encoded name must not break the whole outbox list."""
     import json

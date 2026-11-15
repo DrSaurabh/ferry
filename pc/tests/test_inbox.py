@@ -108,6 +108,7 @@ def test_mtime_restored_and_implausible_ignored(tmp_path):
     assert time.time() - os.stat(tmp_path / "future.jpg").st_mtime < 60
 
 
+@pytest.mark.skipif(ferry.IS_WIN, reason="POSIX modes")
 def test_permissions_follow_umask(tmp_path):
     ib = Inbox(str(tmp_path), is_win=False, umask=0o022)
     up(ib, b"x", "p.txt")
