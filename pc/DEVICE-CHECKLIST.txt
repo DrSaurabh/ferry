@@ -1,0 +1,52 @@
+FERRY - DEVICE CHECKLIST (about 15 minutes)
+Write the result next to each item and send this file back. "Expected" is what should happen.
+
+---------------------------------------------------------------------------------
+A. WINDOWS PC
+---------------------------------------------------------------------------------
+A1. Double-click "Ferry self-test.bat".
+    Expected: every line says PASS ("ALL PASSED"). It saves ferry-selftest.txt - send it.
+    Result: ______
+A2. Double-click Ferry.bat. Is the whole QR code visible without scrolling?
+    Expected: yes, black squares on white.                           Result: ______
+A3. Click inside the Ferry window, then send a photo from the phone.
+    Expected: the transfer still completes (the window doesn't freeze). Result: ______
+A4. Double-click Ferry.bat a second time while the first is open.
+    Expected: "Ferry is already running in another window."          Result: ______
+
+---------------------------------------------------------------------------------
+B. PHONE (vivo, Chrome)
+---------------------------------------------------------------------------------
+B1. Scan the QR code. Expected: Ferry opens; header shows your PC's name. Result: ______
+B2. Open http://<PC address>:8765/diag  (same address as the QR code + /diag)
+B3. diag section 2: tap "Photos & videos picker", pick ONE photo taken with location on.
+    Then tap "Any file picker" and pick the SAME photo via Images/DCIM/Camera.
+    Note for each: GPS: PRESENT / ZEROED / NONE, and whether the date was kept.
+    Photos & videos: GPS ______  date ______
+    Any file:        GPS ______  date ______
+B4. diag section 3: tap Start, put the phone down for 2 minutes without touching it.
+    Expected (hoped): "screen still on". Result: ______
+B5. diag section 4: run both speed tests.  Download ______ MB/s   Upload ______ MB/s
+B6. diag section 5: tap "Test .zip". Open it from Chrome's download message or Files.
+    Expected: it opens and shows two text files.                     Result: ______
+    Tap "Test .apk". Note exactly what Chrome shows (warning? blocked?). Result: ______
+B7. Back on the main page: send 20+ photos and one large video (1 GB+).
+    Expected: all saved; speed shown; "All done".                    Result: ______
+B8. Send the same photos again. Expected: "Already on PC" for each.   Result: ______
+B9. Put 3 files in the Desktop "Ferry outbox". On the phone: From PC > Download all.
+    Expected: one "Allow multiple downloads?" question, then 3 downloads. Result: ______
+B10. Chrome > three dots > Add to Home screen. Expected: Ferry boat icon. Result: ______
+
+---------------------------------------------------------------------------------
+C. FIRE TV STICK
+---------------------------------------------------------------------------------
+C1. Open the Ferry address in Silk (or Downloader's browser).
+    Expected: a list of outbox files only (no "Send to PC" tab), big text. Result: ______
+C2. Can you move between buttons with the remote's arrows and press OK?
+    (Or does a mouse-like cursor appear instead?)                     Result: ______
+C3. Put an .mp4 in the outbox. On the TV press "Play". Expected: it plays and you
+    can skip forward.                                                 Result: ______
+C4. In Downloader, type http://<PC address>:8765/new with an .apk as the newest outbox
+    file. Expected: Downloader downloads it and offers to install.   Result: ______
+
+Thank you! Send this file (and ferry-selftest.txt) back.
