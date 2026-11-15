@@ -24,3 +24,4 @@ Ph3b · discovery + cast + tests green (core-jvm ×2, app-build, emulator-api25)
 Ph3b · main fast-forwarded · d0da3d5 · main android 43747308064 green (all 6 jobs) · DONE
 Ph4 · app skeleton, connection, settings, manifest/APK checks, package + dist jobs; all jobs incl. three emulator suites green · ea01b1f · android 43754052469 · fast-forward main, check package + dist
 Ph4 · main fast-forwarded · 7c9f876 · main android 43755657517 green (all 8 jobs incl. package + dist; Ferry-2.0.48 on branch dist) · DONE
+Ph5a · step 1 pushed (service, factory, coordinator, screen, tests) · 7ae60a2 · pending · wait for CI

@@ -107,7 +107,8 @@ fun TransferScreen(nav: Navigator, vm: TransferViewModel = viewModel()) {
 @Composable
 private fun androidx.compose.foundation.layout.ColumnScope.TransferBody(st: EngineState, words: TransferWords, onCancel: () -> Unit) {
     val running = st.phase != Phase.Finished
-    Text(words.headline(st), Modifier.testTag("transfer-headline"), style = MaterialTheme.typography.titleMedium)
+    // Finished: the summary card says it (no second copy of the summary line)
+    if (running) Text(words.headline(st), Modifier.testTag("transfer-headline"), style = MaterialTheme.typography.titleMedium)
     val detail = words.detail(st)
     if (detail.isNotEmpty()) Text(detail, Modifier.testTag("transfer-detail"), style = MaterialTheme.typography.bodyMedium)
     if (running) {
