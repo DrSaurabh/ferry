@@ -1,6 +1,5 @@
 package app.ferry
 
-import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import app.ferry.core.HostPort
 import app.ferry.core.upload.ItemStatus
@@ -14,7 +13,6 @@ import app.ferry.probe.Shots
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
-import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 
@@ -26,8 +24,6 @@ import org.junit.runner.RunWith
  */
 @RunWith(AndroidJUnit4::class)
 class CancelAndWaitingTest {
-    @get:Rule val compose = createEmptyComposeRule()
-
     private fun send(id: Long) {
         val p = runBlocking { SendCoordinator.prepare(Probe.context, SendRequest.Picks(listOf(MediaPick(id, false)))) }
         assertTrue(p.needsLocationChoice.isEmpty())
@@ -45,20 +41,20 @@ class CancelAndWaitingTest {
         val big = SendHelpers.findImage(Probe.arg("bigName", "BIG_300MB.jpg"))
         val small = SendHelpers.findImage(SendHelpers.gpsName)
         LaunchHelpers.launch(open = MainActivity.OPEN_TRANSFER).use {
-            SendHelpers.waitConnected(compose)
+            SendHelpers.waitConnected()
             send(big.id)
-            SendHelpers.waitTransfer(compose, "big file at 25 %", 120_000) { s ->
+            SendHelpers.waitTransfer("big file at 25 %", 120_000) { s ->
                 val st = s?.items?.firstOrNull()?.status
                 st is ItemStatus.Sending && st.sent * 4 >= st.total
             }
-            LaunchHelpers.settle(compose)
+            SendHelpers.settle()
             Shots.take("transfer-sending")
             cancelOnScreen()
-            SendHelpers.waitTransfer(compose, "cancelled") { it?.phase == Phase.Finished }
+            SendHelpers.waitTransfer("cancelled") { it?.phase == Phase.Finished }
             val s = AppGraph.transfers.state.value!!
             assertEquals("cancelled, not saved: ${s.items[0].status}", ItemStatus.Cancelled, s.items[0].status)
             assertEquals(1, s.summary!!.cancelled)
-            LaunchHelpers.settle(compose)
+            SendHelpers.settle()
             Shots.take("transfer-cancelled")
 
             // No PC: unused port, nothing remembered (broadcast can't leave the emulator NAT [B27])
@@ -68,12 +64,12 @@ class CancelAndWaitingTest {
             runBlocking { AppGraph.connection.relocate() }
             assertTrue(AppGraph.connection.state.value !is ConnectionState.Connected)
             send(small.id)
-            SendHelpers.waitTransfer(compose, "waiting for PC", 15_000) { it?.phase == Phase.WaitingForPc }
-            LaunchHelpers.waitForText(compose, "continues automatically", 10_000)
-            LaunchHelpers.settle(compose)
+            SendHelpers.waitTransfer("waiting for PC", 15_000) { it?.phase == Phase.WaitingForPc }
+            SendHelpers.waitText("continues automatically", 10_000)
+            SendHelpers.settle()
             Shots.take("transfer-waiting")
             cancelOnScreen()
-            SendHelpers.waitTransfer(compose, "waiting cancelled", 20_000) { it?.phase == Phase.Finished }
+            SendHelpers.waitTransfer("waiting cancelled", 20_000) { it?.phase == Phase.Finished }
             assertEquals(ItemStatus.Cancelled, AppGraph.transfers.state.value!!.items[0].status)
         }
     }

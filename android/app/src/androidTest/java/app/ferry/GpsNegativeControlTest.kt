@@ -1,6 +1,5 @@
 package app.ferry
 
-import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import app.ferry.core.HostPort
 import app.ferry.core.upload.ItemStatus
@@ -15,7 +14,6 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
-import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 
@@ -27,8 +25,6 @@ import org.junit.runner.RunWith
  */
 @RunWith(AndroidJUnit4::class)
 class GpsNegativeControlTest {
-    @get:Rule val compose = createEmptyComposeRule()
-
     @Test
     fun sendWithoutLocationToPcB() {
         assertFalse("ACCESS_MEDIA_LOCATION must not be granted yet", SendHelpers.hasLocationPermission())
@@ -38,7 +34,7 @@ class GpsNegativeControlTest {
         Probe.record("negative_owner", row.owner)
         assertNotEquals("Ferry must not own the row (owners are never redacted)", "app.ferry", row.owner)
         LaunchHelpers.launch(open = MainActivity.OPEN_TRANSFER).use {
-            SendHelpers.waitConnected(compose)
+            SendHelpers.waitConnected()
             val p = runBlocking { SendCoordinator.prepare(Probe.context, SendRequest.Picks(listOf(MediaPick(row.id, false)))) }
             assertEquals(1, p.items.size)
             assertEquals("the original can't be read: location choice needed", listOf(p.items[0].id), p.needsLocationChoice)
@@ -47,12 +43,12 @@ class GpsNegativeControlTest {
             assertFalse(w.items[0].original)
             assertTrue(w.needsLocationChoice.isEmpty())
             SendCoordinator.start(Probe.context, w)
-            SendHelpers.waitTransfer(compose, "saved without location") { it?.phase == Phase.Finished }
+            SendHelpers.waitTransfer("saved without location") { it?.phase == Phase.Finished }
             val s = AppGraph.transfers.state.value!!
             assertTrue("row saved: ${s.items[0].status}", s.items[0].status is ItemStatus.Saved)
             assertEquals(1, s.summary!!.savedWithoutLocation)
-            LaunchHelpers.waitForText(compose, "Saved without location")
-            LaunchHelpers.settle(compose)
+            SendHelpers.waitText("Saved without location")
+            SendHelpers.settle()
             Shots.take("transfer-saved-without-location")
             Probe.record("negative_summary", s.summary)
         }

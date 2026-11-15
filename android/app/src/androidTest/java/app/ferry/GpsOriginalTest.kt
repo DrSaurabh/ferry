@@ -1,6 +1,5 @@
 package app.ferry
 
-import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import app.ferry.core.upload.ItemStatus
 import app.ferry.core.upload.Phase
@@ -12,7 +11,6 @@ import app.ferry.probe.Shots
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
-import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 
@@ -24,8 +22,6 @@ import org.junit.runner.RunWith
  */
 @RunWith(AndroidJUnit4::class)
 class GpsOriginalTest {
-    @get:Rule val compose = createEmptyComposeRule()
-
     private fun prepare(id: Long) =
         runBlocking { SendCoordinator.prepare(Probe.context, SendRequest.Picks(listOf(MediaPick(id, false)))) }
 
@@ -36,35 +32,35 @@ class GpsOriginalTest {
         val row = SendHelpers.findImage(SendHelpers.gpsName)
         Probe.record("original_date_modified_s", row.dateModifiedS)
         LaunchHelpers.launch(open = MainActivity.OPEN_TRANSFER).use {
-            SendHelpers.waitConnected(compose)
+            SendHelpers.waitConnected()
             val p = prepare(row.id)
             assertTrue("no location choice with the permission", p.needsLocationChoice.isEmpty())
             assertTrue("opened as the original", p.items[0].requireOriginal)
             assertEquals(row.dateModifiedS * 1000, p.items[0].mtimeMs)
             SendCoordinator.start(Probe.context, p)
-            SendHelpers.waitTransfer(compose, "saved") { it?.phase == Phase.Finished }
+            SendHelpers.waitTransfer("saved") { it?.phase == Phase.Finished }
             var s = AppGraph.transfers.state.value!!
             assertEquals(ItemStatus.Saved(SendHelpers.gpsName, false), s.items[0].status)
             assertEquals(0, s.summary!!.savedWithoutLocation)
-            LaunchHelpers.waitForText(compose, "1 saved · 0 already on PC")
-            LaunchHelpers.settle(compose)
+            SendHelpers.waitText("1 saved · 0 already on PC")
+            SendHelpers.settle()
             Shots.take("transfer-summary-saved")
 
             // Resend: a fresh run, answered by the pre-check
             val runs = SendHelpers.finishedRuns()
             SendCoordinator.start(Probe.context, prepare(row.id))
-            SendHelpers.waitTransfer(compose, "already on PC") { SendHelpers.finishedRuns() > runs && it?.phase == Phase.Finished }
+            SendHelpers.waitTransfer("already on PC") { SendHelpers.finishedRuns() > runs && it?.phase == Phase.Finished }
             s = AppGraph.transfers.state.value!!
             assertTrue("resend: ${s.items[0].status}", s.items[0].status is ItemStatus.AlreadyOnPc)
             assertEquals(1, s.summary!!.alreadyOnPc)
-            LaunchHelpers.waitForText(compose, "0 saved · 1 already on PC")
-            LaunchHelpers.settle(compose)
+            SendHelpers.waitText("0 saved · 1 already on PC")
+            SendHelpers.settle()
             Shots.take("transfer-summary-already")
 
             // Send anyway: uploaded without the pre-check, the PC compares content → skipped (identical)
             val runs2 = SendHelpers.finishedRuns()
             SendHelpers.tap("Send anyway")
-            SendHelpers.waitTransfer(compose, "send anyway done") { SendHelpers.finishedRuns() > runs2 && it?.phase == Phase.Finished }
+            SendHelpers.waitTransfer("send anyway done") { SendHelpers.finishedRuns() > runs2 && it?.phase == Phase.Finished }
             s = AppGraph.transfers.state.value!!
             assertTrue("send anyway: ${s.items[0].status}", s.items[0].status is ItemStatus.AlreadyOnPc)
             Probe.record("original_send_anyway", s.items[0].status)

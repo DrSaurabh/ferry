@@ -5,10 +5,13 @@ import android.content.ContentUris
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.provider.MediaStore
-import androidx.compose.ui.test.junit4.ComposeTestRule
 import app.ferry.core.upload.EngineState
 import app.ferry.net.ConnectionState
 import app.ferry.probe.Probe
+import app.ferry.probe.Shots
+import androidx.test.uiautomator.By
+import androidx.test.uiautomator.UiDevice
+import androidx.test.uiautomator.Until
 
 /** Shared steps of the sending tests (plan §4.14): media rows made by the shell, PC addresses, engine waits. */
 object SendHelpers {
@@ -40,25 +43,52 @@ object SendHelpers {
         }
     }
 
-    fun waitConnected(rule: ComposeTestRule) =
-        LaunchHelpers.waitFor("connected", rule, 30_000) { AppGraph.connection.state.value is ConnectionState.Connected }
+    private val device get() = UiDevice.getInstance(Probe.instrumentation)
 
-    /** Waits on the published engine state; on timeout the state, RingLog and a screenshot go to the job log. */
-    fun waitTransfer(rule: ComposeTestRule, what: String, timeoutMs: Long = 60_000, cond: (EngineState?) -> Boolean) {
+    /**
+     * Polling wait without a Compose test rule (Ph5a B50): the rule's test frame clock ran layout off the main thread
+     * while the Transfer screen collected the engine's state from IO, crashing the app. On timeout the state, the
+     * RingLog and a screenshot go to the job log.
+     */
+    fun waitUntil(what: String, timeoutMs: Long, cond: () -> Boolean) {
+        val end = System.currentTimeMillis() + timeoutMs
+        while (!cond()) {
+            if (System.currentTimeMillis() > end) {
+                Probe.record("wait_failed", "$what; state=${AppGraph.connection.state.value}")
+                for (line in AppGraph.ringLog.snapshot().takeLast(40)) Probe.record("ringlog", line)
+                runCatching { Shots.take("fail-" + what.filter { it.isLetterOrDigit() }.take(30)) }
+                throw AssertionError("timed out after $timeoutMs ms waiting for $what")
+            }
+            Thread.sleep(100)
+        }
+    }
+
+    fun waitConnected() = waitUntil("connected", 30_000) { AppGraph.connection.state.value is ConnectionState.Connected }
+
+    /** Text on screen (UiAutomator; substring). */
+    fun waitText(text: String, timeoutMs: Long = 30_000) =
+        waitUntil("text '$text'", timeoutMs) { device.hasObject(By.textContains(text)) }
+
+    /** Lets the last frame reach the screen before a screenshot. */
+    fun settle() {
+        device.waitForIdle()
+        Thread.sleep(700)
+    }
+
+    /** Waits on the published engine state. */
+    fun waitTransfer(what: String, timeoutMs: Long = 60_000, cond: (EngineState?) -> Boolean) {
         try {
-            LaunchHelpers.waitFor(what, rule, timeoutMs) { cond(AppGraph.transfers.state.value) }
+            waitUntil(what, timeoutMs) { cond(AppGraph.transfers.state.value) }
         } finally {
             Probe.record("transfer_state", AppGraph.transfers.state.value?.let { "${it.phase} ${it.items.map { r -> r.status }} ${it.summary}" })
         }
     }
 
     /**
-     * Taps a button by its text through UiAutomator (real input events). Ph5a B48: Compose-test `performClick`
-     * during a transfer's state switch twice crashed the app with "multithreaded access to SnapshotStateObserver".
+     * Taps a button by its text through UiAutomator (real input events, no Compose test rule; B48/B50).
      */
     fun tap(text: String, timeoutMs: Long = 10_000) {
-        val dev = androidx.test.uiautomator.UiDevice.getInstance(Probe.instrumentation)
-        val o = dev.wait(androidx.test.uiautomator.Until.findObject(androidx.test.uiautomator.By.text(text)), timeoutMs)
+        val o = device.wait(Until.findObject(By.text(text)), timeoutMs)
         checkNotNull(o) { "no '$text' on screen" }.click()
     }
 
