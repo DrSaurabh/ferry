@@ -7,6 +7,7 @@ plugins {
 }
 
 // Version [H26] [CP13]: android.yml sets FERRY_RELEASE=1 and FERRY_RUN_NUMBER on main only.
+// Same rule as app.ferry.VersionRule (VersionRuleTest checks that BuildConfig follows it).
 val ferryRelease = System.getenv("FERRY_RELEASE") == "1"
 val ferryRun = System.getenv("FERRY_RUN_NUMBER")?.toIntOrNull()
 val ferryVersionCode = if (ferryRelease && ferryRun != null) 20000 + ferryRun else 1
@@ -65,7 +66,11 @@ dependencies {
     coreLibraryDesugaring(libs.desugar.jdk.libs)
     val bom = platform("androidx.compose:compose-bom:2024.12.01")
     implementation(bom)
+    implementation("androidx.core:core-ktx:1.15.0")
     implementation("androidx.activity:activity-compose:1.9.3")
+    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")
+    implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.7")
+    implementation(libs.kotlinx.coroutines.android)
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.foundation:foundation")
     implementation("androidx.compose.material3:material3")

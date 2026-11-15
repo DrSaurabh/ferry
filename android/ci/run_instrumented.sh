@@ -156,6 +156,8 @@ GPS_SHA=$(sha256sum "$CI/fixtures/gps.jpg" | cut -d' ' -f1)
 # Where the app keeps screenshots/probe files [CP16]: the shell can't read Android/data on API 30 TV (Ph0b).
 case $suite in tv) STORE=internal ;; *) STORE=external ;; esac
 INST_ARGS=(-e pcA 10.0.2.2:18765 -e suite "$suite" -e store "$STORE" -e gpsName "$GPS_NAME" -e gpsSha "$GPS_SHA")
+# API 25 image: its only network is reported as cellular, so the app uses the debug NET=any override [PR2].
+if [ "$suite" = api25 ]; then INST_ARGS+=(-e app.ferry.debug.NET any); fi
 
 adb uninstall "$PKG" > /dev/null 2>&1
 adb uninstall "$PKG.test" > /dev/null 2>&1

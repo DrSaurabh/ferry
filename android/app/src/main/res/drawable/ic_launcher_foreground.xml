@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- pc/ferry-icon.svg content, scaled into the adaptive-icon safe zone (108 viewport, 66 % centred). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp"
+    android:viewportWidth="108" android:viewportHeight="108">
+    <group android:translateX="21" android:translateY="21" android:scaleX="0.66" android:scaleY="0.66">
+        <path android:fillColor="#fbbf24"
+            android:pathData="M61.5,12 h5 a1.5,1.5 0 0 1 1.5,1.5 v8 a1.5,1.5 0 0 1 -1.5,1.5 h-5 a1.5,1.5 0 0 1 -1.5,-1.5 v-8 a1.5,1.5 0 0 1 1.5,-1.5 z" />
+        <path android:fillColor="#ffffff"
+            android:pathData="M31,22 h40 a3,3 0 0 1 3,3 v24 a3,3 0 0 1 -3,3 h-40 a3,3 0 0 1 -3,-3 v-24 a3,3 0 0 1 3,-3 z" />
+        <path android:fillColor="#1d4ed8" android:pathData="M37,28 h7 v24 h-7 z M37,28 h29 v5 h-29 z M37,39 h21 v5 h-21 z" />
+        <path android:fillColor="#ffffff" android:pathData="M18,52 L82,52 L72,68 L28,68 Z" />
+        <path android:strokeColor="#93c5fd" android:strokeWidth="5" android:strokeLineCap="round"
+            android:pathData="M14,80 q9,-6 18,0 t18,0 t18,0 t18,0" />
+    </group>
+</vector>

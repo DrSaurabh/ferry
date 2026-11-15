@@ -140,3 +140,106 @@ def test_junit_summary(tmp_path):
     assert rows[2].startswith("FAILED") and rows[2].endswith("HostPortTest.c")
     assert rows[3] == "note    diskFull branch=507"
     assert len(rows) == 4
+
+
+# ---------- check_manifest.py (Ph4) ----------
+def _manifest(name):
+    import check_manifest
+    with open(os.path.join(FIX, name), encoding="utf-8") as f:
+        return check_manifest.load(f.read())
+
+
+def test_manifest_xmltree_fixture_passes():
+    import check_manifest
+    assert check_manifest.check(_manifest("manifest-xmltree.txt")) == []
+
+
+def test_manifest_plain_xml_fixture_passes():
+    import check_manifest
+    assert check_manifest.check(_manifest("manifest-sample.xml")) == []
+
+
+def test_manifest_source_matches_sample_entries():
+    """The app's source manifest declares every permission the checker requires (and not the forbidden one)."""
+    import check_manifest
+    with open(os.path.join(HERE, "..", "app", "src", "main", "AndroidManifest.xml"), encoding="utf-8") as f:
+        src = check_manifest.load(f.read())
+    names = {p.get("name") for p in src.kids("uses-permission")}
+    assert set(check_manifest.REQUIRED_PERMISSIONS) <= names
+    assert not names & set(check_manifest.FORBIDDEN_PERMISSIONS)
+
+
+def _mutated(old, new, count=1):
+    import check_manifest
+    with open(os.path.join(FIX, "manifest-sample.xml"), encoding="utf-8") as f:
+        text = f.read()
+    assert old in text, old
+    return check_manifest.check(check_manifest.load(text.replace(old, new, count)))
+
+
+def test_manifest_each_rule_can_fail():
+    cases = [
+        ('android:usesCleartextTraffic="true"', 'android:usesCleartextTraffic="false"', "usesCleartextTraffic"),
+        ('<uses-permission android:name="android.permission.INTERNET" />', "", "INTERNET"),
+        ('<uses-permission android:name="android.permission.INTERNET" />',
+         '<uses-permission android:name="android.permission.INTERNET" />'
+         '<uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />', "WRITE_EXTERNAL_STORAGE"),
+        ('android:maxSdkVersion="32"', 'android:maxSdkVersion="28"', "maxSdkVersion 32"),
+        ('android:minSdkVersion="25"', 'android:minSdkVersion="26"', "minSdkVersion"),
+        ('<category android:name="android.intent.category.LEANBACK_LAUNCHER" />', "", "LEANBACK_LAUNCHER"),
+        ('android:banner="@drawable/banner"', "", "banner"),
+        ('android:launchMode="singleTask"', 'android:launchMode="singleTop"', "singleTask"),
+        ('|uiMode"', '"', "configChanges"),
+        ('android:foregroundServiceType="dataSync"', 'android:foregroundServiceType="mediaPlayback"', "TransferService"),
+        ('android:authorities="app.ferry.files"', 'android:authorities="app.ferry.other"', "authority"),
+        ('android:taskAffinity=""', 'android:taskAffinity="x"', "taskAffinity"),
+        ('<action android:name="android.intent.action.SEND_MULTIPLE" />', "", "SEND_MULTIPLE"),
+        ('android:name="android.software.leanback" android:required="false"',
+         'android:name="android.software.leanback" android:required="true"', "leanback"),
+        ("</application>", '<uses-library android:name="org.apache.http.legacy" /></application>', "uses-library"),
+    ]
+    for old, new, word in cases:
+        problems = _mutated(old, new)
+        assert problems, "no problem reported for: %s" % word
+        assert any(word in p for p in problems), (word, problems)
+
+
+def test_manifest_xmltree_values():
+    import check_manifest
+    assert check_manifest._xmltree_value('"a b" (Raw: "a b")') == "a b"
+    assert check_manifest._xmltree_value("(type 0x12)0xffffffff") == "0xffffffff"
+    assert check_manifest.as_bool("0xffffffff") is True and check_manifest.as_bool("false") is False
+    assert check_manifest.as_int("0x7a0") == 0x7a0
+    assert check_manifest.as_int("orientation|uiMode", check_manifest.CONFIG_BITS) == 0x280
+
+
+def test_manifest_cli(tmp_path, capsys):
+    import check_manifest
+    assert check_manifest.main([os.path.join(FIX, "manifest-xmltree.txt")]) == 0
+    bad = tmp_path / "m.txt"
+    bad.write_text("nothing here\n")
+    assert check_manifest.main([str(bad)]) == 1
+    assert "could not read the manifest" in capsys.readouterr().out
+
+
+# ---------- make_apk_json.py (Ph4) ----------
+def test_make_apk_json_is_accepted_by_ferry_appbundle(tmp_path):
+    import json
+    import ferry
+    import make_apk_json
+    apk = tmp_path / "Ferry.apk"
+    apk.write_bytes(b"PK\x03\x04" + os.urandom(5000))
+    meta = make_apk_json.apk_json(str(apk), "20057", "2.0.57")
+    assert meta["version_code"] == 20057 and meta["size"] == 5004 and meta["url"] == "/app/Ferry.apk"
+    (tmp_path / "Ferry.apk.json").write_text(json.dumps(meta))
+    state, got, _ = ferry.AppBundle(str(tmp_path)).status()
+    assert state == "ok" and got["sha256"] == meta["sha256"] and got["version_name"] == "2.0.57"
+
+
+def test_make_apk_json_rejects_bad_version(tmp_path):
+    import pytest
+    import make_apk_json
+    apk = tmp_path / "a.apk"
+    apk.write_bytes(b"x")
+    with pytest.raises(ValueError):
+        make_apk_json.apk_json(str(apk), "0", "2.0.0")

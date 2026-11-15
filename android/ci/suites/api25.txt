@@ -1,3 +1,5 @@
 # API 25 suite (Fire OS 6 level). Class | host steps before | host check after (plan CP6, §4.14)
+# Ph4:
+app.ferry.Api25LaunchTest | |
 # Ph0b probes (throw-away):
 app.ferry.probe.HostReachProbe | |

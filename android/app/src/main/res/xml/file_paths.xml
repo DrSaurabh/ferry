@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- FileProvider app.ferry.files (plan §4.8) [A14]: app update, TV/phone APK downloads, diagnostics log. -->
+<paths>
+    <files-path name="update" path="update/" />
+    <files-path name="apk" path="apk/" />
+    <files-path name="logs" path="logs/" />
+</paths>

@@ -1,0 +1,116 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- All user-visible wording (plan §4.12) [A22]: one place to correct it after the real-device tests. -->
+<resources>
+    <string name="app_name">Ferry</string>
+
+    <!-- Connection status (plan §4.12) -->
+    <string name="status_connected">Connected to %1$s</string>
+    <string name="status_looking">Looking for your PC…</string>
+    <string name="status_not_found">PC not found. Is Ferry running on the PC, and is this phone on the same Wi-Fi?</string>
+    <string name="status_no_wifi">Your phone is not on Wi-Fi. Connect to your home Wi-Fi.</string>
+    <string name="status_old_pc">Your PC has an older Ferry. Replace it with the new Ferry folder.</string>
+    <string name="status_pc_error">Your PC answered with an error (%1$s). Restart Ferry on the PC.</string>
+
+    <!-- Transfers (used from Ph5a) -->
+    <string name="waiting_for_pc">Waiting for %1$s… (continues automatically)</string>
+    <string name="gave_up_waiting">Couldn\'t reach %1$s for 30 minutes. %2$d files not sent. Tap Retry when the PC is on.</string>
+    <string name="pc_disk_full_need">Your PC needs %1$s more free space. Nothing was sent.</string>
+    <string name="pc_disk_full">Your PC\'s disk is full. Free some space, then tap Retry.</string>
+    <string name="phone_storage_full">Not enough space on your phone (%1$s needed).</string>
+    <string name="battery_saver_on">Battery saver is on. Transfers may be slower.</string>
+    <string name="row_waiting">Waiting</string>
+    <string name="row_checking">Checking</string>
+    <string name="row_sending">Sending %1$d%%</string>
+    <string name="row_saved">Saved</string>
+    <string name="row_saved_as">Saved as %1$s</string>
+    <string name="row_saved_no_location">Saved without location</string>
+    <string name="row_already">Already on PC</string>
+    <string name="send_anyway">Send anyway</string>
+    <string name="row_failed_read">Can\'t read this file any more. Share it again.</string>
+    <string name="row_failed_changed">The file changed while sending.</string>
+    <string name="row_failed_location">Can\'t read this photo\'s location. Send it again.</string>
+    <string name="preparing">Preparing…</string>
+    <string name="download_failed">Download failed. Try again.</string>
+    <string name="downloads_need_android10">Downloading from the PC needs Android 10 or newer.</string>
+    <string name="row_failed_drops">The connection kept dropping.</string>
+    <string name="row_not_sent">Not sent: PC not found</string>
+    <string name="summary">%1$d saved · %2$d already on PC</string>
+    <string name="summary_failed">%1$d failed. Tap to retry</string>
+    <string name="summary_no_location">%1$d saved without location</string>
+    <string name="interrupted">The last transfer was interrupted (%1$d files not sent). vivo may have stopped Ferry. Fix battery settings</string>
+
+    <!-- Battery (P10) [A8]; the vivo steps stay in ONE string -->
+    <string name="vivo_steps">1. Open Recents and lock Ferry (pull the Ferry card down or tap the lock). 2. Settings → Battery → Background power consumption → Ferry → Allow.</string>
+    <string name="battery_ok">Android battery setting: OK</string>
+    <string name="battery_fix">Android battery setting: needs a change → Fix</string>
+
+    <!-- Location / permissions (Ph5a, Ph6) -->
+    <string name="location_dialog">Ferry isn\'t allowed to read photo locations.</string>
+    <string name="location_allow">Allow</string>
+    <string name="location_without">Send without location</string>
+    <string name="lose_location_note">Photos sent this way may lose their location. Use Send photos &amp; videos.</string>
+    <string name="partial_access">Ferry can only see some photos → Allow all</string>
+    <string name="media_rationale">Choose Allow all. If vivo asks again, choose Allow.</string>
+    <string name="share_toast">Sending %1$d files to %2$s</string>
+
+    <!-- Update and install (C3, T4) -->
+    <string name="update_available">Ferry %1$s is available → Update</string>
+    <string name="update_after">Update after this finishes</string>
+    <string name="install_allow">Allow Ferry to install apps.</string>
+    <string name="install_steps_fireos">Settings → My Fire TV → Developer options → Install unknown apps → Ferry: ON. (No Developer options? Settings → My Fire TV → About → press OK on the device name 7 times.)</string>
+    <string name="install_steps_fireos6">Settings → My Fire TV → Developer options → Apps from Unknown Sources: ON</string>
+
+    <!-- TV (design §5) -->
+    <string name="tv_not_found">On the TV, open Ferry and leave it on its home screen.</string>
+    <string name="tv_ready">Ready for your phone. On the phone: Ferry → Play on TV.</string>
+    <string name="tv_pc_not_found">Can\'t find your PC</string>
+    <string name="tv_empty">Put files in Desktop → Ferry outbox on your PC. They\'ll appear here.</string>
+    <string name="tv_other_files">Open these on your phone or PC</string>
+    <string name="cant_play_format">This TV can\'t play this video format (%1$s)</string>
+    <string name="cant_play_sound">This TV can\'t play this video\'s sound (%1$s)</string>
+    <string name="cant_show_photo">Can\'t show this photo</string>
+    <string name="cant_show_format">Can\'t show this photo format</string>
+    <string name="lost_phone">Lost connection to the phone</string>
+    <string name="playing_from">Playing from %1$s</string>
+
+    <!-- Screen labels (Ph4 skeleton; wording pass in Ph10) -->
+    <string name="welcome_title">Welcome to Ferry</string>
+    <string name="welcome_line1">Send photos, videos and files from this phone to your PC over home Wi-Fi.</string>
+    <string name="welcome_line2">Get files from the PC\'s Ferry outbox, and play videos and photos on your Fire TV.</string>
+    <string name="welcome_line3">Start Ferry on the PC first. This phone finds it by itself.</string>
+    <string name="battery_card">vivo may stop Ferry in the background. Allow Ferry to run in the background.</string>
+    <string name="battery_allow">Allow</string>
+    <string name="continue_">Continue</string>
+    <string name="btn_send_photos">Send photos &amp; videos</string>
+    <string name="btn_send_files">Send other files (documents, APKs…)</string>
+    <string name="btn_from_pc">From PC</string>
+    <string name="btn_play_tv">Play on TV</string>
+    <string name="btn_settings">Settings</string>
+    <string name="try_again">Try again</string>
+    <string name="enter_address">Enter address</string>
+    <string name="coming_soon">Coming in this build</string>
+    <string name="settings_pc">PC</string>
+    <string name="settings_find_again">Find again</string>
+    <string name="settings_searching">Searching…</string>
+    <string name="settings_none_found">No PC answered.</string>
+    <string name="settings_address">PC address (e.g. 192.168.1.5)</string>
+    <string name="settings_address_bad">Type the PC\'s address like 192.168.1.5 or 192.168.1.5:8800.</string>
+    <string name="settings_save">Save</string>
+    <string name="settings_clear">Clear</string>
+    <string name="settings_battery">Battery</string>
+    <string name="settings_still_stopping">Still stopping?</string>
+    <string name="settings_slideshow">Slideshow: seconds per photo</string>
+    <string name="settings_version">Ferry %1$s</string>
+    <string name="settings_share_log">Share diagnostics log</string>
+    <string name="settings_no_log">There is no log yet.</string>
+    <string name="tv_header">Ferry · %1$s</string>
+    <string name="tv_row_videos">Videos</string>
+    <string name="tv_row_photos">Photos</string>
+    <string name="tv_row_apps">Apps</string>
+    <string name="tv_row_other">Other files</string>
+    <string name="tv_slideshow_card">▶ Slideshow (%1$d)</string>
+    <string name="tv_found_pcs">PCs found:</string>
+    <string name="channel_transfers">Transfers</string>
+    <string name="channel_results">Results</string>
+    <string name="channel_casting">Casting</string>
+</resources>

@@ -1,5 +1,7 @@
 # Phone suite (API 34). One line per test class, run in this order (plan CP6, §4.14):
 #   Class | host steps before it | host check after it
+# Ph4:
+app.ferry.PhoneLaunchTest | |
 # Ph0b probes (throw-away):
 app.ferry.probe.HostReachProbe | |
 app.ferry.probe.RedactionProbe#withoutPermission | grant READ_MEDIA_IMAGES; push_media gps.jpg /sdcard/DCIM/Camera/IMG_20250101_120000.jpg; scan_media /sdcard/DCIM/Camera/IMG_20250101_120000.jpg | check_redacted

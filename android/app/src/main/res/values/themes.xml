@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Platform themes only (plan §4.11): no Material Components library. Compose draws everything else. -->
+<resources>
+    <style name="Theme.Ferry" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:colorPrimary">@color/ferry_blue</item>
+        <item name="android:colorAccent">@color/ferry_amber</item>
+    </style>
+    <style name="Theme.Ferry.Translucent" parent="android:Theme.Translucent.NoTitleBar" />
+</resources>

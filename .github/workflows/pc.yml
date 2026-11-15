@@ -1,6 +1,7 @@
 name: pc
 on:
   push:
+    branches-ignore: [dist]
     paths: ["pc/**", ".github/workflows/pc.yml"]
   workflow_dispatch:
 jobs:

@@ -1,10 +1,12 @@
 # Ferry Android CI (plan §5.2). NEVER rename this file: versionCode = 20000 + its run number [H26].
 # Branch pushes run the fast jobs only; emulator suites run on main, on a manual run, or on a branch
 # when the head commit message carries [emu] / [emu:phone] / [emu:tv] / [emu:api25] [H28] [CP18].
-# package (Ph4) does not exist yet.
+# On main, `package` builds the PC zip with the APK (artifact Ferry-2.0.<n>, or -UNVERIFIED unless all three
+# emulator suites passed [CP19]) and `dist` commits a verified zip + APK to the orphan branch `dist` (B38).
 name: android
 on:
   push:
+    branches-ignore: [dist]
     paths: ["android/**", "pc/**", ".github/workflows/android.yml"]
   workflow_dispatch:
     inputs:
@@ -17,6 +19,10 @@ on:
 concurrency:
   group: android-${{ github.ref }}
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+# Read-only token everywhere; only the dist job may write (B38).
+permissions:
+  contents: read
 
 env:
   FERRY_RELEASE: ${{ github.ref == 'refs/heads/main' && '1' || '0' }}
@@ -72,16 +78,21 @@ jobs:
       - name: Unit tests, lint (NewApi), release + debug + androidTest APKs
         working-directory: android
         run: ./gradlew --no-daemon :app:testDebugUnitTest :app:lintDebug :app:assembleRelease :app:assembleDebug :app:assembleDebugAndroidTest
-      - name: Check the release APK
+      - name: Check the release APK (manifest, certificate, libraries, version) and write Ferry.apk.json
         run: |
           BT=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
           echo "build-tools: $BT"
           if [ "$FERRY_RELEASE" = 1 ]; then CODE=$((20000 + FERRY_RUN_NUMBER)); NAME="2.0.$FERRY_RUN_NUMBER"; else CODE=1; NAME=2.0.0-dev; fi
           APK=android/app/build/outputs/apk/release/app-release.apk
+          mkdir -p out/ferry-apk out/test-apks
+          "$BT/aapt2" dump xmltree --file AndroidManifest.xml "$APK" > out/manifest.txt
+          echo "----- release manifest (aapt2 dump xmltree) -----"; cat out/manifest.txt; echo "-----"
+          python android/ci/check_manifest.py out/manifest.txt
           unzip -l "$APK" 'lib/*' || true
           python android/ci/check_apk.py "$APK" --build-tools "$BT" --expect-code "$CODE" --expect-name "$NAME"
-          mkdir -p out/ferry-apk out/test-apks
           cp "$APK" out/ferry-apk/Ferry.apk
+          python android/ci/make_apk_json.py out/ferry-apk/Ferry.apk "$CODE" "$NAME" > out/ferry-apk/Ferry.apk.json
+          cat out/ferry-apk/Ferry.apk.json
           cp android/app/build/outputs/apk/debug/app-debug.apk out/test-apks/
           cp android/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk out/test-apks/
       - uses: actions/upload-artifact@v4
@@ -326,3 +337,98 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with: { name: screenshots-api25, path: ci-out/*/screenshots/, if-no-files-found: ignore }
+
+  package:
+    # The user zip (plan §5.2, §5.3) [B25] [CP7] [CP19]: main only; waits for every job and reads their results.
+    needs: [core-jvm, app-build, emulator-phone, emulator-tv, emulator-api25]
+    if: ${{ !cancelled() && github.ref == 'refs/heads/main' && needs.core-jvm.result == 'success' && needs.app-build.result == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    outputs:
+      name: ${{ steps.zip.outputs.name }}
+      verified: ${{ steps.zip.outputs.verified }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.13" }
+      - run: pip install pytest
+      - name: PC tests (Linux)
+        run: python -m pytest -q pc/tests
+      - uses: actions/download-artifact@v4
+        with: { name: ferry-apk, path: pc/app }
+      - name: Build Ferry-<version>.zip
+        id: zip
+        env:
+          PHONE: ${{ needs.emulator-phone.result }}
+          TV: ${{ needs.emulator-tv.result }}
+          API25: ${{ needs.emulator-api25.result }}
+        run: |
+          python pc/tools/package.py --app-dir pc/app --out dist
+          ZIP=$(ls dist/Ferry-*.zip)
+          VER=${ZIP#dist/Ferry-}; VER=${VER%.zip}
+          if [ "$PHONE" = success ] && [ "$TV" = success ] && [ "$API25" = success ]; then
+            SUFFIX=""; VERIFIED=true
+          else
+            SUFFIX="-UNVERIFIED"; VERIFIED=false
+          fi
+          echo "name=Ferry-$VER$SUFFIX" >> "$GITHUB_OUTPUT"
+          echo "verified=$VERIFIED" >> "$GITHUB_OUTPUT"
+          unzip -l "$ZIP"
+          {
+            echo "### Ferry-$VER$SUFFIX"
+            echo "emulator-phone: $PHONE · emulator-tv: $TV · emulator-api25: $API25"
+            if [ -n "$SUFFIX" ]; then echo "**Not verified: do not give this zip to the user [H29].**"; fi
+          } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.zip.outputs.name }}
+          path: dist/Ferry-*.zip
+          retention-days: 90
+
+  dist:
+    # Delivery workaround (B38): the agent workspace cannot download Actions artifacts (proxy 403), so a
+    # VERIFIED main zip and its APK are also committed to the orphan branch `dist` (only the latest files,
+    # force-pushed). Only this job gets a token that can write. `dist` is never merged into main.
+    needs: package
+    if: ${{ !cancelled() && github.ref == 'refs/heads/main' && needs.package.result == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - name: Skip unverified builds
+        if: needs.package.outputs.verified != 'true'
+        run: |
+          echo "dist: ${{ needs.package.outputs.name }} is not verified (an emulator suite did not pass); dist not updated"
+      - uses: actions/download-artifact@v4
+        if: needs.package.outputs.verified == 'true'
+        with: { name: "${{ needs.package.outputs.name }}", path: dl }
+      - uses: actions/download-artifact@v4
+        if: needs.package.outputs.verified == 'true'
+        with: { name: ferry-apk, path: apk }
+      - name: Commit the zip and the APK to the dist branch
+        if: needs.package.outputs.verified == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NAME: ${{ needs.package.outputs.name }}
+        run: |
+          set -euo pipefail
+          mkdir site
+          cp dl/Ferry-*.zip apk/Ferry.apk apk/Ferry.apk.json site/
+          printf '%s\nmain commit %s\nandroid.yml run %s (%s)\n' "$NAME" "$GITHUB_SHA" "$GITHUB_RUN_NUMBER" "$GITHUB_RUN_ID" > site/BUILD.txt
+          cd site
+          git init -q -b dist
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          TREE=$(git write-tree)
+          URL="https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          if [ -n "$(git ls-remote "$URL" refs/heads/dist)" ]; then
+            git fetch -q --depth 1 "$URL" dist
+            if [ "$(git rev-parse 'FETCH_HEAD^{tree}')" = "$TREE" ]; then
+              echo "dist: nothing changed ($NAME already on dist)"; exit 0
+            fi
+          fi
+          git commit -q -m "dist: $NAME (main ${GITHUB_SHA:0:7}, run $GITHUB_RUN_NUMBER)"
+          git push -q --force "$URL" HEAD:refs/heads/dist
+          echo "dist: pushed $NAME"; ls -l
