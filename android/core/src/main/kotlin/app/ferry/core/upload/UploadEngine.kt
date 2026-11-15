@@ -315,6 +315,10 @@ class UploadEngine(
             }
             var needed = 0L
             var free: Long? = null
+            // Results are applied only after the last chunk, together with the space decision, so the other
+            // worker cannot claim a row before "needed > free" has been checked [B3] (Ph2b run 1).
+            val results = ArrayList<Pair<Row, String?>>(batch.size)
+            var unchecked: List<Row> = emptyList()
             val chunks = batch.chunked(config.checkChunk)
             for ((index, chunk) in chunks.withIndex()) {
                 val reply: CheckBatchReply = try {
@@ -327,36 +331,34 @@ class UploadEngine(
                     if (e !is FerryException.Unreachable && answers(a)) {
                         // [B4] the PC is there but could not check: upload unchecked (its hash still dedupes)
                         log("check-batch failed ($e); uploading unchecked")
-                        synchronized(lock) {
-                            for (r in chunks.drop(index).flatten()) {
-                                if (r.status !is ItemStatus.Checking) continue
-                                r.checked = true
-                                r.status = ItemStatus.Waiting
-                            }
-                            bump()
-                        }
+                        unchecked = chunks.drop(index).flatten()
                         break
                     }
                     revert(batch)
                     enterWaiting("check-batch: $e")
                     return false
                 }
-                synchronized(lock) {
-                    for ((k, r) in chunk.withIndex()) {
-                        if (r.status !is ItemStatus.Checking) continue // cancelled meanwhile
-                        val dup = reply.results[k].duplicate
-                        r.checked = true
-                        r.status = if (dup != null) ItemStatus.AlreadyOnPc(dup) else ItemStatus.Waiting
-                    }
-                    bump()
-                }
+                for ((k, r) in chunk.withIndex()) results += r to reply.results[k].duplicate
                 needed += reply.neededBytes
                 if (reply.freeBytes != null) free = reply.freeBytes
             }
-            val f = free
-            if (f != null && needed > f) {
-                log("not enough space: needed $needed, free $f")
-                stopWith(StopReason.DiskFull(needed - f)) // [B3] nothing sent
+            synchronized(lock) {
+                for ((r, dup) in results) {
+                    if (r.status !is ItemStatus.Checking) continue // cancelled or stopped meanwhile
+                    r.checked = true
+                    r.status = if (dup != null) ItemStatus.AlreadyOnPc(dup) else ItemStatus.Waiting
+                }
+                for (r in unchecked) {
+                    if (r.status !is ItemStatus.Checking) continue
+                    r.checked = true
+                    r.status = ItemStatus.Waiting
+                }
+                val f = free
+                if (f != null && needed > f) {
+                    log("not enough space: needed $needed, free $f")
+                    stopLocked(StopReason.DiskFull(needed - f)) // [B3] nothing sent
+                }
+                bump()
             }
             return true
         }

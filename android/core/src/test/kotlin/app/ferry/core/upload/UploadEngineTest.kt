@@ -186,7 +186,8 @@ class UploadEngineTest {
         val s = env.engine.awaitFinished()
         assertEquals(2, s.saved)
         assertEquals(2, env.rediscoverTimes.size)
-        assertEquals(30_000L, env.rediscoverTimes[1] - env.rediscoverTimes[0])
+        val gap = env.rediscoverTimes[1] - env.rediscoverTimes[0]
+        assertTrue("re-discovery gap $gap ms", gap in 30_000L..33_000L) // every 30 s, on the 3 s probe tick
         assertEquals(0, env.fake.uploadCalls.get())
         assertEquals(2, second.uploadCalls.get()) // the re-discovered PC took over
     }
