@@ -1,3 +1,5 @@
+import java.time.Duration
+
 // :core — pure Kotlin/JVM, no android.* (plan §3.1). Java 8 bytecode and API so it runs on Fire OS 6 (API 25) [A3] [CP9].
 plugins {
     id("org.jetbrains.kotlin.jvm")
@@ -38,5 +40,5 @@ tasks.test {
         events("failed")
         exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL
     }
-    timeout.set(java.time.Duration.ofMinutes(20))
+    timeout.set(Duration.ofMinutes(20))
 }
