@@ -78,10 +78,21 @@ class EngineAgainstFerryPyTest {
             .build()
     }
 
+    private val os = System.getProperty("os.name")
+
+    /** Engine log lines of the test (also printed). */
+    private val engineLog: MutableList<String> = Collections.synchronizedList(mutableListOf())
+
     private fun engine(client: FerryApi, config: EngineConfig = EngineConfig()): UploadEngine {
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO).also { scopes += it }
-        return UploadEngine(scope, { client }, { null }, SystemClock, config, log = { println("[engine ${System.currentTimeMillis() % 100_000}] $it") })
+        return UploadEngine(scope, { client }, { null }, SystemClock, config, log = {
+            engineLog += it
+            println("[engine ${System.currentTimeMillis() % 100_000}] $it")
+        })
     }
+
+    /** Printed into the CI job log by junit_summary.py. */
+    private fun note(text: String) = println("FERRY_NOTE $text")
 
     private fun item(name: String, source: UploadSource, size: Long, skipPrecheck: Boolean = false) =
         UploadItem(ids.incrementAndGet(), source, name, size, mtime, skipPrecheck = skipPrecheck)
@@ -257,7 +268,7 @@ class EngineAgainstFerryPyTest {
         val s = finish(e)
         assertEquals(2, s.saved)
         val names = files(pc)
-        println("case clash → $names (${System.getProperty("os.name")})")
+        note("parallelCaseClashDifferentContent on $os: $names")
         assertEquals(2, names.size)
         assertEquals(setOf(sha256(a), sha256(b)), names.map { sha256(File(pc.inbox, it).readBytes()) }.toSet())
         assertNoTempWithin(pc, 1_000)
@@ -286,6 +297,12 @@ class EngineAgainstFerryPyTest {
         // upload itself, where the PC answers 507 after draining ≤ 64 MB, or closes before the 507 is read.
         e.add(listOf(item("big.mp4", GenSource(100L shl 20, 15), 100L shl 20, skipPrecheck = true)))
         val s = finish(e, 120)
+        val branch = when {
+            engineLog.any { it.contains("507 disk full") } -> "the 507 reply was read"
+            engineLog.any { it.contains("dropped mid-body") } -> "connection closed before the 507; info() free-space check [B11]"
+            else -> "unknown: $engineLog"
+        }
+        note("diskFullLargeUpload on $os: $branch")
         assertEquals(StopReason.DiskFull(null), s.stop)
         assertEquals(ItemStatus.NotSent(StopReason.DiskFull(null)), statuses(e)["big.mp4"])
         assertEquals("no retry loop", 1, counting.uploads.get())
@@ -350,7 +367,7 @@ class EngineAgainstFerryPyTest {
         Thread.sleep(8_000)
         relay.mode = TcpRelay.Mode.PASS
         val s = finish(e)
-        println("pcGoesAwayAndComesBack: ${System.currentTimeMillis() - t0} ms, phases $seen, $s")
+        note("pcGoesAwayAndComesBack on $os: ${System.currentTimeMillis() - t0} ms, phases $seen")
         assertTrue("never showed WaitingForPc: $seen", Phase.WaitingForPc in seen)
         assertEquals(20, s.saved)
         assertBatchSavedOnce(pc, e, batch)
@@ -382,7 +399,7 @@ class EngineAgainstFerryPyTest {
         awaitState(e, 60) { it.phase == Phase.WaitingForPc }
         relay.mode = TcpRelay.Mode.PASS
         val s = finish(e)
-        println("silentStall: phases $seen, $s, opens ${source.opens.get()}")
+        note("silentStallIsNoticedAndRecovered on $os: phases $seen, opens ${source.opens.get()}")
         assertEquals(1, s.saved)
         assertTrue(source.opens.get() >= 2)
         assertEquals(ItemStatus.Saved("stall.mp4", false), statuses(e)["stall.mp4"])
@@ -403,7 +420,7 @@ class EngineAgainstFerryPyTest {
         val pc2 = pc.restartOnSamePort().also { pcs += it }
         assertEquals(pc.base, pc2.base)
         val s = finish(e)
-        println("pcRestartOnSamePort: phases $seen, $s")
+        note("pcRestartOnSamePort on $os: phases $seen")
         assertEquals(20, s.saved)
         assertBatchSavedOnce(pc2, e, batch)
     }

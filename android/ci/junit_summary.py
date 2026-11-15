@@ -3,6 +3,8 @@ workspace (Ph0b, B27), so the per-test outcome (passed / skipped / FAILED, with 
 
 Usage: python junit_summary.py <dir with TEST-*.xml> [<dir> ...]
 Exit code 0 always (Gradle decides pass/fail); prints a total line "junit: N passed, N skipped, N failed".
+Lines a test printed that start with "FERRY_NOTE " (from the suite's <system-out>) are printed too (Ph2b): facts a
+passing test documents, e.g. which disk-full branch ran.
 """
 import glob
 import os
@@ -25,6 +27,10 @@ def summarise(dirs):
                 counts[status] += 1
                 cls = case.get("classname", "").rsplit(".", 1)[-1]
                 rows.append("%-7s %6.2fs  %s.%s" % (status, float(case.get("time") or 0), cls, case.get("name")))
+            for out in root.iter("system-out"):
+                for line in (out.text or "").splitlines():
+                    if line.startswith("FERRY_NOTE "):
+                        rows.append("note    " + line[len("FERRY_NOTE "):])
     total = "junit: %d passed, %d skipped, %d failed" % (counts["passed"], counts["skipped"], counts["FAILED"])
     return rows, total
 

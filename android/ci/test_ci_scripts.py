@@ -133,8 +133,10 @@ def test_junit_summary(tmp_path):
         '<testsuite name="x"><testcase name="a" classname="app.ferry.core.it.ClientAgainstFerryPyTest" time="1.5"/>'
         '<testcase name="b" classname="app.ferry.core.it.ClientAgainstFerryPyTest" time="0"><skipped/></testcase>'
         '<testcase name="c" classname="app.ferry.core.HostPortTest" time="0.1"><failure message="m">t</failure>'
-        '</testcase></testsuite>')
+        '</testcase><system-out><![CDATA[noise\nFERRY_NOTE diskFull branch=507\n]]></system-out></testsuite>')
     rows, total = junit_summary.summarise([str(tmp_path)])
     assert total == "junit: 1 passed, 1 skipped, 1 failed"
     assert rows[0].startswith("passed") and rows[0].endswith("ClientAgainstFerryPyTest.a")
     assert rows[2].startswith("FAILED") and rows[2].endswith("HostPortTest.c")
+    assert rows[3] == "note    diskFull branch=507"
+    assert len(rows) == 4
