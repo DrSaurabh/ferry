@@ -197,6 +197,8 @@ else
 fi
 if how=$(pull_files probe "$OUT"); then cp "$OUT/probe/results.txt" "$OUT/probe-results.txt" 2>/dev/null; fi
 adb logcat -d > "$OUT/logcat.txt" 2>&1 || true
+echo "----- app log lines (tag Ferry) in logcat ($suite) -----"
+grep -E ' (I|W|E) Ferry *:' "$OUT/logcat.txt" | tail -80
 echo "----- FERRY_PROBE lines in logcat ($suite) -----"
 grep 'FERRY_PROBE' "$OUT/logcat.txt" | sed 's/^.*FERRY_PROBE[^:]*: //'
 # Artifacts can't be downloaded into the agent workspace (proxy), so screenshots also go into the job

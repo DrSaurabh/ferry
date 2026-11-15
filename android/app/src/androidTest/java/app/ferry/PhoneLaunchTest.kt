@@ -34,10 +34,11 @@ class PhoneLaunchTest {
             assertTrue(LaunchHelpers.hasTag(compose, "phone-root"))
             assertFalse(LaunchHelpers.hasTag(compose, "tv-root"))
             compose.onNodeWithText("Send photos & videos").assertExists()
+            LaunchHelpers.settle(compose)
             Shots.take("home-connected")
             compose.onNodeWithText("Settings").performClick()
             compose.onNodeWithTag("settings").assertExists()
-            compose.waitForIdle()
+            LaunchHelpers.settle(compose)
             Shots.take("settings")
         }
     }
@@ -46,10 +47,11 @@ class PhoneLaunchTest {
     fun welcomeFirstThenHome() {
         LaunchHelpers.cleanPrefs(welcomeDone = false)
         LaunchHelpers.launch().use {
-            compose.waitUntil(10_000) { LaunchHelpers.hasTag(compose, "welcome") }
+            LaunchHelpers.waitFor("welcome", compose, 10_000) { LaunchHelpers.hasTag(compose, "welcome") }
+            LaunchHelpers.settle(compose)
             Shots.take("welcome")
             compose.onNodeWithText("Continue").performClick()
-            compose.waitUntil(10_000) { LaunchHelpers.hasTag(compose, "home") }
+            LaunchHelpers.waitFor("home", compose, 10_000) { LaunchHelpers.hasTag(compose, "home") }
             assertTrue(AppGraph.prefs.welcomeDone)
             assertTrue(compose.onAllNodesWithText("Welcome to Ferry").fetchSemanticsNodes().isEmpty())
         }

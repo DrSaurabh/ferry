@@ -25,7 +25,7 @@ class TvLaunchTest {
         LaunchHelpers.cleanPrefs(welcomeDone = false) // the TV never shows Welcome
         assertTrue("android-tv image must be in TV mode", DeviceMode.isTv(Probe.context, null))
         LaunchHelpers.launch().use {
-            compose.waitUntil(30_000) { AppGraph.connection.state.value is ConnectionState.Connected }
+            LaunchHelpers.waitFor("connected", compose) { AppGraph.connection.state.value is ConnectionState.Connected }
             val c = AppGraph.connection.state.value as ConnectionState.Connected
             LaunchHelpers.waitForText(compose, "Ferry · ${c.name}")
             LaunchHelpers.waitForText(compose, "small.mp4")
@@ -34,7 +34,7 @@ class TvLaunchTest {
             assertFalse(LaunchHelpers.hasTag(compose, "phone-root"))
             assertFalse(LaunchHelpers.hasTag(compose, "welcome"))
             assertTrue(compose.onAllNodesWithText("Send", substring = true).fetchSemanticsNodes().isEmpty())
-            compose.waitForIdle()
+            LaunchHelpers.settle(compose)
             Shots.take("tv-home")
         }
     }

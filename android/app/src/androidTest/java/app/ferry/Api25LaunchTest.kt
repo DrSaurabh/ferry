@@ -28,6 +28,7 @@ class Api25LaunchTest {
             val c = AppGraph.connection.state.value as ConnectionState.Connected
             Probe.record("api25_launch", "sdk=${Build.VERSION.SDK_INT} connected name=${c.name} network=${AppGraph.network.chosen.value?.kind}")
             assertTrue(LaunchHelpers.hasTag(compose, "phone-root"))
+            LaunchHelpers.settle(compose)
             Shots.take("home-connected")
         }
     }
