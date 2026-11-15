@@ -37,6 +37,13 @@ def test_cert_matches_after_normalisation():
     assert check_apk.check_cert(out2, expected_cert()) == []
 
 
+def test_cert_per_sdk_range_signer_lines_accepted():
+    fp = check_apk.normalise_fp(expected_cert())
+    out = ("Signer (minSdkVersion=24, maxSdkVersion=2147483647) certificate SHA-256 digest: %s\n"
+           "Signer (minSdkVersion=25, maxSdkVersion=27) certificate SHA-256 digest: %s\n" % (fp, fp))
+    assert check_apk.check_cert(out, expected_cert()) == []
+
+
 def test_cert_mismatch_and_missing_are_reported():
     other = "Signer #1 certificate SHA-256 digest: %s\n" % ("ab" * 32)
     assert check_apk.check_cert(other, expected_cert())

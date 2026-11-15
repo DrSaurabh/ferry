@@ -31,7 +31,7 @@ def normalise_fp(text):
 def parse_apksigner(text):
     """SHA-256 digests of the signer certificates in `apksigner verify --print-certs` output."""
     return [normalise_fp(m) for m in
-            re.findall(r"^Signer #\d+ certificate SHA-256 digest:\s*([0-9a-fA-F:]+)\s*$", text, re.M)]
+            re.findall(r"^Signer\b[^\n]*?certificate SHA-256 digest:\s*([0-9a-fA-F:]+)\s*$", text, re.M)]
 
 
 def check_cert(apksigner_output, expected):
@@ -39,8 +39,8 @@ def check_cert(apksigner_output, expected):
     want = normalise_fp(expected)
     if not digests:
         return ["apksigner printed no SHA-256 certificate digest"]
-    if digests != [want]:
-        return ["signing certificate %s does not match cert-sha256.txt %s" % (", ".join(digests), want)]
+    if set(digests) != {want}:  # one line per signer / per SDK range; all must be our certificate
+        return ["signing certificate %s does not match cert-sha256.txt %s" % (", ".join(sorted(set(digests))), want)]
     return []
 
 
@@ -121,7 +121,10 @@ def main(argv=None):
     if rc != 0:
         problems.append("apksigner verify failed:\n" + out)
     else:
+        print("apksigner:", *[l for l in out.splitlines() if "SHA-256" in l or "DN" in l], sep="\n  ")
         problems += check_cert(out, expected)
+        if not parse_apksigner(out):
+            print(out)
     with zipfile.ZipFile(a.apk) as z:
         names = z.namelist()
     libs = sorted(n for n in names if n.startswith("lib/"))
