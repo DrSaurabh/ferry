@@ -18,3 +18,4 @@ Ph2b · engine + unit + integration tests green (core-jvm ×2, app-build, emulat
 Ph2b · look-ahead-off probe red as required (growingFileIsNeverSavedTruncated) · 470d4f2 · android 43725763301 · reverted in 1666a2d
 Ph2b · all jobs incl. three emulator suites green · 1666a2d · android 43726151903 · fast-forward main
 Ph2b · main fast-forwarded · a8913d3 · main android 43727118110 green (all 6 jobs, attempt 1) · DONE
+Ph3a · server, downloads, update, log; all jobs incl. three emulator suites green · 7f57112 · android 43740946058 · fast-forward main
