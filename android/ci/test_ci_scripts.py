@@ -243,3 +243,21 @@ def test_make_apk_json_rejects_bad_version(tmp_path):
     apk.write_bytes(b"x")
     with pytest.raises(ValueError):
         make_apk_json.apk_json(str(apk), "0", "2.0.0")
+
+
+def test_manifest_real_xmltree_rules_can_fail():
+    """The fixture is the real `aapt2 dump xmltree` of the Ph4 release APK (from the CI log)."""
+    import check_manifest
+    with open(os.path.join(FIX, "manifest-xmltree.txt"), encoding="utf-8") as f:
+        text = f.read()
+    cases = [
+        ("usesCleartextTraffic(0x010104ec)=true", "usesCleartextTraffic(0x010104ec)=false", "usesCleartextTraffic"),
+        ("foregroundServiceType(0x01010599)=0x00000001", "foregroundServiceType(0x01010599)=0x00000002", "TransferService"),
+        ("configChanges(0x0101001f)=0x000007a0", "configChanges(0x0101001f)=0x00000080", "configChanges"),
+        ("launchMode(0x0101001d)=2", "launchMode(0x0101001d)=1", "singleTask"),
+        ('"android.permission.ACCESS_MEDIA_LOCATION"', '"android.permission.SOMETHING_ELSE"', "ACCESS_MEDIA_LOCATION"),
+    ]
+    for old, new, word in cases:
+        assert old in text, old
+        problems = check_manifest.check(check_manifest.load(text.replace(old, new, 1)))
+        assert any(word in p for p in problems), (word, problems)
