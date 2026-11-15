@@ -14,3 +14,6 @@ Ph1 · main fast-forwarded · c3b4bf9 · main pc 43716087530 + android 437160874
 Ph2a · :core foundation green (core-jvm ubuntu+windows 32/32, app-build, emu api25); scan acceptance seen red · a2c0799 · android 43720112113 · emulators=all on branch, then fast-forward main
 Ph2a · all emulator suites green on branch (dispatched) · 2edae8f · android 43720897064 · fast-forward main
 Ph2a · main fast-forwarded · aa1e70c · main android 43721978778 green (all 6 jobs, attempt 1) · DONE
+Ph2b · engine + unit + integration tests green (core-jvm ×2, app-build, emulator-api25) · 015fb2a · android 43725217915 · look-ahead red check, merge
+Ph2b · look-ahead-off probe red as required (growingFileIsNeverSavedTruncated) · 470d4f2 · android 43725763301 · reverted in 1666a2d
+Ph2b · all jobs incl. three emulator suites green · 1666a2d · android 43726151903 · fast-forward main
