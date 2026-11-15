@@ -3,6 +3,7 @@ package app.ferry.core.net
 import app.ferry.core.FerryJson
 import app.ferry.core.HostPort
 import app.ferry.core.download.DownloadSink
+import app.ferry.core.download.SinkWriter
 import app.ferry.core.model.AppInfo
 import app.ferry.core.model.CheckBatchReply
 import app.ferry.core.model.CheckBatchRequest
@@ -132,30 +133,21 @@ class FerryClient(
             val body = resp.body ?: throw FerryException.BadReply("no body")
             val len = body.contentLength()
             if (len != expectedSize) throw FerryException.BadReply("length $len, expected $expectedSize")
-            var got = 0L
-            var committed = false
-            val out = sink.open()
+            val w = SinkWriter(sink, expectedSize, onProgress) // close → compare → commit; failure → close → abort [PB17]
             try {
-                try {
-                    body.byteStream().use { input ->
-                        val buf = ByteArray(StreamingBody.CHUNK)
-                        while (true) {
-                            val n = input.read(buf)
-                            if (n < 0) break
-                            out.write(buf, 0, n)
-                            got += n
-                            onProgress(got)
-                        }
+                w.start()
+                body.byteStream().use { input ->
+                    val buf = ByteArray(StreamingBody.CHUNK)
+                    while (true) {
+                        val n = input.read(buf)
+                        if (n < 0) break
+                        w.write(buf, n)
                     }
-                } finally {
-                    out.close() // FIRST close (flush + sync), then compare, then commit [PB17]
                 }
-                if (got != expectedSize) throw FerryException.BadReply("got $got bytes, expected $expectedSize")
-                val name = sink.commit()
-                committed = true
-                name
-            } finally {
-                if (!committed) sink.abort()
+                w.finish()
+            } catch (e: Throwable) {
+                w.abort()
+                throw e
             }
         }
     }

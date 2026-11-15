@@ -8,6 +8,8 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import app.ferry.MainActivity
 import app.ferry.core.HostPort
 import app.ferry.core.SystemClock
+import app.ferry.core.http.BytesRangeSource
+import app.ferry.core.http.MiniHttpServer
 import app.ferry.core.net.FerryClient
 import app.ferry.core.net.FerryHttp
 import app.ferry.core.upload.ItemStatus
@@ -22,6 +24,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
+import okhttp3.Request
 import java.io.ByteArrayInputStream
 import java.io.InputStream
 import org.junit.Assert.assertEquals
@@ -34,6 +37,7 @@ import org.junit.runner.RunWith
  * Ph2a: the request goes through `:core` (`FerryClient.info()`), the first real `:core` code on the
  * API 25 (Fire OS 6) level [A3].
  * Ph2b: a 1 MB in-memory send through `:core`'s `UploadEngine` (coroutines, workers, state flow).
+ * Ph3a: `:core`'s `MiniHttpServer` answers a Range request from the app to itself.
  */
 @RunWith(AndroidJUnit4::class)
 class HostReachProbe {
@@ -72,6 +76,24 @@ class HostReachProbe {
             assertEquals(ItemStatus.Saved(name, false), status)
         } finally {
             scope.cancel()
+        }
+    }
+
+    @Test
+    fun miniHttpServerRangeToItself() { // Ph3a: :core's server (threads, sockets, watchdog) on this API level
+        val bytes = ByteArray(100_000).also { java.util.Random(5).nextBytes(it) }
+        MiniHttpServer(0).use { server ->
+            server.route("GET", "/f") { req, res -> res.file(req, BytesRangeSource(bytes, "probe"), "probe.bin", "application/octet-stream") }
+            val port = server.start()
+            val http = FerryHttp.newClient(null, "CI probe")
+            val req = Request.Builder().url("http://127.0.0.1:$port/f").header("Range", "bytes=1000-1999").build()
+            http.newCall(req).execute().use { r ->
+                val body = r.body!!.bytes()
+                Probe.record("mini_http_range", "code=${r.code} range=${r.header("Content-Range")} len=${body.size} sdk=${Build.VERSION.SDK_INT}")
+                assertEquals(206, r.code)
+                assertEquals("bytes 1000-1999/100000", r.header("Content-Range"))
+                assertTrue(bytes.copyOfRange(1000, 2000).contentEquals(body))
+            }
         }
     }
 

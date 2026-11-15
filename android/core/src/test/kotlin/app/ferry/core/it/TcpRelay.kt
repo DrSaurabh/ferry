@@ -93,9 +93,15 @@ class TcpRelay(private val target: HostPort) : Closeable {
         } catch (e: IOException) {
             // closed or reset
         } finally {
-            quietClose(conn.client)
-            quietClose(conn.upstream)
-            conns -= conn
+            if (conn.stalled && from === conn.upstream) {
+                // The PC finished or closed its side, but the stalled client must not hear of it (no FIN, no RST):
+                // a download stall stays silent until the client gives up (Ph3a). The client side's pump closes both.
+                quietClose(conn.upstream)
+            } else {
+                quietClose(conn.client)
+                quietClose(conn.upstream)
+                conns -= conn
+            }
         }
     }
 
