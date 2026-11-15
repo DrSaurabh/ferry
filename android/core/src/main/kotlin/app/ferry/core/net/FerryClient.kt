@@ -66,7 +66,12 @@ interface FerryApi {
  * cancels the call and closes the socket (the PC then deletes its temp file). Replies are read on the
  * OkHttp thread before the coroutine resumes, so cancellation also covers reading the body.
  */
-class FerryClient(http: OkHttpClient, override val base: HostPort) : FerryApi {
+class FerryClient(
+    http: OkHttpClient,
+    override val base: HostPort,
+    /** Tests of a silent stall shorten this (Ph2b, B24); the app always uses the default. */
+    uploadReadTimeoutMs: Long = 10 * 60_000L,
+) : FerryApi {
     /** Same pool and interceptors; a network interceptor marks "connection opened" for the error mapping. */
     private val http: OkHttpClient = http.newBuilder()
         .addNetworkInterceptor { chain ->
@@ -79,7 +84,8 @@ class FerryClient(http: OkHttpClient, override val base: HostPort) : FerryApi {
     private val checkHttp: OkHttpClient = this.http.newBuilder().readTimeout(60, TimeUnit.SECONDS).build()
 
     /** Only upload waits long for the reply: the PC may be hashing a same-named large file [PB11]. */
-    private val uploadHttp: OkHttpClient = this.http.newBuilder().readTimeout(10, TimeUnit.MINUTES).build()
+    private val uploadHttp: OkHttpClient =
+        this.http.newBuilder().readTimeout(uploadReadTimeoutMs, TimeUnit.MILLISECONDS).build()
 
     override suspend fun info(timeoutMs: Long): PcInfo {
         val info = call(http, get("api/v1/info"), timeoutMs) { decode(it, PcInfo.serializer()) }

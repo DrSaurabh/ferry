@@ -46,7 +46,7 @@ class StreamingBody(
         var read = 0L
         while (read < size) {
             val want = minOf(CHUNK.toLong(), size - read).toInt()
-            val n = readFully(input, spare, want)
+            val n = readSource { readFully(input, spare, want) }
             if (n < want) throw FerryException.SourceChanged() // the file got shorter
             read += n
             if (heldLen > 0) send(sink, held, heldLen)
@@ -54,10 +54,19 @@ class StreamingBody(
             heldLen = n
         }
         // Look ahead before the last bytes go out: any further byte means the file grew [PB1].
-        if (input.read() >= 0) throw FerryException.SourceChanged()
+        if (readSource { input.read() } >= 0) throw FerryException.SourceChanged()
         if (heldLen > 0) send(sink, held, heldLen) else onProgress(0) // heldLen is 0 only when size == 0
         sink.flush()
         bodyFullySent = true
+    }
+
+    /** A read error of the phone's file is not a network error (Ph2b): it must not be retried as one. */
+    private inline fun <T> readSource(block: () -> T): T = try {
+        block()
+    } catch (e: FerryException) {
+        throw e
+    } catch (e: java.io.IOException) {
+        throw FerryException.SourceUnreadable(e)
     }
 
     private fun send(sink: BufferedSink, buf: ByteArray, len: Int) {
