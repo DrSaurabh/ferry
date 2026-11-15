@@ -11,3 +11,4 @@ Ph0b · main fast-forwarded · 6f16f1e · main android 43704843235 green (all 4,
 Ph1 · ferry.py 2.0.0 + all §2.13/§2.14 tests, pc 4/4 + app-build green · 9931a4e · pc 43715028378, android 43715028407 · [emu] run on branch, then fast-forward main
 Ph1 · emulator suites green against ferry.py 2.0 (dispatched) · d7ec0a9 · android 43715299033 · fast-forward main
 Ph1 · main fast-forwarded · c3b4bf9 · main pc 43716087530 + android 43716087462 green (all 4 jobs) · DONE
+Ph2a · :core foundation green (core-jvm ubuntu+windows 32/32, app-build, emu api25); scan acceptance seen red · a2c0799 · android 43720112113 · emulators=all on branch, then fast-forward main
