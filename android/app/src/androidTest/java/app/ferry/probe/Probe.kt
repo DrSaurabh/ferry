@@ -10,8 +10,8 @@ import java.util.concurrent.TimeUnit
 
 /**
  * Ph0b probe helpers (throw-away; deleted when the real instrumented tests exist).
- * Results go to logcat (tag FERRY_PROBE) and to files/probe/results.txt in the app's external files
- * folder, which run_instrumented.sh pulls and prints.
+ * Results go to logcat (tag FERRY_PROBE) and to probe/results.txt under [baseDir], which
+ * run_instrumented.sh pulls and prints.
  */
 object Probe {
     val instrumentation get() = InstrumentationRegistry.getInstrumentation()
@@ -22,15 +22,23 @@ object Probe {
 
     val pc: String get() = arg("pcA", "10.0.2.2:18765")
 
+    /**
+     * Where screenshots and probe files go [CP16]: the external files dir (host: `adb pull`), or with
+     * `-e store internal` filesDir (host: `run-as app.ferry tar`), for images where the shell may not
+     * read Android/data (API 30 TV, Ph0b).
+     */
+    val baseDir: File
+        get() = if (arg("store", "external") == "internal") context.filesDir else context.getExternalFilesDir(null)!!
+
     fun record(key: String, value: Any?) {
         val line = "$key=$value"
         Log.i("FERRY_PROBE", line)
-        val dir = File(context.getExternalFilesDir(null), "probe").apply { mkdirs() }
+        val dir = File(baseDir, "probe").apply { mkdirs() }
         File(dir, "results.txt").appendText(line + "\n")
     }
 
     fun outFile(name: String): File =
-        File(File(context.getExternalFilesDir(null), "probe").apply { mkdirs() }, name)
+        File(File(baseDir, "probe").apply { mkdirs() }, name)
 
     /** The product's timeouts (design §5.2 [B13]): connect 8 s, read 20 s. */
     val http: OkHttpClient by lazy {

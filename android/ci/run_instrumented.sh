@@ -139,7 +139,9 @@ esac
 
 GPS_NAME=IMG_20250101_120000.jpg
 GPS_SHA=$(sha256sum "$CI/fixtures/gps.jpg" | cut -d' ' -f1)
-INST_ARGS=(-e pcA 10.0.2.2:18765 -e suite "$suite" -e gpsName "$GPS_NAME" -e gpsSha "$GPS_SHA")
+# Where the app keeps screenshots/probe files [CP16]: the shell can't read Android/data on API 30 TV (Ph0b).
+case $suite in tv) STORE=internal ;; *) STORE=external ;; esac
+INST_ARGS=(-e pcA 10.0.2.2:18765 -e suite "$suite" -e store "$STORE" -e gpsName "$GPS_NAME" -e gpsSha "$GPS_SHA")
 
 adb uninstall "$PKG" > /dev/null 2>&1
 adb uninstall "$PKG.test" > /dev/null 2>&1
@@ -158,27 +160,26 @@ while IFS='|' read -r cls before after <&3; do
 done 3< "$CI/suites/$suite.txt"
 
 # ---------- collect ----------
-# pull_ext SUBDIR DEST: copy $EXT/SUBDIR to DEST/SUBDIR. Tries plain `adb pull` [CP16], then the
-# /storage/emulated/0 path, then `run-as` + tar (debug APK) and records which way worked.
-pull_ext() {
+# pull_files SUBDIR DEST: copy the app's SUBDIR (screenshots, probe) to DEST/SUBDIR [CP16].
+# STORE=external: `adb pull` from the external files dir. STORE=internal (images where the shell may not
+# read Android/data, e.g. API 30 TV): `run-as` + tar from filesDir (debug APK).
+pull_files() {
   local sub=$1 dest=$2 err
-  if err=$(adb pull "$EXT/$sub" "$dest/" 2>&1); then echo "adb pull $EXT/$sub"; return 0; fi
-  echo "  (adb pull $EXT/$sub: $err)" >&2
-  if err=$(adb pull "/storage/emulated/0/Android/data/$PKG/files/$sub" "$dest/" 2>&1); then
-    echo "adb pull /storage/emulated/0/Android/data/$PKG/files/$sub"; return 0; fi
-  echo "  (adb pull /storage/emulated/0/…/$sub: $err)" >&2
-  if adb exec-out run-as "$PKG" sh -c "cd /storage/emulated/0/Android/data/$PKG/files && tar -cf - $sub" 2>/dev/null \
-      | tar -xf - -C "$dest" 2>/dev/null && [ -e "$dest/$sub" ]; then
-    echo "adb exec-out run-as $PKG tar (external files dir)"; return 0; fi
+  if [ "$STORE" = external ]; then
+    err=$(adb pull "$EXT/$sub" "$dest/" 2>&1) && { echo "adb pull $EXT/$sub"; return 0; }
+    echo "  (adb pull $EXT/$sub: $err)" >&2; return 1
+  fi
+  adb exec-out run-as "$PKG" tar -cf - -C files "$sub" | tar -xf - -C "$dest" && [ -e "$dest/$sub" ] &&
+    { echo "adb exec-out run-as $PKG tar -cf - -C files $sub"; return 0; }
   return 1
 }
-if how=$(pull_ext screenshots "$OUT"); then
+if how=$(pull_files screenshots "$OUT"); then
   log "screenshots: $how OK ($(find "$OUT/screenshots" -name '*.png' | wc -l) png)"
 else
   log "screenshots: every pull way FAILED"
   FAILED=1
 fi
-if how=$(pull_ext probe "$OUT"); then cp "$OUT/probe/results.txt" "$OUT/probe-results.txt" 2>/dev/null; fi
+if how=$(pull_files probe "$OUT"); then cp "$OUT/probe/results.txt" "$OUT/probe-results.txt" 2>/dev/null; fi
 adb logcat -d > "$OUT/logcat.txt" 2>&1 || true
 echo "----- FERRY_PROBE lines in logcat ($suite) -----"
 grep 'FERRY_PROBE' "$OUT/logcat.txt" | sed 's/^.*FERRY_PROBE[^:]*: //'
