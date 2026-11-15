@@ -13,6 +13,10 @@ object FerryHttp {
      * connect 5 s, write 60 s, read 30 s [PB11], no silent retries. Every request carries `X-Ferry-Device`
      * (percent-encoded UTF-8 [B10]) and `User-Agent: Ferry-Android/<appVersion>` [CP15]. [socketFactory] is the
      * Wi-Fi network's factory on Android [A9] (null = default).
+     *
+     * Every request also says `Connection: close` (Ph2a, B23): ferry.py is an HTTP/1.0 server and closes
+     * the socket after each response, but OkHttp pools the connection unless it sees "close"; the next call
+     * would then hit the dead socket ("Broken pipe") and, with retryOnConnectionFailure(false), fail.
      */
     fun newClient(socketFactory: SocketFactory?, deviceName: String, appVersion: String = "dev"): OkHttpClient {
         val device = PercentEncode.utf8(deviceName)
@@ -27,6 +31,7 @@ object FerryHttp {
                     chain.request().newBuilder()
                         .header(DEVICE_HEADER, device)
                         .header("User-Agent", agent)
+                        .header("Connection", "close")
                         .build(),
                 )
             }
