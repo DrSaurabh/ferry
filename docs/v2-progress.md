@@ -21,3 +21,4 @@ Ph2b · main fast-forwarded · a8913d3 · main android 43727118110 green (all 6 
 Ph3a · server, downloads, update, log; all jobs incl. three emulator suites green · 7f57112 · android 43740946058 · fast-forward main
 Ph3a · main fast-forwarded · 1005e37 · main android 43742299970 green (all 6 jobs) · DONE
 Ph3b · discovery + cast + tests green (core-jvm ×2, app-build, emulator-api25) · 86794a7 · android 43744835236 · all-emulator run, fast-forward main
+Ph3b · main fast-forwarded · d0da3d5 · main android 43747308064 green (all 6 jobs) · DONE
