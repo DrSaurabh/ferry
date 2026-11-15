@@ -17,3 +17,5 @@ Short resume lines (one per green sub-step) are in `docs/v2-progress.md` (plan �
 - Run 2 (commit d343705; pc run 43690282909): **green** on all four legs (windows-latest 3.8/3.13, ubuntu-22.04 3.8, ubuntu-latest 3.13). Windows: 3 POSIX-only tests skipped as planned, plus the 4 existing `FERRY_SLOW` zip skips.
 - Note for later phases: a change to `.gitattributes`/`android/**` triggers `android.yml` too; the current `android.yml` is still the smoke build (job `build`), Ph0b replaces it.
 - Then: fast-forward `main` to `ph0a` and check the `main` run (below).
+- `main` fast-forwarded to b5b3463: `main` runs pc 43690413274 **green**, android 43690413300 **green**. **Ph0a done** 2026-11-15. (This closing note is a docs-only commit, fast-forwarded the same way; docs-only pushes trigger no workflow.)
+- Left for later: nothing for Ph0a. Plan §2.13's other rows (browser retirement, `Srv` → `helpers.py`) belong to Ph1.
