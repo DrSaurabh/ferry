@@ -1,8 +1,6 @@
 package app.ferry
 
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
-import androidx.compose.ui.test.onNodeWithTag
-import androidx.compose.ui.test.performClick
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import app.ferry.core.upload.ItemStatus
 import app.ferry.core.upload.Phase
@@ -65,7 +63,7 @@ class GpsOriginalTest {
 
             // Send anyway: uploaded without the pre-check, the PC compares content → skipped (identical)
             val runs2 = SendHelpers.finishedRuns()
-            compose.onNodeWithTag("send-anyway-all").performClick()
+            SendHelpers.tap("Send anyway")
             SendHelpers.waitTransfer(compose, "send anyway done") { SendHelpers.finishedRuns() > runs2 && it?.phase == Phase.Finished }
             s = AppGraph.transfers.state.value!!
             assertTrue("send anyway: ${s.items[0].status}", s.items[0].status is ItemStatus.AlreadyOnPc)

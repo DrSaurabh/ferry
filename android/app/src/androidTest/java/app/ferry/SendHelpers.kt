@@ -52,6 +52,16 @@ object SendHelpers {
         }
     }
 
+    /**
+     * Taps a button by its text through UiAutomator (real input events). Ph5a B48: Compose-test `performClick`
+     * during a transfer's state switch twice crashed the app with "multithreaded access to SnapshotStateObserver".
+     */
+    fun tap(text: String, timeoutMs: Long = 10_000) {
+        val dev = androidx.test.uiautomator.UiDevice.getInstance(Probe.instrumentation)
+        val o = dev.wait(androidx.test.uiautomator.Until.findObject(androidx.test.uiautomator.By.text(text)), timeoutMs)
+        checkNotNull(o) { "no '$text' on screen" }.click()
+    }
+
     /** Engine runs that have finished so far (each logs "finished: Summary(…)"), to wait for the next one. */
     fun finishedRuns(): Int = AppGraph.ringLog.snapshot().count { it.contains(" engine finished:") }
 }

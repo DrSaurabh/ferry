@@ -177,6 +177,8 @@ if [ "$suite" = api25 ]; then INST_ARGS+=(-e app.ferry.debug.NET any); fi
 
 adb uninstall "$PKG" > /dev/null 2>&1
 adb uninstall "$PKG.test" > /dev/null 2>&1
+# A retry reinstalls under a new UID: files the first attempt left in Android/data would be EACCES (Ph5a B49).
+adb shell rm -rf "/sdcard/Android/data/$PKG" > /dev/null 2>&1
 adb install -r "$APKS/app-debug.apk" || exit 1
 adb install -r "$APKS/app-debug-androidTest.apk" || exit 1
 if [ "$SDK" -ge 33 ]; then grant POST_NOTIFICATIONS; fi

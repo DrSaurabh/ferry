@@ -1,8 +1,6 @@
 package app.ferry
 
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
-import androidx.compose.ui.test.onNodeWithTag
-import androidx.compose.ui.test.performClick
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import app.ferry.core.HostPort
 import app.ferry.core.upload.ItemStatus
@@ -37,8 +35,8 @@ class CancelAndWaitingTest {
     }
 
     private fun cancelOnScreen() {
-        compose.onNodeWithTag("transfer-cancel").performClick()
-        compose.onNodeWithTag("cancel-confirm").performClick()
+        SendHelpers.tap("Cancel")
+        SendHelpers.tap("Stop sending")
     }
 
     @Test
