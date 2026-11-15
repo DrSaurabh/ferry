@@ -8,7 +8,13 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import app.ferry.MainActivity
 import app.ferry.core.HostPort
 import app.ferry.core.SystemClock
+import app.ferry.core.discovery.DatagramTransport
+import app.ferry.core.discovery.DiscoveryClient
+import app.ferry.core.discovery.DiscoveryCodec
+import app.ferry.core.discovery.DiscoveryResponder
 import app.ferry.core.http.BytesRangeSource
+import app.ferry.core.model.DiscoveryReply
+import app.ferry.core.model.Peer
 import app.ferry.core.http.MiniHttpServer
 import app.ferry.core.net.FerryClient
 import app.ferry.core.net.FerryHttp
@@ -27,6 +33,7 @@ import kotlinx.coroutines.withTimeout
 import okhttp3.Request
 import java.io.ByteArrayInputStream
 import java.io.InputStream
+import java.net.InetAddress
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -38,6 +45,7 @@ import org.junit.runner.RunWith
  * API 25 (Fire OS 6) level [A3].
  * Ph2b: a 1 MB in-memory send through `:core`'s `UploadEngine` (coroutines, workers, state flow).
  * Ph3a: `:core`'s `MiniHttpServer` answers a Range request from the app to itself.
+ * Ph3b: `DiscoveryCodec` round trip, then `DiscoveryResponder` + `DiscoveryClient` over loopback UDP.
  */
 @RunWith(AndroidJUnit4::class)
 class HostReachProbe {
@@ -94,6 +102,26 @@ class HostReachProbe {
                 assertEquals("bytes 1000-1999/100000", r.header("Content-Range"))
                 assertTrue(bytes.copyOfRange(1000, 2000).contentEquals(body))
             }
+        }
+    }
+
+    @Test
+    fun discoveryRoundTripOnLoopback() { // Ph3b: codec (kotlinx JSON) + UDP threads/sockets on this API level
+        val nonce = DiscoveryCodec.newNonce()
+        val req = DiscoveryCodec.request("CI probe ’📱", "phone", nonce)
+        val parsed = DiscoveryCodec.parseRequest(req, req.size)
+        assertEquals("CI probe ’📱", parsed?.name)
+        val tv = DiscoveryReply(name = "Probe TV", deviceType = "tv", port = 8766, version = "2.0.0")
+        val rep = DiscoveryCodec.reply(tv.copy(nonce = nonce))
+        val local = InetAddress.getByName("127.0.0.1")
+        assertEquals(Peer("Probe TV", "tv", "127.0.0.1", 8766, "2.0.0", 2), DiscoveryCodec.parseReply(rep, rep.size, nonce, local))
+        val transport = DatagramTransport(0, broadcast = false)
+        DiscoveryResponder(transport, { tv }).use { responder ->
+            responder.start()
+            val client = DiscoveryClient({ DatagramTransport() }, { listOf(local) }, "CI probe" to "phone", transport.localPort)
+            val peers = runBlocking { client.discover(sends = 3, gapMs = 100, listenMs = 1_000) }
+            Probe.record("discovery", "peers=$peers replies=${responder.replies} sdk=${Build.VERSION.SDK_INT}")
+            assertEquals(listOf(Peer("Probe TV", "tv", "127.0.0.1", 8766, "2.0.0", 2)), peers)
         }
     }
 
