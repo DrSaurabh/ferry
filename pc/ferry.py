@@ -2054,7 +2054,8 @@ class FerryHandler(BaseHTTPRequestHandler):
         self.end_headers()
         if not self._head:
             self.wfile.write(body)
-            self._nbytes += len(body)
+            if self.command != "POST":           # log "bytes": the body read for POST, the body sent for GET
+                self._nbytes += len(body)
 
     def send_json(self, code: int, obj) -> None:
         body = json.dumps(obj, ensure_ascii=False).encode("utf-8")

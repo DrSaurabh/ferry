@@ -135,10 +135,10 @@ class FerryProcess:
     """ferry.py in a subprocess. stdout is read by a thread into a queue (select() doesn't work on pipes
     on Windows) [PB19]."""
 
-    def __init__(self, tmp_path, *extra, ready_timeout=15.0):
+    def __init__(self, tmp_path, *extra, ready_timeout=15.0, script=None):
         self.root = tmp_path
         self.inbox, self.outbox, self.data = tmp_path / "in", tmp_path / "out", tmp_path / "data"
-        args = [sys.executable, "-u", os.path.join(ROOT, "ferry.py"), "--no-open", "--inbox", str(self.inbox),
+        args = [sys.executable, "-u", script or os.path.join(ROOT, "ferry.py"), "--no-open", "--inbox", str(self.inbox),
                 "--outbox", str(self.outbox), "--data-dir", str(self.data)] + list(extra)
         env = dict(os.environ, PYTHONIOENCODING="utf-8", HOME=str(tmp_path), XDG_CONFIG_HOME=str(tmp_path / "cfg"))
         self.p = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL,

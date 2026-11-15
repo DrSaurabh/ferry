@@ -3,10 +3,8 @@ import io
 import json
 import os
 import socket
-import threading
 import time
 import zipfile
-from urllib.parse import quote
 
 import pytest
 
