@@ -143,7 +143,7 @@ run_class() {
   if judge "$raw"; then log "PASS $cls"
   else
     log "FAIL $cls"; FAILED=1
-    grep -E -A12 'INSTRUMENTATION_STATUS: stack=|INSTRUMENTATION_RESULT|Process crashed' "$raw" | head -40
+    grep -E -A45 'INSTRUMENTATION_STATUS: stack=|Process crashed' "$raw" | grep -vE 'at android\.view\.(View|ViewGroup)\.' | head -70
   fi
   if [ -n "$after" ]; then eval "$after"; fi
 }

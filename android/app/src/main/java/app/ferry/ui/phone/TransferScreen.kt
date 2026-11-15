@@ -107,8 +107,7 @@ fun TransferScreen(nav: Navigator, vm: TransferViewModel = viewModel()) {
 @Composable
 private fun androidx.compose.foundation.layout.ColumnScope.TransferBody(st: EngineState, words: TransferWords, onCancel: () -> Unit) {
     val running = st.phase != Phase.Finished
-    // Finished: the summary card says it (no second copy of the summary line)
-    if (running) Text(words.headline(st), Modifier.testTag("transfer-headline"), style = MaterialTheme.typography.titleMedium)
+    Text(words.headline(st), Modifier.testTag("transfer-headline"), style = MaterialTheme.typography.titleMedium)
     val detail = words.detail(st)
     if (detail.isNotEmpty()) Text(detail, Modifier.testTag("transfer-detail"), style = MaterialTheme.typography.bodyMedium)
     if (running) {
@@ -127,15 +126,17 @@ private fun androidx.compose.foundation.layout.ColumnScope.TransferBody(st: Engi
 private fun SummaryCard(st: EngineState, words: TransferWords) {
     val sum = st.summary ?: return
     val ctx = LocalContext.current
+    // The summary line itself is the headline above; the card holds the extras and the actions.
+    val extras = words.summaryExtras(sum, words.pcName(st))
+    val already = st.items.filter { it.status is ItemStatus.AlreadyOnPc }.map { it.id }
+    if (extras.isEmpty() && already.isEmpty() && TransferMath.retryable(sum) == 0) return
     Card(Modifier.fillMaxWidth().testTag("transfer-summary")) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(words.summary(sum), style = MaterialTheme.typography.titleMedium)
-            for (line in words.summaryExtras(sum, words.pcName(st))) Text(line, style = MaterialTheme.typography.bodyMedium)
+            for (line in extras) Text(line, style = MaterialTheme.typography.bodyMedium)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (TransferMath.retryable(sum) > 0) {
                     Button(onClick = { SendCoordinator.retry(ctx) }, Modifier.testTag("transfer-retry")) { Text(stringResource(R.string.retry)) }
                 }
-                val already = st.items.filter { it.status is ItemStatus.AlreadyOnPc }.map { it.id }
                 if (already.isNotEmpty()) {
                     OutlinedButton(onClick = { SendCoordinator.sendAnyway(ctx, already) }, Modifier.testTag("send-anyway-all")) {
                         Text(stringResource(R.string.send_anyway))
