@@ -14,6 +14,8 @@ pc/ferry-state.json
 pc/ferry-log*.txt
 pc/ferry-error.log
 pc/ferry-selftest.txt
+pc/app/
+pc/dist/
 dist/
 ci-out/
 apks/

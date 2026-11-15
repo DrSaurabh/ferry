@@ -43,7 +43,7 @@ from dataclasses import dataclass
 from email.utils import formatdate
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Callable, Dict, List, Optional, Tuple
-from urllib.parse import parse_qs, quote, urlsplit
+from urllib.parse import parse_qs, quote, unquote, urlsplit
 
 try:  # bundled QR generator (optional)
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -55,8 +55,9 @@ except Exception:  # missing, or incompatible: run without a QR code
 # Constants
 # =============================================================================================
 
-VERSION = "1.0.2"
-PROTOCOL = 1
+VERSION = "2.0.0"
+PROTOCOL = 2
+CAPABILITIES = ["receive", "outbox", "check_batch", "app_update", "discovery"]
 DEFAULT_PORT = 8765
 CHUNK = 1 << 20                  # 1 MiB
 SOCKET_TIMEOUT = 60              # seconds of silence before a connection is dropped
@@ -69,9 +70,38 @@ WATCH_INTERVAL = 1.0
 WATCHDOG_SECONDS = 60
 IS_WIN = os.name == "nt"
 HERE = os.path.dirname(os.path.abspath(__file__))
-STATE_FILE = os.path.join(HERE, "ferry-state.json")
-ERROR_LOG = os.path.join(HERE, "ferry-error.log")
-SELFTEST_FILE = os.path.join(HERE, "ferry-selftest.txt")
+DATA_DIR = HERE                  # ferry-state.json, ferry-error.log, ferry-selftest.txt, ferry-log*.txt;
+                                 # set once by main() from the hidden --data-dir flag
+STATE_NAME = "ferry-state.json"
+ERROR_LOG_NAME = "ferry-error.log"
+SELFTEST_NAME = "ferry-selftest.txt"
+
+DISCOVERY_PORT = 8765            # UDP; independent of --port (the app always asks on 8765)
+DISCOVERY_MAX_DATAGRAM = 512
+DISCOVERY_MAX_REPLIES_PER_S = 20
+CHECK_BATCH_MAX_ITEMS = 2000
+CHECK_BATCH_MAX_BODY = 1 << 20
+LOG_NAME = "ferry-log.txt"
+LOG_OLD_NAME = "ferry-log.1.txt"
+LOG_MAX_BYTES = 5 << 20
+LOG_RETRY_STEP = 1 << 20
+LOG_HARD_CAP = 10 << 20
+LOG_QUEUE_MAX = 10000
+LOG_POLL_FLUSH_S = 600
+LOG_DISCOVERY_EVERY_S = 60
+APP_DIR = os.path.join(HERE, "app")
+APK_NAME = "Ferry.apk"
+APK_JSON = "Ferry.apk.json"
+APK_MIME = "application/vnd.android.package-archive"
+APK_JSON_MAX = 64 << 10
+DEVICE_HEADER = "X-Ferry-Device"
+DEVICE_NAME_MAX = 60
+POLL_PATHS = {"/api/v1/outbox", "/api/v1/info"}
+
+
+def data_path(name: str) -> str:
+    return os.path.join(DATA_DIR, name)
+
 
 TEMP_PREFIX = ".ferry-"
 TEMP_SUFFIX = ".part"
@@ -84,7 +114,7 @@ FILE_ATTRIBUTE_OFFLINE = 0x1000
 FILE_ATTRIBUTE_RECALL_ON_DATA_ACCESS = 0x400000
 
 MIME_OVERRIDES = {
-    ".apk": "application/vnd.android.package-archive",
+    ".apk": APK_MIME,
     ".mp4": "video/mp4", ".m4v": "video/mp4", ".mkv": "video/x-matroska",
     ".mov": "video/quicktime", ".webm": "video/webm", ".avi": "video/x-msvideo",
     ".3gp": "video/3gpp", ".ts": "video/mp2t",
@@ -221,6 +251,20 @@ def device_type(ua: str) -> str:
     if "Android" in ua or "iPhone" in ua or "iPad" in ua:
         return "phone"
     return "browser"
+
+
+_CONTROL_CHARS = re.compile("[\x00-\x1f\x7f-\x9f]")
+
+
+def device_label(headers, ua: str) -> str:
+    """The app's device name (X-Ferry-Device, percent-encoded UTF-8) [B10], else the User-Agent class."""
+    raw = headers.get(DEVICE_HEADER) if headers is not None else None
+    if raw:
+        s = _CONTROL_CHARS.sub(" ", unquote(raw, errors="replace"))
+        s = " ".join(s.split())[:DEVICE_NAME_MAX].strip()
+        if s:
+            return s
+    return device_type(ua)
 
 
 # =============================================================================================
@@ -447,13 +491,14 @@ class Config:
 
 
 class State:
-    def __init__(self, path: str = STATE_FILE):
-        self.path = path
+    def __init__(self, path: Optional[str] = None):
+        self.path = path or data_path(STATE_NAME)
         self.data = {"last_ip": None, "first_run_done": False}
 
     @classmethod
-    def load(cls, path: str = STATE_FILE) -> "State":
+    def load(cls, path: Optional[str] = None) -> "State":
         s = cls(path)
+        path = s.path
         try:
             with open(path, encoding="utf-8") as f:
                 d = json.load(f)
@@ -627,18 +672,6 @@ def qr_console_lines(url: str, ansi: bool, indent: str = "      ") -> List[str]:
     return lines
 
 
-def qr_svg(url: str) -> Optional[str]:
-    m = qr_matrix(url)
-    if m is None:
-        return None
-    n, b = len(m), 4
-    parts = ["M%d %dh1v1h-1z" % (x + b, y + b) for y in range(n) for x in range(n) if m[y][x]]
-    s = n + 2 * b
-    return ('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 %d %d" shape-rendering="crispEdges">'
-            '<rect width="%d" height="%d" fill="#fff"/><path d="%s" fill="#000"/></svg>'
-            % (s, s, s, s, "".join(parts)))
-
-
 # =============================================================================================
 # File names (uploads)
 # =============================================================================================
@@ -678,6 +711,38 @@ def sanitize_name(raw: str, dest_dir: str = "", is_win: bool = IS_WIN) -> str:
     return s
 
 
+def family_rx(name: str, is_win: bool):
+    """`name`, `name (1)`, `name (2)`… (same stem and extension). The ONE rule for "same family"."""
+    stem, ext = split_ext(name)
+    flags = re.IGNORECASE if is_win else 0
+    return re.compile(r"^%s(?: \((\d+)\))?%s$" % (re.escape(stem), re.escape(ext)), flags)
+
+
+RX_NUMBERED_STEM = re.compile(r"^(.*) \(\d+\)$", re.DOTALL)
+
+
+def coarse_key(name: str, is_win: bool) -> str:
+    """Index key that only NARROWS the candidates; family_rx decides [PB3]. Must be a superset of
+    re.IGNORECASE: non-ASCII characters and the ASCII letters with non-ASCII case partners (i: İ ı,
+    k: Kelvin sign, s: ſ) all become one placeholder."""
+    if not is_win:
+        return name
+    return "".join("\0" if (ord(c) > 127 or c in "iksIKS") else c.lower() for c in name)
+
+
+def family_keys(fname: str, is_win: bool) -> List[str]:
+    """Keys under which an inbox file is indexed: its own name and, if numbered, its base name."""
+    keys = [coarse_key(fname, is_win)]
+    stem, ext = split_ext(fname)
+    for s, e in ((stem, ext), (fname, "")):
+        m = RX_NUMBERED_STEM.match(s)
+        if m:
+            k = coarse_key(m.group(1) + e, is_win)
+            if k not in keys:
+                keys.append(k)
+    return keys
+
+
 def numbered(name: str, n: int) -> str:
     if n == 0:
         return name
@@ -702,8 +767,9 @@ WIN_RENAME_DELAYS = (0.2, 0.3, 0.5, 1.0, 2.0, 4.0)   # about 8 s in total
 
 class Inbox:
     def __init__(self, path: str, log: Optional[Callable] = None, is_win: bool = IS_WIN,
-                 umask: Optional[int] = None):
+                 umask: Optional[int] = None, free_override: Optional[int] = None):
         self.path = path
+        self.free_override = free_override          # hidden --test-free-bytes [B11]
         self.log = log or (lambda *a, **k: None)
         self.is_win = is_win
         self.umask = _read_umask() if umask is None else umask
@@ -728,10 +794,16 @@ class Inbox:
         return n
 
     # -- duplicate helpers -----------------------------------------------------------------
+    def free_bytes(self) -> Optional[int]:
+        if self.free_override is not None:
+            return self.free_override
+        try:
+            return shutil.disk_usage(self.path).free
+        except OSError:
+            return None
+
     def family(self, name: str) -> List[Tuple[str, str, os.stat_result]]:
-        stem, ext = split_ext(name)
-        flags = re.IGNORECASE if self.is_win else 0
-        rx = re.compile(r"^%s(?: \((\d+)\))?%s$" % (re.escape(stem), re.escape(ext)), flags)
+        rx = family_rx(name, self.is_win)
         out = []
         try:
             with os.scandir(self.path) as it:
@@ -781,10 +853,7 @@ class Inbox:
     # -- pre-flight --------------------------------------------------------------------------
     def precheck(self, raw_name: str, size: Optional[int], mtime_ms: Optional[int]) -> dict:
         size = max(size or 0, 0)
-        try:
-            free = shutil.disk_usage(self.path).free
-        except OSError:
-            free = None
+        free = self.free_bytes()
         if free is not None and free < size + DISK_MARGIN:
             return {"ok": False, "reason": "disk_full", "free_bytes": free}
         name = sanitize_name(raw_name, self.path, self.is_win)
@@ -793,6 +862,44 @@ class Inbox:
                 if st.st_size == size and abs(st.st_mtime - mtime_ms / 1000.0) <= 2.0:
                     return {"ok": True, "duplicate": fname, "name": name}
         return {"ok": True, "name": name}
+
+    def check_batch(self, files: List[Tuple[str, int, Optional[int]]]) -> dict:
+        """Duplicate check for many files: ONE folder scan and ONE free-space call [B4]. Same answers as
+        precheck() per file; never refuses for space (the app decides) [B3]."""
+        index: Dict[str, List[os.DirEntry]] = {}
+        try:
+            with os.scandir(self.path) as it:
+                for e in it:
+                    for k in family_keys(e.name, self.is_win):
+                        index.setdefault(k, []).append(e)
+        except OSError:
+            pass
+        free = self.free_bytes()
+        results, needed = [], 0
+        for raw, size, mtime_ms in files:
+            dup = None
+            if mtime_ms is not None:
+                name = sanitize_name(raw, self.path, self.is_win)
+                cands = index.get(coarse_key(name, self.is_win))
+                if cands:
+                    rx = family_rx(name, self.is_win)
+                    for e in cands:
+                        if not rx.match(e.name):
+                            continue
+                        try:
+                            if not e.is_file(follow_symlinks=False):
+                                continue
+                            st = e.stat(follow_symlinks=False)
+                        except OSError:
+                            continue
+                        if st.st_size == size and abs(st.st_mtime - mtime_ms / 1000.0) <= 2.0:
+                            dup = e.name
+                            break
+            if dup is None:
+                needed += size
+            results.append({"duplicate": dup})
+        return {"ok": True, "results": results, "needed_bytes": needed,
+                "free_bytes": None if free is None else max(0, free - DISK_MARGIN)}
 
     # -- receive -----------------------------------------------------------------------------
     def receive(self, rfile, length: int, raw_name: str, mtime_ms: Optional[int]) -> dict:
@@ -1032,7 +1139,7 @@ class Outbox:
         self.ready[name] = of
         self.by_id[of.id] = of
         if not quiet:
-            self.log("outbox", "+ #%d" % of.id, name, "%s   short link: %s/%d" % (fmt_size(of.size), self.url_base(), of.id))
+            self.log("outbox", "+ #%d" % of.id, name, fmt_size(of.size))
         return of
 
     def start_scan(self) -> None:
@@ -1293,15 +1400,14 @@ class TransferTracker:
                 win_keep_awake(want)
                 on = want
 
-    def seen_client(self, ip: str, ua: str) -> None:
+    def seen_client(self, ip: str, label: str) -> None:
         with self.lock:
             if ip in self.clients:
                 return
             self.clients.add(ip)
             self.any_client = True
-        dev = device_type(ua)
-        hint = "Android" if "Android" in (ua or "") else ("Fire TV" if dev == "Fire TV" else "")
-        self.note("%s connected (%s%s)" % (dev[0].upper() + dev[1:], (hint + ", ") if hint and hint != dev else "", ip))
+        label = label or "browser"
+        self.note("%s connected (%s)" % (label[0].upper() + label[1:], ip))
 
     def first_play(self, key) -> bool:
         with self.lock:
@@ -1320,7 +1426,7 @@ class TransferTracker:
 
 
 # =============================================================================================
-# EXIF GPS check (used only by the /diag page)
+# EXIF GPS check (test helper)
 # =============================================================================================
 
 def exif_gps_status(data: bytes) -> str:
@@ -1370,6 +1476,424 @@ def _tiff_gps(t: bytes) -> str:
 
 
 # =============================================================================================
+# Request log: ferry-log.txt (C5). A slow or locked disk never blocks a transfer.
+# =============================================================================================
+
+_LOG_STOP = object()
+_LOG_CTRL = re.compile(r"[\t\r\n]")
+
+
+def log_field(v) -> str:
+    if v is None or v == "":
+        return "-"
+    return _LOG_CTRL.sub(" ", str(v))
+
+
+def log_path(raw: str) -> str:
+    """Request path for the log: query values are dropped, except the file name."""
+    parts = urlsplit(raw or "")
+    path = unquote(parts.path, errors="replace")
+    if not parts.query:
+        return path
+    out = []
+    for piece in parts.query.split("&"):
+        k, eq, v = piece.partition("=")
+        k = unquote(k, errors="replace")
+        out.append("name=" + unquote(v, errors="replace") if (k == "name" and eq) else k)
+    return path + "?" + "&".join(out)
+
+
+class RequestLog:
+    def __init__(self, folder: str, console_note: Callable[[str], None], max_bytes: int = LOG_MAX_BYTES,
+                 retry_step: int = LOG_RETRY_STEP, hard_cap: int = LOG_HARD_CAP, queue_max: int = LOG_QUEUE_MAX,
+                 replace=os.replace, opener=open, clock=time.time, poll_flush_s: float = LOG_POLL_FLUSH_S,
+                 rotate_delays: Tuple[float, ...] = (0.1, 0.2, 0.4)):
+        self.folder = folder
+        self.path = os.path.join(folder, LOG_NAME)
+        self.old_path = os.path.join(folder, LOG_OLD_NAME)
+        self.note = console_note
+        self.max_bytes, self.retry_step, self.hard_cap = max_bytes, retry_step, hard_cap
+        self.replace, self.opener, self.clock = replace, opener, clock
+        self.poll_flush_s = poll_flush_s
+        self.rotate_delays = rotate_delays
+        self.q: "queue.Queue" = queue.Queue(maxsize=queue_max)
+        self.dropped = 0
+        self._dlock = threading.Lock()
+        self.polls: Dict[Tuple[str, str], int] = {}
+        self._plock = threading.Lock()
+        self._f = None
+        self._size = 0
+        self._next_try = 0
+        self._noted: set = set()
+        self._last_flush = clock()
+        self.t: Optional[threading.Thread] = None
+
+    # -- producers (any thread; never block) ----------------------------------------------------
+    def _put(self, line: str) -> None:
+        try:
+            self.q.put_nowait(line)
+        except queue.Full:
+            with self._dlock:
+                self.dropped += 1
+
+    def _line(self, fields) -> str:
+        t = self.clock()
+        ts = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(t)) + ".%03d" % (int(t * 1000) % 1000)
+        return "\t".join([ts] + [log_field(f) for f in fields])
+
+    def request(self, ip, device, method, path, rng, status, nbytes, ms, outcome, error) -> None:
+        self._put(self._line([ip, device, method, log_path(path), rng, status, nbytes, ms, outcome, error]))
+
+    def event(self, text: str, ip=None, device=None) -> None:
+        self._put(self._line([ip, device, "EVENT", None, None, None, None, None, text, None]))
+
+    def poll(self, ip: str, device: str) -> None:
+        with self._plock:
+            self.polls[(ip, device)] = self.polls.get((ip, device), 0) + 1
+
+    def flush_polls(self) -> None:
+        with self._plock:
+            polls, self.polls = self.polls, {}
+        self._last_flush = self.clock()
+        for (ip, device), n in sorted(polls.items()):
+            self.event("%d list refresh%s" % (n, "" if n == 1 else "es"), ip, device)
+
+    # -- writer thread ---------------------------------------------------------------------------
+    def start(self) -> None:
+        self.t = threading.Thread(target=self._run, name="ferry-log", daemon=True)
+        self.t.start()
+
+    def stop(self, timeout: float = 2.0) -> None:
+        if self.t is None:
+            return
+        self.flush_polls()
+        try:
+            self.q.put(_LOG_STOP, timeout=timeout)
+        except queue.Full:
+            pass
+        self.t.join(timeout)
+        self.t = None
+
+    def _note_once(self, text: str) -> None:
+        if text not in self._noted:
+            self._noted.add(text)
+            try:
+                self.note(text)
+            except Exception:
+                pass
+
+    def _open(self, mode: str = "a") -> None:
+        try:
+            os.makedirs(self.folder, exist_ok=True)
+            self._f = self.opener(self.path, mode, encoding="utf-8", newline="\n", buffering=1)
+        except OSError as e:
+            self._f = None
+            self._note_once("Can't write ferry-log.txt: %s" % (e.strerror or e))
+            return
+        try:
+            self._size = os.path.getsize(self.path)
+        except OSError:
+            self._size = 0
+
+    def _close(self) -> None:
+        if self._f is not None:
+            try:
+                self._f.close()
+            except Exception:
+                pass
+            self._f = None
+
+    def _maybe_rotate(self) -> None:
+        if self._size <= self.max_bytes or self._size < self._next_try:
+            return
+        self._close()
+        for delay in self.rotate_delays:
+            try:
+                self.replace(self.path, self.old_path)
+                break
+            except OSError:
+                time.sleep(delay)
+        else:
+            self._note_once("Can't rotate ferry-log.txt (is it open in another program?)")
+            self._open()
+            if self._f is None or self._size < self.hard_cap:
+                self._next_try = self._size + self.retry_step
+                return
+            self._close()
+            self._open("w")
+            self._next_try = 0
+            self._write_raw(self._line([None, None, "EVENT", None, None, None, None, None,
+                                        "log restarted (could not rotate)", None]))
+            return
+        self._next_try = 0
+        self._open()
+
+    def _write_raw(self, line: str) -> None:
+        if self._f is None:
+            self._open()
+            if self._f is None:
+                return
+        try:
+            self._f.write(line + "\n")
+            self._f.flush()
+            self._size += len(line.encode("utf-8")) + 1
+        except Exception as e:
+            self._note_once("Can't write ferry-log.txt: %s" % (getattr(e, "strerror", None) or e))
+            self._close()
+
+    def _write(self, line: str) -> None:
+        self._maybe_rotate()
+        with self._dlock:
+            dropped, self.dropped = self.dropped, 0
+        if dropped:
+            self._write_raw(self._line([None, None, "EVENT", None, None, None, None, None,
+                                        "(%d log lines dropped)" % dropped, None]))
+        self._write_raw(line)
+
+    def _run(self) -> None:
+        self._open()
+        self._maybe_rotate()
+        while True:
+            try:
+                item = self.q.get(timeout=1.0)
+            except queue.Empty:
+                item = None
+            if item is _LOG_STOP:
+                while True:
+                    try:
+                        rest = self.q.get_nowait()
+                    except queue.Empty:
+                        break
+                    if rest is not _LOG_STOP:
+                        self._write(rest)
+                break
+            if item is not None:
+                self._write(item)
+            if self.clock() - self._last_flush >= self.poll_flush_s:
+                self.flush_polls()
+        self._close()
+
+
+# =============================================================================================
+# Discovery responder (UDP 8765, C2): answers the app's broadcast "where is Ferry?"
+# =============================================================================================
+
+RX_NONCE = re.compile(r"^[0-9a-fA-F]{8,32}$")
+
+
+class DiscoveryResponder:
+    def __init__(self, port: int, reply_info: Callable[[], dict], console, reqlog, sock_factory=None,
+                 clock=time.monotonic, address_hint: Callable[[], str] = lambda: "the PC's address"):
+        self.port = port
+        self.reply_info = reply_info
+        self.console = console
+        self.reqlog = reqlog
+        self.sock_factory = sock_factory or (lambda: socket.socket(socket.AF_INET, socket.SOCK_DGRAM))
+        self.clock = clock
+        self.address_hint = address_hint
+        self.sock = None
+        self.bound_port = 0
+        self._stop = threading.Event()
+        self._replies: List[float] = []
+        self._logged: Dict[str, float] = {}
+        self.t: Optional[threading.Thread] = None
+
+    def start(self) -> bool:
+        s = None
+        try:
+            s = self.sock_factory()
+            s.settimeout(0.5)
+            ioctl, opt = getattr(s, "ioctl", None), getattr(socket, "SIO_UDP_CONNRESET", None)
+            if ioctl is not None and opt is not None:
+                try:
+                    ioctl(opt, False)        # Windows: no 10054 storm after replying to a closed port
+                except Exception:
+                    pass
+            s.bind(("0.0.0.0", self.port))
+            try:
+                self.bound_port = s.getsockname()[1]
+            except Exception:
+                self.bound_port = self.port
+        except OSError:
+            if s is not None:
+                try:
+                    s.close()
+                except Exception:
+                    pass
+            self.console.note("Automatic discovery is off. On the phone, enter %s once" % self.address_hint())
+            return False
+        self.sock = s
+        self.t = threading.Thread(target=self._loop, name="ferry-discovery", daemon=True)
+        self.t.start()
+        return True
+
+    def stop(self) -> None:
+        self._stop.set()
+        if self.t is not None:
+            self.t.join(1.0)
+        if self.sock is not None:
+            try:
+                self.sock.close()
+            except Exception:
+                pass
+
+    def handle(self, data: bytes, addr) -> Optional[bytes]:
+        if not isinstance(data, (bytes, bytearray)) or len(data) > DISCOVERY_MAX_DATAGRAM:
+            return None
+        try:
+            req = json.loads(bytes(data).decode("utf-8"))
+        except (ValueError, UnicodeDecodeError):
+            return None
+        if not isinstance(req, dict) or req.get("app") != "ferry" or req.get("q") != "discover":
+            return None
+        nonce = req.get("nonce")
+        if not isinstance(nonce, str) or not RX_NONCE.match(nonce):
+            return None
+        info = self.reply_info()
+        return json.dumps({"app": "ferry", "protocol": PROTOCOL, "nonce": nonce, "name": info.get("name"),
+                           "device_type": "pc", "port": info.get("port"), "version": VERSION}).encode("utf-8")
+
+    def _allow(self) -> bool:
+        now = self.clock()
+        self._replies = [t for t in self._replies if now - t < 1.0]
+        if len(self._replies) >= DISCOVERY_MAX_REPLIES_PER_S:
+            return False
+        self._replies.append(now)
+        return True
+
+    def _log(self, data: bytes, ip: str) -> None:
+        now = self.clock()
+        last = self._logged.get(ip)
+        if last is not None and now - last < LOG_DISCOVERY_EVERY_S:
+            return
+        self._logged[ip] = now
+        try:
+            req = json.loads(bytes(data).decode("utf-8"))
+            who = "%s, %s" % (str(req.get("name") or "?")[:DEVICE_NAME_MAX], str(req.get("device_type") or "?")[:20])
+        except Exception:
+            who = "?"
+        if self.reqlog is not None:
+            self.reqlog.event("discovery reply to %s (%s)" % (ip, who), ip)
+
+    def _loop(self) -> None:
+        s = self.sock
+        while not self._stop.is_set():
+            try:
+                data, addr = s.recvfrom(2048)
+            except socket.timeout:
+                continue
+            except OSError:              # e.g. Windows 10054 after a reply to a closed port [B2]
+                if self._stop.is_set():
+                    break
+                time.sleep(0.01)
+                continue
+            try:
+                reply = self.handle(data, addr)
+                if reply is None or not self._allow():
+                    continue
+                s.sendto(reply, addr)
+                self._log(data, addr[0])
+            except OSError:
+                continue
+            except Exception as e:       # never let the loop die
+                self.console.error_once("discovery: %s: %s" % (type(e).__name__, e))
+
+
+# =============================================================================================
+# App bundle: app/Ferry.apk + app/Ferry.apk.json (C3), checked on every request [B26] [PB2]
+# =============================================================================================
+
+RX_SHA256 = re.compile(r"^[0-9a-f]{64}$")
+
+
+def sha256_file(path: str) -> str:
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        while True:
+            b = f.read(CHUNK)
+            if not b:
+                break
+            h.update(b)
+    return h.hexdigest()
+
+
+def _is_int(v) -> bool:
+    return isinstance(v, int) and not isinstance(v, bool)
+
+
+class AppBundle:
+    def __init__(self, folder: str, hasher: Optional[Callable[[str], str]] = None):
+        self.folder = folder
+        self.hasher = hasher or sha256_file
+        self.apk = os.path.join(folder, APK_NAME)
+        self.json_path = os.path.join(folder, APK_JSON)
+        self._lock = threading.Lock()
+        self._key = None
+        self._result: Tuple[str, Optional[dict], Optional[Tuple[int, int]]] = ("missing", None, None)
+
+    def status(self) -> Tuple[str, Optional[dict], Optional[Tuple[int, int]]]:
+        """("ok", meta, (apk_size, apk_mtime_ns)) | ("missing"|"invalid"|"copying", None, None)."""
+        try:
+            st = os.stat(self.apk)
+            with open(self.json_path, "rb") as f:
+                jb = f.read(APK_JSON_MAX + 1)
+        except OSError:
+            return ("missing", None, None)
+        if not os.path.isfile(self.apk):
+            return ("missing", None, None)
+        key = (jb, st.st_size, st.st_mtime_ns)     # the json text differs between builds (it holds the sha)
+        with self._lock:
+            if key != self._key:
+                self._result = self._evaluate(jb, st)
+                self._key = key
+            return self._result
+
+    @staticmethod
+    def _parse(jb: bytes) -> Optional[dict]:
+        if len(jb) > APK_JSON_MAX:
+            return None
+        try:
+            d = json.loads(jb.decode("utf-8"))
+        except (ValueError, UnicodeDecodeError):
+            return None
+        if not isinstance(d, dict):
+            return None
+        code, name, size, sha = d.get("version_code"), d.get("version_name"), d.get("size"), d.get("sha256")
+        if not (_is_int(code) and code > 0 and isinstance(name, str) and name and _is_int(size) and size >= 0
+                and isinstance(sha, str) and RX_SHA256.match(sha)):
+            return None
+        return {"version_code": code, "version_name": name, "size": size, "sha256": sha}
+
+    def _evaluate(self, jb: bytes, st: os.stat_result):
+        meta = self._parse(jb)
+        if meta is None:
+            return ("invalid", None, None)
+        if st.st_size != meta["size"]:
+            return ("copying", None, None)
+        try:
+            digest = self.hasher(self.apk)
+        except OSError:
+            return ("copying", None, None)
+        if digest != meta["sha256"]:
+            return ("copying", None, None)
+        return ("ok", meta, (st.st_size, st.st_mtime_ns))
+
+    def peek(self) -> Tuple[str, Optional[dict]]:
+        """Cheap guess for the console banner (no hashing): ("ok", meta) when the json is valid and the
+        APK size matches it."""
+        try:
+            st = os.stat(self.apk)
+            with open(self.json_path, "rb") as f:
+                jb = f.read(APK_JSON_MAX + 1)
+        except OSError:
+            return ("missing", None)
+        meta = self._parse(jb)
+        if meta is None:
+            return ("invalid", None)
+        return ("ok", meta) if st.st_size == meta["size"] else ("copying", None)
+
+
+# =============================================================================================
 # HTTP server
 # =============================================================================================
 
@@ -1410,18 +1934,27 @@ class FerryServer(ThreadingHTTPServer):
 
 
 ROUTES_EXACT = {
-    "/": "page", "/index.html": "page", "/api/v1/info": "api_info", "/api/v1/check": "api_check",
+    "/": "get_app_page", "/favicon.svg": "favicon",
+    "/app": "send_app", "/app/" + APK_NAME: "send_app", "/api/v1/app": "api_app",
+    "/api/v1/info": "api_info", "/api/v1/check": "api_check", "/api/v1/check-batch": "api_check_batch",
     "/api/v1/upload": "api_upload", "/api/v1/outbox": "api_outbox", "/api/v1/outbox.zip": "send_zip",
-    "/new": "redirect_new", "/qr": "qr_page", "/diag": "diag_page",
-    "/api/v1/diag/inspect": "diag_inspect", "/api/v1/diag/blob": "diag_blob",
-    "/api/v1/diag/sink": "diag_sink", "/api/v1/diag/test.zip": "diag_zip",
-    "/api/v1/diag/ferry-test.apk": "diag_apk",
 }
-POST_ROUTES = {"api_upload", "diag_inspect", "diag_sink"}
+POST_ROUTES = {"api_upload", "api_check_batch"}
 RX_OUTBOX = re.compile(r"^/api/v1/outbox/(\d{1,9})(?:/.*)?$")
-RX_SHORT = re.compile(r"^/(\d{1,6})/?$")
-ASSET_PATHS = ("/favicon.svg", "/icon-192.png", "/icon-512.png", "/icon-maskable-512.png",
-               "/manifest.webmanifest")
+RX_HOST = re.compile(r"^\d{1,3}(?:\.\d{1,3}){3}(?::\d{1,5})?$")
+APP_COPYING = "The app is being copied, try again in a moment"
+
+
+class _CountingReader:
+    """Wraps rfile so the request log knows how much of a body was read."""
+
+    def __init__(self, raw, handler):
+        self.raw, self.h = raw, handler
+
+    def read(self, n: int = -1) -> bytes:
+        b = self.raw.read(n)
+        self.h._nbytes += len(b)
+        return b
 
 
 class FerryHandler(BaseHTTPRequestHandler):
@@ -1450,16 +1983,33 @@ class FerryHandler(BaseHTTPRequestHandler):
         self._dispatch("POST")
 
     # -- plumbing ------------------------------------------------------------------------------
+    def send_response(self, code: int, message: Optional[str] = None) -> None:
+        self._status = code
+        super().send_response(code, message)
+
+    def activity(self, who: str, verb: str, name: str = "", detail: str = "") -> None:
+        """Console activity line; the same words become the request log's outcome."""
+        self.app.console.log(who, verb, name, detail)
+        self._outcome = ("%s %s" % (verb, name)).strip()
+        if verb in ("FAILED", "stopped") and detail:
+            self._error = detail
+
     def _dispatch(self, method: str) -> None:
+        self._t0 = time.monotonic()
+        self._status: Optional[int] = None
+        self._nbytes = 0
+        self._outcome = ""
+        self._error = ""
         self._head = method == "HEAD"
         parts = urlsplit(self.path)
         path = parts.path
+        self._range = self.headers.get("Range")
         self.q = {k: v[-1] for k, v in parse_qs(parts.query, keep_blank_values=True).items()}
         self.ua = self.headers.get("User-Agent", "")
-        self.device = device_type(self.ua)
-        if not path.startswith(("/favicon", "/icon-", "/manifest")):
-            self.app.tracker.seen_client(self.client_address[0], self.ua)
+        self.device = device_label(self.headers, self.ua)
         try:
+            if not path.startswith("/favicon"):
+                self.app.tracker.seen_client(self.client_address[0], self.device)
             name = ROUTES_EXACT.get(path)
             if name:
                 if (name in POST_ROUTES) != (method == "POST"):
@@ -1470,20 +2020,30 @@ class FerryHandler(BaseHTTPRequestHandler):
             m = RX_OUTBOX.match(path)
             if m:
                 return self.send_outbox_file(int(m.group(1)))
-            m = RX_SHORT.match(path)
-            if m:
-                return self.redirect_id(int(m.group(1)))
-            if path in ASSET_PATHS:
-                return self.asset(path[1:])
             return self.not_found()
-        except (ConnectionError, socket.timeout, TimeoutError):
+        except (ConnectionError, socket.timeout, TimeoutError) as e:
             self.close_connection = True
+            self._error = self._error or ("connection lost: %s" % type(e).__name__)
         except Exception as e:
             self.app.console.note("error  %s: %s: %s" % (path, type(e).__name__, e))
+            self._error = "%s: %s" % (type(e).__name__, e)
             try:
                 self.send_json(500, {"result": "error", "message": "unexpected error on the PC"})
             except Exception:
                 pass
+        finally:
+            self._log_request(method, path)
+
+    def _log_request(self, method: str, path: str) -> None:
+        reqlog = getattr(self.app, "reqlog", None)
+        if reqlog is None:
+            return
+        ip = self.client_address[0]
+        if method == "GET" and path in POLL_PATHS and self._status == 200:
+            reqlog.poll(ip, self.device)
+            return
+        reqlog.request(ip, self.device, method, self.path, self._range, self._status, self._nbytes,
+                       int((time.monotonic() - self._t0) * 1000), self._outcome, self._error)
 
     def send_bytes(self, code: int, body: bytes, ctype: str, headers: Optional[dict] = None) -> None:
         self.send_response(code)
@@ -1494,6 +2054,7 @@ class FerryHandler(BaseHTTPRequestHandler):
         self.end_headers()
         if not self._head:
             self.wfile.write(body)
+            self._nbytes += len(body)
 
     def send_json(self, code: int, obj) -> None:
         body = json.dumps(obj, ensure_ascii=False).encode("utf-8")
@@ -1517,6 +2078,7 @@ class FerryHandler(BaseHTTPRequestHandler):
                 if not b:
                     break
                 left -= len(b)
+                self._nbytes += len(b)
         except Exception:
             pass
         self.close_connection = True
@@ -1535,48 +2097,111 @@ class FerryHandler(BaseHTTPRequestHandler):
             return None
         return n
 
-    # -- pages & assets ---------------------------------------------------------------------
-    def page(self) -> None:
-        self.send_bytes(200, self.app.page_bytes, "text/html; charset=utf-8", {"Cache-Control": "no-store"})
+    # -- pages -------------------------------------------------------------------------------
+    def favicon(self) -> None:
+        self.send_bytes(200, FAVICON_SVG.encode("utf-8"), "image/svg+xml", {"Cache-Control": "max-age=86400"})
 
-    def diag_page(self) -> None:
-        self.send_bytes(200, self.app.diag_bytes, "text/html; charset=utf-8", {"Cache-Control": "no-store"})
+    def page_host(self) -> str:
+        host = (self.headers.get("Host") or "").strip()
+        if RX_HOST.match(host):
+            return host
+        return "%s:%d" % (self.app.primary or "<PC address>", self.app.cfg.port)
 
-    def qr_page(self) -> None:
-        svg = qr_svg(self.app.primary_url) if self.app.primary_url else None
-        body = QR_PAGE.replace("{{URL}}", _h(self.app.primary_url or "(no network address)")) \
-                      .replace("{{SVG}}", svg or "<p>QR code unavailable (qrcodegen.py missing).</p>")
+    def get_app_page(self) -> None:
+        state, meta, _ = self.app.bundle.status()
+        host = self.page_host()
+        if state == "ok":
+            button = ('<a class="btn" href="/app">Download Ferry for Android</a>'
+                      '<p class="small">Ferry %s &middot; %s</p>' % (_h(meta["version_name"]), _h(fmt_size(meta["size"]))))
+        elif state == "copying":
+            button = '<p class="warn">%s.</p>' % _h(APP_COPYING)
+        else:
+            button = '<p class="warn">This Ferry folder has no app. Get the latest Ferry zip.</p>'
+        body = GET_APP_HTML.replace("{{BUTTON}}", button).replace("{{HOST}}", _h(host))
         self.send_bytes(200, body.encode("utf-8"), "text/html; charset=utf-8", {"Cache-Control": "no-store"})
 
-    def asset(self, name: str) -> None:
-        a = self.app.assets.get(name)
-        if a is None:
-            return self.not_found()
-        ctype, body = a
-        self.send_bytes(200, body, ctype, {"Cache-Control": "max-age=86400"})
+    # -- app bundle ------------------------------------------------------------------------------
+    def send_app(self) -> None:
+        state, _meta, key = self.app.bundle.status()
+        if state != "ok":
+            if state == "copying":
+                return self.send_html_page(404, "Try again in a moment", APP_COPYING)
+            return self.send_html_page(404, "No app here", "No Ferry app in this Ferry folder.")
+        self.send_file(self.app.bundle.apk, APK_NAME, APK_MIME, key[0], key[1], APK_NAME, APP_COPYING, ("app",))
+
+    def api_app(self) -> None:
+        state, meta, _ = self.app.bundle.status()
+        if state == "ok":
+            return self.send_json(200, dict(meta, url="/app/" + APK_NAME))
+        if state == "copying":
+            return self.send_json(404, {"result": "error", "message": APP_COPYING})
+        return self.send_json(404, {"result": "error", "message": "no app bundled"})
 
     # -- API -------------------------------------------------------------------------------------
     def api_info(self) -> None:
         app = self.app
-        try:
-            free = shutil.disk_usage(app.cfg.inbox).free
-        except OSError:
-            free = None
+        state, meta, _ = app.bundle.status()
         self.send_json(200, {
             "app": "ferry", "protocol": PROTOCOL, "version": VERSION, "name": app.pc_name,
             "device_type": "pc", "os": "windows" if IS_WIN else "linux",
-            "capabilities": ["receive", "outbox"],
+            "capabilities": CAPABILITIES,
             "inbox_label": app.cfg.inbox_label, "outbox_label": app.cfg.outbox_label,
-            "free_bytes": free})
+            "free_bytes": app.inbox.free_bytes(),
+            "app_version_code": meta["version_code"] if state == "ok" else None})
 
     def api_check(self) -> None:
         name = self.q.get("name", "")
         res = self.app.inbox.precheck(name, parse_int(self.q.get("size")), parse_int(self.q.get("mtime")))
         who = "from " + self.device
         if res.get("duplicate"):
-            self.app.console.log(who, "skipped", res["duplicate"], "already on PC")
+            self.activity(who, "skipped", res["duplicate"], "already on PC")
         elif not res.get("ok"):
-            self.app.console.log(who, "FAILED", res.get("name", name) or name, "PC disk is full")
+            self.activity(who, "FAILED", res.get("name", name) or name, "PC disk is full")
+        self.send_json(200, res)
+
+    def api_check_batch(self) -> None:
+        length = self.content_length()
+        if length is None:
+            self.close_connection = True
+            return self.send_json(411, {"result": "error", "message": "Content-Length required"})
+        if length < 0:
+            self.close_connection = True
+            return self.send_json(400, {"result": "error", "message": "bad Content-Length"})
+        if length > CHECK_BATCH_MAX_BODY:
+            self.drain(length)
+            return self.send_json(413, {"result": "error", "message": "request too large"})
+        body = b""
+        try:
+            while len(body) < length:
+                b = self.rfile.read(length - len(body))
+                if not b:
+                    break
+                body += b
+        finally:
+            self._nbytes += len(body)
+        if len(body) < length:
+            self.close_connection = True
+            return
+        bad = {"result": "error", "message": "bad check-batch request"}
+        try:
+            req = json.loads(body.decode("utf-8"))
+        except (ValueError, UnicodeDecodeError):
+            return self.send_json(400, bad)
+        files = req.get("files") if isinstance(req, dict) else None
+        if not isinstance(files, list) or len(files) > CHECK_BATCH_MAX_ITEMS:
+            return self.send_json(400, bad)
+        items = []
+        for it in files:
+            if not isinstance(it, dict):
+                return self.send_json(400, bad)
+            n, s, mt = it.get("name"), it.get("size"), it.get("mtime")
+            if not (isinstance(n, str) and n and _is_int(s) and s >= 0 and (mt is None or _is_int(mt))):
+                return self.send_json(400, bad)
+            items.append((n, s, mt))
+        res = self.app.inbox.check_batch(items)
+        dups = sum(1 for r in res["results"] if r["duplicate"])
+        self.activity("from " + self.device, "checked", "%d file%s" % (len(items), "" if len(items) == 1 else "s"),
+                      "%d already on PC" % dups)
         self.send_json(200, res)
 
     def api_upload(self) -> None:
@@ -1595,20 +2220,27 @@ class FerryHandler(BaseHTTPRequestHandler):
         if not name or (size is not None and size != length):
             self.drain(length)
             return self.send_json(400, {"result": "error", "message": "bad upload request"})
+        free = app.inbox.free_bytes()
+        if free is not None and free < length + DISK_MARGIN:      # refuse early [CP3]
+            sname = sanitize_name(name, app.inbox.path, app.inbox.is_win)
+            if not any(st.st_size == length for _n, _p, st in app.inbox.family(sname)):   # likely resend [PB4]
+                self.activity(who, "FAILED", sname, "PC disk is full")
+                self.drain(length)
+                return self.send_json(507, {"result": "error", "reason": "disk_full", "message": "PC disk is full"})
         app.tracker.begin()
         t0 = time.monotonic()
         try:
-            res = app.inbox.receive(self.rfile, length, name, mtime)
+            res = app.inbox.receive(_CountingReader(self.rfile, self), length, name, mtime)
         except UploadAborted:
-            app.console.log(who, "stopped", sanitize_name(name), "cancelled or connection lost")
+            self.activity(who, "stopped", sanitize_name(name), "cancelled or connection lost")
             self.close_connection = True
             return
         except DiskFull as e:
-            app.console.log(who, "FAILED", sanitize_name(name), "PC disk is full")
+            self.activity(who, "FAILED", sanitize_name(name), "PC disk is full")
             self.drain(e.remaining)
             return self.send_json(507, {"result": "error", "reason": "disk_full", "message": "PC disk is full"})
         except WriteError as e:
-            app.console.log(who, "FAILED", sanitize_name(name), "can't save: %s" % e)
+            self.activity(who, "FAILED", sanitize_name(name), "can't save: %s" % e)
             self.drain(e.remaining)
             return self.send_json(500, {"result": "error", "message": "The PC couldn't save the file: %s" % e})
         finally:
@@ -1616,11 +2248,11 @@ class FerryHandler(BaseHTTPRequestHandler):
         dt = time.monotonic() - t0
         r = res["result"]
         if r == "skipped":
-            app.console.log(who, "skipped", res["saved_as"], "already on PC")
+            self.activity(who, "skipped", res["saved_as"], "already on PC")
         elif r == "renamed":
-            app.console.log(who, "renamed", "%s -> %s" % (sanitize_name(name), res["saved_as"]), fmt_size(length))
+            self.activity(who, "renamed", "%s -> %s" % (sanitize_name(name), res["saved_as"]), fmt_size(length))
         else:
-            app.console.log(who, "saved", res["saved_as"], ("%s  %s" % (fmt_size(length), fmt_speed(length, dt))).strip())
+            self.activity(who, "saved", res["saved_as"], ("%s  %s" % (fmt_size(length), fmt_speed(length, dt))).strip())
         self.send_json(200, res)
 
     def api_outbox(self) -> None:
@@ -1629,39 +2261,25 @@ class FerryHandler(BaseHTTPRequestHandler):
                              "total_size": sum(o.size for o in files),
                              "folders_ignored": len(self.app.outbox.folders)})
 
-    def redirect_id(self, id_: int) -> None:
-        of = self.app.outbox.get(id_)
-        if of is None:
-            return self.send_html_page(404, "Not in the outbox", "That file is no longer in the outbox.")
-        self._redirect(of)
-
-    def redirect_new(self) -> None:
-        of = self.app.outbox.newest()
-        if of is None:
-            return self.send_html_page(404, "Outbox is empty", "There's nothing in the outbox yet.")
-        self._redirect(of)
-
-    def _redirect(self, of: OutFile) -> None:
-        self.send_response(302)
-        self.send_header("Location", "/api/v1/outbox/%d/%s" % (of.id, quote(of.name, safe="")))
-        self.send_header("Content-Length", "0")
-        self.send_header("Cache-Control", "no-store")
-        self.end_headers()
-
     def send_outbox_file(self, id_: int) -> None:
-        app = self.app
-        of = app.outbox.get(id_)
+        of = self.app.outbox.get(id_)
         gone = "That file is no longer in the outbox."
-        if of is None or not app.outbox.contains(of.path):
+        if of is None or not self.app.outbox.contains(of.path):
             return self.not_found(gone)
+        self.send_file(of.path, of.name, guess_type(of.name), of.size, of.mtime_ns, of.name, gone, ("outbox", of.id))
+
+    def send_file(self, path: str, name: str, ctype: str, expect_size: int, expect_mtime_ns: int,
+                  log_name: str, gone_message: str, play_key) -> None:
+        """Shared sender for outbox files and the app (Range, If-Range, HEAD, inline)."""
+        app = self.app
         try:
-            f = open(of.path, "rb")
+            f = open(path, "rb")
         except OSError:
-            return self.not_found(gone)
+            return self.not_found(gone_message)
         with f:
             st = os.fstat(f.fileno())
-            if st.st_size != of.size or st.st_mtime_ns != of.mtime_ns:
-                return self.not_found(gone)
+            if st.st_size != expect_size or st.st_mtime_ns != expect_mtime_ns:
+                return self.not_found(gone_message)
             size = st.st_size
             etag = '"%d-%d"' % (size, st.st_mtime_ns)
             last_mod = formatdate(safe_ts(st.st_mtime), usegmt=True)
@@ -1677,8 +2295,8 @@ class FerryHandler(BaseHTTPRequestHandler):
             else:
                 start, code, length = 0, 200, size
             self.send_response(code)
-            self.send_header("Content-Type", guess_type(of.name))
-            self.send_header("Content-Disposition", content_disposition("inline" if inline else "attachment", of.name))
+            self.send_header("Content-Type", ctype)
+            self.send_header("Content-Disposition", content_disposition("inline" if inline else "attachment", name))
             self.send_header("Content-Length", str(length))
             self.send_header("Accept-Ranges", "bytes")
             self.send_header("ETag", etag)
@@ -1700,22 +2318,29 @@ class FerryHandler(BaseHTTPRequestHandler):
                     if not b:
                         raise ShortRead()
                     self.wfile.write(b)
+                    self._nbytes += len(b)
                     left -= len(b)
             except ShortRead:
-                app.console.log(who, "FAILED", of.name, "file changed while sending")
+                self.activity(who, "FAILED", log_name, "file changed while sending")
                 return self.abort_connection()
-            except (ConnectionError, socket.timeout, TimeoutError, OSError):
+            except (ConnectionError, socket.timeout, TimeoutError, OSError) as e:
                 if not playing:
-                    app.console.log(who, "cancelled", of.name)
+                    self.activity(who, "cancelled", log_name)
+                else:
+                    self._outcome = "playing %s (connection closed)" % log_name
+                self._error = "connection lost: %s" % type(e).__name__
                 self.close_connection = True
                 return
             finally:
                 app.tracker.end()
             if playing:
-                if app.tracker.first_play(of.id):
-                    app.console.log(who, "playing", of.name, fmt_size(size))
+                if app.tracker.first_play(play_key):
+                    self.activity(who, "playing", log_name, fmt_size(size))
+                else:
+                    self._outcome = "playing %s" % log_name
             else:
-                app.console.log(who, "sent", of.name, ("%s  %s" % (fmt_size(size), fmt_speed(size, time.monotonic() - t0))).strip())
+                self.activity(who, "sent", log_name,
+                              ("%s  %s" % (fmt_size(size), fmt_speed(size, time.monotonic() - t0))).strip())
 
     def send_zip(self) -> None:
         app = self.app
@@ -1745,98 +2370,17 @@ class FerryHandler(BaseHTTPRequestHandler):
         try:
             zip_write(guard, zip_pairs(files), file_source)
         except (ZipAbort, OSError) as e:
-            app.console.log(who, "cancelled" if not isinstance(e, ZipAbort) else "FAILED", zname,
-                            "" if not isinstance(e, ZipAbort) else str(e))
+            self._nbytes += guard.n
+            if isinstance(e, ZipAbort):
+                self.activity(who, "FAILED", zname, str(e))
+            else:
+                self.activity(who, "cancelled", zname)
+                self._error = "connection lost: %s" % type(e).__name__
             return self.abort_connection()
         finally:
             app.tracker.end()
-        app.console.log(who, "sent", zname, ("%s  %s" % (fmt_size(length), fmt_speed(length, time.monotonic() - t0))).strip())
-
-    # -- diagnostics (/diag) ----------------------------------------------------------------
-    def diag_inspect(self) -> None:
-        length = self.content_length()
-        if length is None or length < 0:
-            self.close_connection = True
-            return self.send_json(411, {"result": "error", "message": "Content-Length required"})
-        head = bytearray()
-        left = length
-        try:
-            while left > 0:
-                b = self.rfile.read(min(CHUNK, left))
-                if not b:
-                    raise UploadAborted()
-                if len(head) < 262144:
-                    head += b[:262144 - len(head)]
-                left -= len(b)
-        except (UploadAborted, OSError):
-            self.close_connection = True
-            return
-        name = self.q.get("name", "")
-        mt = parse_int(self.q.get("mtime"))
-        now_ms = int(time.time() * 1000)
-        ext = os.path.splitext(name)[1].lower()
-        gps = exif_gps_status(bytes(head)) if ext in (".jpg", ".jpeg") or head[:2] == b"\xff\xd8" else (
-            "unsupported" if ext in (".heic", ".heif") else "unknown")
-        self.send_json(200, {"name": name, "size": length, "last_modified_ms": mt, "server_now_ms": now_ms,
-                             "age_seconds": None if mt is None else round((now_ms - mt) / 1000.0),
-                             "gps": gps})
-
-    def diag_blob(self) -> None:
-        mb = min(max(parse_int(self.q.get("mb")) or 100, 1), 1024)
-        n = mb * 1000000
-        self.send_response(200)
-        self.send_header("Content-Type", "application/octet-stream")
-        self.send_header("Content-Length", str(n))
-        self.send_header("Cache-Control", "no-store")
-        self.end_headers()
-        if self._head:
-            return
-        left = n
-        try:
-            while left > 0:
-                k = min(CHUNK, left)
-                self.wfile.write(_ZEROS if k == CHUNK else _ZEROS[:k])
-                left -= k
-        except OSError:
-            self.close_connection = True
-
-    def diag_sink(self) -> None:
-        length = self.content_length()
-        if length is None or length < 0:
-            self.close_connection = True
-            return self.send_json(411, {"result": "error"})
-        t0 = time.monotonic()
-        left = length
-        try:
-            while left > 0:
-                b = self.rfile.read(min(CHUNK, left))
-                if not b:
-                    raise UploadAborted()
-                left -= len(b)
-        except (UploadAborted, OSError):
-            self.close_connection = True
-            return
-        self.send_json(200, {"bytes": length, "seconds": round(time.monotonic() - t0, 3)})
-
-    def diag_zip(self) -> None:
-        sink = CollectSink()
-        with tempfile.TemporaryDirectory() as d:
-            files = []
-            for i, (n, text) in enumerate([("ferry-test-1.txt", "Hello from Ferry!\n"),
-                                           ("ferry-test-2.txt", "If you can read this, zip files work.\n")]):
-                p = os.path.join(d, n)
-                with open(p, "w", encoding="utf-8") as f:
-                    f.write(text)
-                st = os.stat(p)
-                files.append(OutFile(i + 1, n, p, st.st_size, st.st_mtime_ns, "other"))
-            zip_write(sink, zip_pairs(files), file_source)
-        self.send_bytes(200, sink.getvalue(), "application/zip",
-                        {"Content-Disposition": content_disposition("attachment", "ferry-test.zip")})
-
-    def diag_apk(self) -> None:
-        body = b"Ferry test file - not a real app. It is expected to fail to install.\n"
-        self.send_bytes(200, body, MIME_OVERRIDES[".apk"],
-                        {"Content-Disposition": content_disposition("attachment", "ferry-test.apk")})
+        self._nbytes += guard.n
+        self.activity(who, "sent", zname, ("%s  %s" % (fmt_size(length), fmt_speed(length, time.monotonic() - t0))).strip())
 
 
 def parse_range(header: Optional[str], size: int):
@@ -1883,39 +2427,46 @@ background:#fff;color:#0f172a}@media(prefers-color-scheme:dark){body{background:
 a{color:#2563eb;font-weight:500}@media(prefers-color-scheme:dark){a{color:#60a5fa}}</style></head>
 <body><h1>{{TITLE}}</h1><p>{{MESSAGE}}</p><p><a href="/">Back to Ferry</a></p></body></html>"""
 
-QR_PAGE = """<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Ferry - scan me</title>
-<link rel="icon" href="/favicon.svg"><style>body{font:20px system-ui,sans-serif;text-align:center;
-margin:0;padding:2rem;background:#fff;color:#000}svg{width:min(70vmin,520px);height:auto}</style></head>
-<body><h1>Scan with your phone camera</h1>{{SVG}}<p>{{URL}}</p></body></html>"""
-
-
-# =============================================================================================
-# Assets (icons, manifest)
-# =============================================================================================
-
-def build_assets() -> Dict[str, Tuple[str, bytes]]:
-    import base64
-    a: Dict[str, Tuple[str, bytes]] = {"favicon.svg": ("image/svg+xml", FAVICON_SVG.encode("utf-8"))}
-    for name, b64 in ASSETS_B64.items():
-        if name.endswith(".png"):
-            a[name] = ("image/png", base64.b64decode(b64))
-    manifest = {
-        "name": "Ferry", "short_name": "Ferry", "start_url": "/", "display": "browser",
-        "theme_color": "#1d4ed8", "background_color": "#1d4ed8",
-        "icons": [{"src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any"},
-                  {"src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any"},
-                  {"src": "/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable"},
-                  {"src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any"}]}
-    a["manifest.webmanifest"] = ("application/manifest+json", json.dumps(manifest).encode("utf-8"))
-    return a
-
-
-def render_page(template: str, pc_name: str) -> bytes:
-    keep = ASSETS_B64.get("keepawake.mp4", "")
-    return (template.replace("{{PC_NAME}}", _h(pc_name))
-                    .replace("{{VERSION}}", VERSION)
-                    .replace("{{KEEPAWAKE_SRC}}", ("data:video/mp4;base64," + keep) if keep else "")
-                    ).encode("utf-8")
+GET_APP_HTML = """<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Get the Ferry app</title>
+<link rel="icon" href="/favicon.svg">
+<style>
+body{font:20px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;margin:0;background:#fff;color:#0f172a}
+header{background:#1d4ed8;color:#fff;padding:1.2rem 1.5rem}
+header h1{margin:0;font-size:1.6rem}
+main{max-width:46rem;margin:0 auto;padding:1.2rem 1.5rem 2rem}
+.btn{display:block;text-align:center;background:#1d4ed8;color:#fff;text-decoration:none;font-weight:600;
+font-size:1.3rem;padding:1.1rem 1rem;border-radius:.8rem;margin:.6rem 0 .3rem}
+.btn:focus,.btn:hover{outline:4px solid #fbbf24;outline-offset:3px}
+.small{color:#475569;font-size:.95rem;text-align:center;margin:.2rem 0 1rem}
+.warn{background:#fef3c7;color:#78350f;border-radius:.6rem;padding:.9rem 1rem;font-weight:500}
+h2{font-size:1.2rem;margin:1.6rem 0 .4rem}
+ol{padding-left:1.4rem;margin:.3rem 0}
+code{background:#e2e8f0;border-radius:.3rem;padding:.05rem .35rem;font-size:1.05em}
+@media(prefers-color-scheme:dark){body{background:#0f172a;color:#e2e8f0}.small{color:#94a3b8}
+code{background:#1e293b}.warn{background:#451a03;color:#fde68a}}
+</style>
+</head>
+<body>
+<header><h1>Get the Ferry app</h1></header>
+<main>
+{{BUTTON}}
+<h2>On your phone</h2>
+<ol>
+<li>Tap <b>Download Ferry for Android</b>.</li>
+<li>Open the downloaded file. If Android asks, allow your browser to install apps.</li>
+<li>Open Ferry.</li>
+</ol>
+<h2>On Fire TV</h2>
+<p>In the Downloader app, enter <code>{{HOST}}/app</code></p>
+</main>
+</body>
+</html>
+"""
 
 
 # =============================================================================================
@@ -1925,30 +2476,43 @@ def render_page(template: str, pc_name: str) -> bytes:
 RULE = "  " + "─" * 62
 
 
-def build_banner(cfg: Config, url: Optional[str], qr_lines: List[str], outbox_count: int) -> List[str]:
+def build_banner(cfg: Config, url: Optional[str], qr_lines: List[str], outbox_count: int,
+                 app_line: str) -> List[str]:
+    """url = the Get-the-app page, http://<ip>:<port>/ (the QR code encodes exactly this)."""
     lines = ["  FERRY  is running" + " " * 24 + "v" + VERSION]
     if url and qr_lines:
-        lines.append("  Scan with your phone camera:")
+        lines.append("  First time? Scan to install the Ferry app:")
         lines.extend(qr_lines)
     elif url:
         lines.append("  (QR code unavailable - qrcodegen.py is missing)")
     if url:
-        lines.append("  Phone:  " + url)
+        hostport = url.split("//", 1)[-1].rstrip("/")
+        lines.append("  App page:  http://%s/app" % hostport)
+        lines.append("  Fire TV:   in Downloader enter %s/app" % hostport)
     else:
         lines.append("  No network connection found - connect to Wi-Fi, then restart Ferry.")
     lines.append("  Inbox:  %s     Outbox: %s (%d file%s)" % (
         cfg.inbox_label, cfg.outbox_label, outbox_count, "" if outbox_count == 1 else "s"))
+    lines.append("  " + app_line)
     lines.append("  Keep this window open. Ctrl+C to stop.   Help: README.txt")
     lines.append(RULE)
     return lines
+
+
+def app_banner_line(state: str, meta: Optional[dict]) -> str:
+    if state == "ok":
+        return "App: Ferry %s is ready for your phone and TV" % meta["version_name"]
+    if state == "copying":
+        return "! " + APP_COPYING
+    return "! No app in this folder (%s) - get the full Ferry zip" % os.path.join("app", APK_NAME)
 
 
 def build_extras(cfg: Config, url: Optional[str], others: List[str], last_ip: Optional[str],
                  primary: Optional[str], port: int) -> List[str]:
     out = []
     if primary and last_ip and primary != last_ip:
-        out.append("  ! Your PC's address changed (was %s). Rescan the QR code and update your" % last_ip)
-        out.append("    phone shortcut and Fire TV bookmark. To stop this: README.txt > Keep the same address.")
+        out.append("  ! Your PC's address changed (was %s). The Ferry app finds it by itself;" % last_ip)
+        out.append("    if not, enter %s in Ferry > Settings." % primary)
     if others and primary and not primary.startswith("192.168."):
         out.append("  If the phone can't connect, try: " + "  ".join("http://%s:%d" % (o, port) for o in others[:3]))
     if cfg.onedrive_outbox:
@@ -1957,7 +2521,6 @@ def build_extras(cfg: Config, url: Optional[str], others: List[str], last_ip: Op
     if cfg.first_run:
         out.append("  First run - welcome! Files from your phone go to:  " + cfg.inbox)
         out.append("  To send files to your phone or TV, put them in:      " + cfg.outbox)
-        out.append("  Bookmark-friendly name (works on some devices):     http://%s:%d" % (hostname_local(), port))
     return out
 
 
@@ -2000,17 +2563,26 @@ def probe_ferry(port: int) -> bool:
         return False
 
 
-def make_app(cfg: Config, console: Console, primary: Optional[str], is_win: bool = IS_WIN) -> AppContext:
-    url = "http://%s:%d" % (primary, cfg.port) if primary else None
+def page_url(primary: Optional[str], port: int) -> Optional[str]:
+    return "http://%s:%d/" % (primary, port) if primary else None
+
+
+def make_app(cfg: Config, console: Console, primary: Optional[str], is_win: bool = IS_WIN,
+             app_dir: Optional[str] = None, free_override: Optional[int] = None,
+             reqlog: Optional[RequestLog] = None) -> AppContext:
     pc_name = socket.gethostname().split(".")[0] or "PC"
-    app = AppContext(cfg=cfg, console=console, primary=primary, primary_url=url, pc_name=pc_name)
-    app.inbox = Inbox(cfg.inbox, console.log, is_win)
+    app = AppContext(cfg=cfg, console=console, primary=primary, primary_url=page_url(primary, cfg.port),
+                     pc_name=pc_name, reqlog=reqlog)
+
+    def inbox_log(area, verb, name="", detail=""):
+        console.log(area, verb, name, detail)
+        if area == "inbox" and app.reqlog is not None:
+            app.reqlog.event(detail or verb)
+    app.inbox = Inbox(cfg.inbox, inbox_log, is_win, free_override=free_override)
     app.outbox = Outbox(cfg.outbox, console.log, is_win,
                         url_base=lambda: app.primary_url or "http://<PC address>:%d" % cfg.port)
     app.tracker = TransferTracker(console.note, is_win)
-    app.assets = build_assets()
-    app.page_bytes = render_page(PAGE_HTML, pc_name)
-    app.diag_bytes = render_page(DIAG_HTML, pc_name)
+    app.bundle = AppBundle(app_dir or APP_DIR)
     return app
 
 
@@ -2027,11 +2599,19 @@ def install_hooks(console: Console) -> None:
     sys.unraisablehook = uhook
 
 
+def _discovery_port(v: str):
+    if v == "off":
+        return None
+    n = int(v)
+    if not 0 <= n <= 65535:
+        raise ValueError(v)
+    return n
+
+
 def parse_args(argv=None):
     p = argparse.ArgumentParser(
         prog="ferry", description="Ferry - move files between your phone / Fire TV and this PC over Wi-Fi.",
-        epilog="Phone address: shown when Ferry starts (scan the QR code). A name-based address "
-               "http://<pc-name>.local:PORT also works on some devices.")
+        epilog="Get the Ferry app: open the address shown when Ferry starts (scan the QR code).")
     p.add_argument("--port", type=int, default=DEFAULT_PORT, help="port to use (default %d)" % DEFAULT_PORT)
     p.add_argument("--no-open", action="store_true", help="never open the outbox folder")
     p.add_argument("--inbox", help="advanced: folder for files from the phone (used exactly as given)")
@@ -2039,8 +2619,13 @@ def parse_args(argv=None):
     p.add_argument("--install-desktop", action="store_true", help="Linux: add Ferry to the app menu")
     p.add_argument("--selftest", action="store_true", help="check this PC and write ferry-selftest.txt")
     p.add_argument("--version", action="version", version="Ferry " + VERSION)
+    # Hidden test hooks [B24] [CP4]: not in --help or the README.
+    p.add_argument("--discovery-port", type=_discovery_port, default=DISCOVERY_PORT, help=argparse.SUPPRESS)
+    p.add_argument("--data-dir", default=None, help=argparse.SUPPRESS)
+    p.add_argument("--test-free-bytes", type=int, default=None, help=argparse.SUPPRESS)
+    p.add_argument("--app-dir", default=None, help=argparse.SUPPRESS)
     a = p.parse_args(argv)
-    if not (1 <= a.port <= 65535):
+    if not (0 <= a.port <= 65535):
         p.error("port must be 1-65535")
     return a
 
@@ -2070,7 +2655,14 @@ def setup_stdout() -> Dict[str, bool]:
 
 
 def main(argv=None, stop_event: Optional[threading.Event] = None) -> int:
+    global DATA_DIR
     args = parse_args(argv)
+    if args.data_dir:
+        DATA_DIR = os.path.abspath(args.data_dir)
+        try:
+            os.makedirs(DATA_DIR, exist_ok=True)
+        except OSError:
+            pass
     if args.install_desktop:
         return install_desktop()
     if args.selftest:
@@ -2078,11 +2670,14 @@ def main(argv=None, stop_event: Optional[threading.Event] = None) -> int:
     modes = setup_stdout()
     console = Console(ansi=modes["ansi"])
     install_hooks(console)
-    state = State.load()
+    state = State.load(data_path(STATE_NAME))
     try:
         cfg = resolve_folders(args, state)
+        cfg.port = args.port
         primary, others = detect_addresses()
-        app = make_app(cfg, console, primary)
+        reqlog = RequestLog(DATA_DIR, console.note)
+        app = make_app(cfg, console, primary, app_dir=args.app_dir, free_override=args.test_free_bytes,
+                       reqlog=reqlog)
         server = bind_server(cfg.port, app)
     except FatalError as e:
         console.print("")
@@ -2091,13 +2686,29 @@ def main(argv=None, stop_event: Optional[threading.Event] = None) -> int:
         console.stop()
         wait_enter_if_needed()
         return 1
+    cfg.port = server.server_port                # --port 0: the real port everywhere [PB15]
+    app.primary_url = page_url(primary, cfg.port)
+    threading.Thread(target=app.bundle.status, name="ferry-app-warmup", daemon=True).start()   # [PB24]
+    reqlog.start()
+    reqlog.event("Ferry %s started (port %d, Python %s)" % (VERSION, cfg.port, sys.version.split()[0]))
     app.inbox.cleanup_temps()                    # only after we own the port [T1]
     app.outbox.start_scan()
     qr = qr_console_lines(app.primary_url, console.ansi) if app.primary_url else []
-    for line in build_banner(cfg, app.primary_url, qr, len(app.outbox.snapshot())):
+    app_line = app_banner_line(*app.bundle.peek())   # no hashing here: the warm-up thread does it
+    for line in build_banner(cfg, app.primary_url, qr, len(app.outbox.snapshot()), app_line):
         console.print(line)
     for line in build_extras(cfg, app.primary_url, others, state.data.get("last_ip"), primary, cfg.port):
         console.print(line)
+    discovery = None
+    if args.discovery_port is not None:
+        discovery = DiscoveryResponder(args.discovery_port, lambda: {"name": app.pc_name, "port": cfg.port},
+                                       console, reqlog,
+                                       address_hint=lambda: "%s:%d" % (primary or "the PC's address", cfg.port))
+        if not discovery.start():
+            discovery = None
+    if args.data_dir:                            # test harnesses always pass --data-dir [B24]
+        console.print("FERRY_READY port=%d discovery=%s" % (
+            cfg.port, discovery.bound_port if discovery else "off"))
     console.print("  Waiting for your phone...")
     threading.Thread(target=app.outbox.run, name="ferry-outbox", daemon=True).start()
     if IS_WIN and primary:
@@ -2119,9 +2730,13 @@ def main(argv=None, stop_event: Optional[threading.Event] = None) -> int:
     except KeyboardInterrupt:
         pass
     finally:
+        if discovery is not None:
+            discovery.stop()
         app.outbox.stop()
         server.server_close()
         app.inbox.cleanup_temps()                # best effort; startup cleanup is the guarantee
+        reqlog.event("Ferry stopped")
+        reqlog.stop()
         console.print("  Ferry stopped.")
         console.stop()
     return 0
@@ -2209,9 +2824,9 @@ def selftest(args) -> int:
     text = "\n".join(lines)
     print(text)
     try:
-        with open(SELFTEST_FILE, "w", encoding="utf-8") as f:
+        with open(data_path(SELFTEST_NAME), "w", encoding="utf-8") as f:
             f.write(text + "\n")
-        print("\nSaved to " + SELFTEST_FILE)
+        print("\nSaved to " + data_path(SELFTEST_NAME))
     except OSError:
         print("\nCouldn't save ferry-selftest.txt - please send a photo of this window instead.")
     if not os.environ.get("FERRY_NO_WAIT"):
@@ -2251,7 +2866,7 @@ def run() -> int:
         tb = traceback.format_exc()
         try:
             import platform
-            with open(ERROR_LOG, "w", encoding="utf-8") as f:
+            with open(data_path(ERROR_LOG_NAME), "w", encoding="utf-8") as f:
                 f.write("Ferry %s / Python %s / %s\n\n%s" % (VERSION, platform.python_version(), platform.platform(), tb))
         except Exception:
             pass
@@ -2259,810 +2874,10 @@ def run() -> int:
         return 2
 
 
-# --- BEGIN GENERATED (tools/build_assets.py) - do not edit by hand ---
-PAGE_HTML = r'''<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="theme-color" content="#1d4ed8">
-<title>Ferry</title>
-<link rel="icon" href="/favicon.svg" type="image/svg+xml">
-<link rel="apple-touch-icon" href="/icon-192.png">
-<link rel="manifest" href="/manifest.webmanifest">
-<style>
-:root{--bg:#f8fafc;--card:#fff;--text:#0f172a;--muted:#475569;--line:#e2e8f0;--accent:#1d4ed8;--on-accent:#fff;
---ok:#15803d;--warn:#b45309;--bad:#b91c1c;--bar:#e2e8f0;--focus:#f59e0b;font-size:17px}
-@media (prefers-color-scheme:dark){:root{--bg:#0f172a;--card:#1e293b;--text:#e2e8f0;--muted:#94a3b8;--line:#334155;
---accent:#60a5fa;--on-accent:#0f172a;--ok:#4ade80;--warn:#fbbf24;--bad:#f87171;--bar:#334155;--focus:#fbbf24}}
-*{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;line-height:1.45}
-main{max-width:560px;margin:0 auto;padding:12px 16px 40px}
-header{display:flex;align-items:center;gap:10px;padding:6px 0 12px}
-header svg{width:36px;height:36px;flex:none;border-radius:8px}
-header h1{font-size:1.15rem;margin:0;font-weight:600}
-header .to{color:var(--muted);font-weight:500}
-.tabs{display:flex;gap:6px;background:var(--line);padding:4px;border-radius:12px;margin-bottom:14px}
-.tabs button{flex:1;min-height:44px;border:0;border-radius:9px;background:transparent;color:var(--text);font:inherit;font-weight:600;cursor:pointer}
-.tabs button[aria-selected=true]{background:var(--card);box-shadow:0 1px 2px rgba(0,0,0,.15)}
-.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px;margin-bottom:12px}
-.btn{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;min-height:52px;padding:10px 16px;border-radius:12px;
-font:inherit;font-weight:600;font-size:1.05rem;cursor:pointer;text-decoration:none;border:2px solid var(--accent)}
-.btn.primary{background:var(--accent);color:var(--on-accent)}
-.btn.secondary{background:transparent;color:var(--accent)}
-.btn+.btn{margin-top:10px}
-.small{font-size:.9rem;color:var(--muted)}
-.linkbtn{background:none;border:0;color:var(--accent);font:inherit;font-weight:600;padding:10px 0;min-height:44px;cursor:pointer;text-decoration:underline}
-a{color:var(--accent)}
-:focus-visible{outline:4px solid var(--focus);outline-offset:2px}
-.banner{border-radius:12px;padding:12px 14px;margin-bottom:12px;font-weight:500}
-.banner.err{background:color-mix(in srgb,var(--bad) 14%,var(--card));border:1px solid var(--bad)}
-.banner.info{background:color-mix(in srgb,var(--accent) 12%,var(--card));border:1px solid var(--accent)}
-.banner button{margin-top:8px}
-.bar{height:12px;background:var(--bar);border-radius:6px;overflow:hidden}
-.bar>i{display:block;height:100%;width:0;background:var(--accent);transition:width .3s}
-@media (prefers-reduced-motion:reduce){.bar>i{transition:none}}
-.big{font-size:1.25rem;font-weight:700;margin:0 0 8px}
-.stats{margin:8px 0 0;color:var(--muted)}
-.awake{display:flex;align-items:center;gap:10px;margin-top:12px;color:var(--warn);font-weight:600}
-.awake video{width:24px;height:24px;border-radius:4px;background:#000;flex:none}
-ul.items{list-style:none;margin:0;padding:0}
-ul.items li{display:flex;align-items:center;gap:10px;padding:9px 0;border-top:1px solid var(--line);min-height:44px}
-ul.items li:first-child{border-top:0}
-#p-list{position:relative;max-height:45vh;overflow-y:auto}
-ul.items li.prob{flex-wrap:wrap;row-gap:2px}
-ul.items li.prob .fsize{flex:0 0 100%;overflow-wrap:anywhere;color:var(--bad)}
-.st{flex:none;width:7.4em;white-space:nowrap;font-weight:600;font-size:.92rem}
-.st.ok{color:var(--ok)}.st.warn{color:var(--warn)}.st.bad{color:var(--bad)}.st.muted{color:var(--muted)}
-.fname{flex:1;min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
-.fsize{flex:none;color:var(--muted);font-size:.9rem}
-.mini{display:inline-block;width:56px;height:6px;background:var(--bar);border-radius:3px;vertical-align:middle;margin-right:6px;overflow:hidden}
-.mini>i{display:block;height:100%;background:var(--accent)}
-.done-head{text-align:center}
-.done-head .tick{font-size:2.6rem;color:var(--ok);line-height:1}
-.outrow{display:flex;align-items:center;gap:12px;padding:12px 0;border-top:1px solid var(--line);text-decoration:none;color:var(--text);min-height:56px}
-.outrow:first-child{border-top:0}
-.outrow .meta{flex:1;min-width:0}
-.outrow .nm{display:block;font-weight:600;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
-.outrow .sub{display:block}
-.outrow .dl{flex:none;font-weight:700;color:var(--accent)}
-.empty{color:var(--muted);text-align:center;padding:18px 6px}
-.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
-details summary{cursor:pointer;min-height:44px;display:flex;align-items:center;font-weight:600}
-/* TV (10-foot) */
-body.tv{font-size:24px}
-body.tv main{max-width:900px;padding-top:28px}
-body.tv .tvrow{display:flex;align-items:center;gap:20px;padding:18px 0;border-top:1px solid var(--line)}
-body.tv .tvrow:first-child{border-top:0}
-body.tv .tvrow .meta{flex:1;min-width:0}
-body.tv .tvrow .btn{width:auto;min-width:7em;margin:0}
-body.tv .tvrow .btns{display:flex;gap:14px}
-body.tv :focus-visible,body.tv a:focus,body.tv button:focus{outline:6px solid var(--focus);outline-offset:3px}
-body.tv .btn:focus{background:var(--focus);color:#0f172a;border-color:var(--focus)}
-[hidden]{display:none!important}
-</style>
-</head>
-<body>
-<main>
-<header>
-<svg viewBox="0 0 100 100" aria-hidden="true"><rect width="100" height="100" rx="22" fill="#1d4ed8"/><rect x="60" y="12" width="8" height="11" rx="1.5" fill="#fbbf24"/><rect x="28" y="22" width="46" height="30" rx="3" fill="#fff"/><rect x="37" y="28" width="7" height="24" fill="#1d4ed8"/><rect x="37" y="28" width="29" height="5" fill="#1d4ed8"/><rect x="37" y="39" width="21" height="5" fill="#1d4ed8"/><path d="M18 52 L82 52 L72 68 L28 68 Z" fill="#fff"/><path d="M14 80 q9 -6 18 0 t18 0 t18 0 t18 0" fill="none" stroke="#93c5fd" stroke-width="5" stroke-linecap="round"/></svg>
-<h1>Ferry <span class="to">&rarr; <span id="pcname">{{PC_NAME}}</span></span></h1>
-</header>
+# =============================================================================================
+# Favicon (the only static asset left)
+# =============================================================================================
 
-<div id="banner" class="banner err" role="alert" hidden>
-  <div id="banner-text">Can't reach the PC. Is Ferry still running, and is the phone on the same Wi-Fi?</div>
-  <button id="banner-retry" class="linkbtn" type="button">Retry</button>
-</div>
-<div id="note" class="banner info" role="status" hidden></div>
-<p class="sr-only" id="live" aria-live="polite"></p>
-
-<div id="tabs" class="tabs" role="tablist" aria-label="Direction">
-  <button id="tab-send" role="tab" aria-selected="true" aria-controls="pane-send" type="button">Send to PC</button>
-  <button id="tab-from" role="tab" aria-selected="false" aria-controls="pane-from" type="button">From PC <span id="badge"></span></button>
-</div>
-
-<section id="pane-send" role="tabpanel" aria-labelledby="tab-send">
-  <div id="send-ready" class="card">
-    <button id="pick-media-btn" class="btn primary" type="button">Photos &amp; videos</button>
-    <button id="pick-any-btn" class="btn secondary" type="button">Any file</button>
-    <p class="small" style="margin:14px 0 0">Uploads start as soon as you pick. Saves to <b id="inbox-label">Downloads/Phone</b> on the PC.</p>
-    <p id="gps-hint" class="small" hidden>Need location kept? Use <b>Any file</b> &rarr; DCIM/Camera.</p>
-    <p class="small" style="border-top:1px solid var(--line);margin:14px 0 0;padding-top:12px">Tip: in Chrome tap &#8942; &rarr; <b>Add to Home screen</b> for one-tap access.</p>
-  </div>
-
-  <div id="send-progress" class="card" hidden>
-    <p id="p-title" class="big">Sending</p>
-    <div class="bar" id="p-bar" role="progressbar" aria-label="Upload progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><i id="p-fill"></i></div>
-    <p id="p-stats" class="stats"></p>
-    <p id="p-warn" class="small" hidden></p>
-    <div class="awake" id="awake"><video id="keepawake" muted loop playsinline preload="auto" aria-hidden="true" src="{{KEEPAWAKE_SRC}}"></video><span>Keep this screen on until it finishes.</span></div>
-    <ul class="items" id="p-list" style="margin-top:12px"></ul>
-    <button id="cancel-btn" class="btn secondary" type="button" style="margin-top:12px">Cancel</button>
-  </div>
-
-  <div id="send-done" class="card" hidden>
-    <div class="done-head"><div class="tick" id="d-icon" aria-hidden="true">&#10003;</div><p class="big" id="d-title">All done</p>
-    <p id="d-line1" style="margin:0"></p><p id="d-line2" style="margin:0"></p><p id="d-line3" class="small" style="margin:4px 0 14px"></p>
-    <p id="d-help" style="margin:0 0 14px" hidden></p></div>
-    <button id="more-btn" class="btn primary" type="button">Send more</button>
-    <button id="retry-btn" class="btn secondary" type="button" hidden>Retry failed</button>
-    <details style="margin-top:10px"><summary>Show details</summary><ul class="items" id="d-list"></ul></details>
-  </div>
-  <input id="pick-media" type="file" multiple accept="image/*,video/*" hidden>
-  <input id="pick-any" type="file" multiple hidden>
-</section>
-
-<section id="pane-from" role="tabpanel" aria-labelledby="tab-from" hidden>
-  <div class="card">
-    <p id="o-summary" class="big" style="font-size:1.05rem"></p>
-    <button id="dl-all" class="btn primary" type="button" hidden>&#11015; Download all</button>
-    <p id="dl-all-hint" class="small" hidden>If Chrome asks to allow multiple downloads, tap <b>Allow</b>.</p>
-    <div id="o-list" style="margin-top:6px"></div>
-    <p id="o-empty" class="empty" hidden>Nothing to send yet. On the PC, drop files into <b>Desktop &rarr; Ferry outbox</b> and they'll appear here.</p>
-    <p id="o-folders" class="small" hidden>Folders aren't sent. On the PC, put files in directly or zip the folder.</p>
-    <p id="o-zip" class="small" hidden><a id="o-zip-link" href="/api/v1/outbox.zip" download>Get all as one .zip</a></p>
-    <p class="small" id="o-where">Files go to Downloads; photos and videos also show in Gallery.</p>
-  </div>
-</section>
-
-<section id="pane-tv" hidden>
-  <div class="card">
-    <p id="tv-summary" class="big"></p>
-    <div id="tv-list"></div>
-    <p id="tv-empty" class="empty" hidden>Nothing to send yet. On the PC, put files in <b>Desktop &rarr; Ferry outbox</b>. This page updates by itself.</p>
-  </div>
-  <p class="small">Tip: bookmark this page so next time it's one click. &middot; <a href="/?mode=phone">Phone mode</a></p>
-</section>
-</main>
-
-<script>
-/*QUEUE-START*/
-var FerryCore = (function () {
-  'use strict';
-  function fmtBytes(n) {
-    n = Number(n) || 0;
-    if (n < 1000) return n + ' B';
-    var u = ['KB', 'MB', 'GB', 'TB'], i = -1;
-    do { n /= 1000; i++; } while (n >= 1000 && i < u.length - 1);
-    return (n >= 100 ? n.toFixed(0) : n.toFixed(1)) + ' ' + u[i];
-  }
-  function fmtSpeed(bps) { return bps > 0 ? (bps / 1e6).toFixed(1) + ' MB/s' : ''; }
-  function fmtEta(sec) {
-    if (!isFinite(sec) || sec < 0) return '';
-    sec = Math.round(sec);
-    if (sec < 5) return 'a few seconds left';
-    if (sec < 60) return 'about ' + sec + ' s left';
-    var m = Math.round(sec / 60);
-    if (m < 60) return 'about ' + m + ' min left';
-    return 'about ' + Math.floor(m / 60) + ' h ' + (m % 60) + ' min left';
-  }
-  function midTrunc(s, max) {
-    s = String(s);
-    if (s.length <= max) return s;
-    var keep = max - 1, head = Math.ceil(keep / 2);
-    return s.slice(0, head) + '…' + s.slice(s.length - (keep - head));
-  }
-  function relTime(ms, now) {
-    var d = (now - ms) / 1000;
-    if (d < 60) return 'just now';
-    if (d < 3600) return Math.round(d / 60) + ' min ago';
-    var a = new Date(ms), b = new Date(now);
-    var hh = ('0' + a.getHours()).slice(-2) + ':' + ('0' + a.getMinutes()).slice(-2);
-    if (a.toDateString() === b.toDateString()) return 'today ' + hh;
-    return a.toLocaleDateString() + ' ' + hh;
-  }
-
-  var DONE = { saved: 1, renamed: 1, skipped: 1, failed: 1, notsent: 1 };
-
-  function createQueue(opts) {
-    var api = opts.api, now = opts.now, isHidden = opts.isHidden, sleep = opts.sleep;
-    var onChange = opts.onChange || function () {};
-    var items = [], running = false, cancelled = false, stopped = null, current = null;
-    var sendStart = null, sendingMs = 0;
-
-    function emit() { onChange(); }
-    function add(files) {
-      for (var i = 0; i < files.length; i++) {
-        var f = files[i];
-        items.push({ file: f, name: f.name, size: f.size, status: 'waiting', sent: 0, savedAs: null,
-          reason: null, retried: false, hiddenSeen: false });
-      }
-      emit();
-    }
-    function nextWaiting() {
-      for (var i = 0; i < items.length; i++) if (items[i].status === 'waiting') return items[i];
-      return null;
-    }
-    function stopRest(why, reason) {
-      stopped = why;
-      items.forEach(function (x) {
-        if (x.status === 'waiting' || x.status === 'paused') { x.status = 'notsent'; x.reason = reason; }
-      });
-    }
-    function stopDiskFull(it) {
-      if (it) { it.status = 'failed'; it.reason = 'PC disk is full'; }
-      stopRest('disk_full', 'Not sent - PC disk full');
-    }
-    async function netFail(it) {
-      var wasHidden = it.hiddenSeen;
-      it.sent = 0; it.hiddenSeen = false;
-      // Screen is off now: park it; resumeVisible() re-queues it when the screen comes back.
-      if (isHidden()) { it.status = 'paused'; return; }
-      // Screen went off during this attempt but is on again: nobody would resume a parked item, so try again now (free).
-      if (wasHidden) { it.status = 'waiting'; emit(); await sleep(2000); return; }
-      if (!it.retried) { it.retried = true; it.status = 'waiting'; emit(); await sleep(2000); return; }
-      it.status = 'failed'; it.reason = 'Connection lost';
-      // Is it this file, or is the PC gone? If the PC is gone, stop instead of failing every remaining file slowly.
-      if (api.ping) {
-        emit();
-        var p = await api.ping();
-        if (p.kind === 'network' && !cancelled && !isHidden()) stopRest('unreachable', 'Not sent - PC not reachable');
-      }
-    }
-    async function process(it) {
-      it.status = 'checking'; it.hiddenSeen = isHidden(); emit();
-      var c = await api.check(it.file);
-      if (cancelled) return;
-      if (c.kind === 'network') return netFail(it);
-      if (c.kind === 'http') { it.status = 'failed'; it.reason = 'PC error (' + c.status + ')'; return; }
-      var j = c.json || {};
-      if (j.ok === false && j.reason === 'disk_full') { stopDiskFull(it); return; }
-      if (j.duplicate) { it.status = 'skipped'; it.savedAs = j.duplicate; it.sent = it.size; return; }
-      it.status = 'sending'; it.sent = 0; emit();
-      sendStart = now();
-      var h = api.upload(it.file, function (sent) { it.sent = sent; emit(); });
-      current = { item: it, abort: h.abort };
-      var r = await h.promise;
-      current = null;
-      sendingMs += now() - sendStart; sendStart = null;
-      if (cancelled) { it.status = 'notsent'; it.reason = 'Cancelled'; it.sent = 0; return; }
-      if (r.kind === 'ok') {
-        var res = (r.json && r.json.result) || 'saved';
-        it.status = (res === 'renamed' || res === 'skipped') ? res : 'saved';
-        it.savedAs = (r.json && r.json.saved_as) || it.name; it.sent = it.size; return;
-      }
-      if (r.kind === 'http') {
-        if (r.status === 507 || (r.json && r.json.reason === 'disk_full')) { stopDiskFull(it); return; }
-        it.status = 'failed'; it.sent = 0;
-        it.reason = (r.json && r.json.message) || ('PC error (' + r.status + ')'); return;
-      }
-      return netFail(it);
-    }
-    async function run() {
-      if (running) return;
-      running = true; cancelled = false; stopped = null; emit();
-      try {
-        while (!cancelled && !stopped) {
-          var it = nextWaiting();
-          if (!it) break;
-          await process(it);
-          emit();
-        }
-      } finally { running = false; emit(); }
-    }
-    function cancel() {
-      cancelled = true;
-      if (current) { try { current.abort(); } catch (e) {} }
-      items.forEach(function (x) {
-        if (!DONE[x.status]) { x.status = 'notsent'; x.reason = 'Cancelled'; x.sent = 0; }
-      });
-      emit();
-    }
-    function noteHidden() { if (current) current.item.hiddenSeen = true; }
-    function resumeVisible() {
-      var n = 0;
-      items.forEach(function (x) { if (x.status === 'paused') { x.status = 'waiting'; n++; } });
-      if (n && !running) run();
-      return n;
-    }
-    function retryFailed() {
-      var n = 0;
-      items.forEach(function (x) {
-        if (x.status === 'failed' || x.status === 'notsent' || x.status === 'paused') {
-          x.status = 'waiting'; x.retried = false; x.reason = null; x.sent = 0; n++;
-        }
-      });
-      stopped = null;
-      if (n) run();
-      return n;
-    }
-    function reset() { if (!running) { items = []; stopped = null; cancelled = false; sendingMs = 0; emit(); } }
-    function stats() {
-      var s = { total: items.length, saved: 0, renamed: 0, skipped: 0, failed: 0, notsent: 0, paused: 0,
-        waiting: 0, active: 0, bytesTotal: 0, bytesDone: 0, index: 0 };
-      items.forEach(function (x, i) {
-        s.bytesTotal += x.size;
-        if (DONE[x.status]) { s[x.status]++; if (x.status !== 'failed' && x.status !== 'notsent') s.bytesDone += x.size; }
-        else if (x.status === 'paused') s.paused++;
-        else if (x.status === 'waiting') s.waiting++;
-        else { s.active++; s.bytesDone += x.sent; s.index = i + 1; }
-      });
-      if (!s.index) s.index = Math.min(s.total, s.saved + s.renamed + s.skipped + s.failed + s.notsent + 1);
-      s.finished = !running && s.waiting === 0 && s.paused === 0 && s.active === 0 && s.total > 0;
-      s.stopped = stopped; s.cancelled = cancelled; s.running = running;
-      return s;
-    }
-    function elapsedSending() { return sendingMs + (sendStart ? now() - sendStart : 0); }
-    return { add: add, run: run, cancel: cancel, noteHidden: noteHidden, resumeVisible: resumeVisible,
-      retryFailed: retryFailed, reset: reset, stats: stats, items: function () { return items; },
-      isRunning: function () { return running; }, elapsedSending: elapsedSending };
-  }
-
-  function createSpeed(now) {
-    var samples = [];
-    return {
-      add: function (bytes) { var t = now(); samples.push([t, bytes]); while (samples.length > 2 && t - samples[0][0] > 3000) samples.shift(); },
-      bps: function () {
-        if (samples.length < 2) return 0;
-        var a = samples[0], b = samples[samples.length - 1], dt = (b[0] - a[0]) / 1000;
-        return dt > 0.2 ? Math.max(0, (b[1] - a[1]) / dt) : 0;
-      },
-      reset: function () { samples = []; }
-    };
-  }
-  return { fmtBytes: fmtBytes, fmtSpeed: fmtSpeed, fmtEta: fmtEta, midTrunc: midTrunc, relTime: relTime,
-    createQueue: createQueue, createSpeed: createSpeed };
-})();
-if (typeof module !== 'undefined') module.exports = FerryCore;
-/*QUEUE-END*/
-
-(function () {
-  'use strict';
-  var C = FerryCore;
-  var $ = function (id) { return document.getElementById(id); };
-  var params = new URLSearchParams(location.search);
-  var isTV = /AFT|Silk/.test(navigator.userAgent) && params.get('mode') !== 'phone';
-  var SHOW_GPS_HINT = false;
-  var info = null, lastOutbox = null, activeTab = 'send';
-
-  // ---------------- API ----------------
-  function fetchJSON(url, ms) {
-    var ctl = new AbortController();
-    var t = setTimeout(function () { ctl.abort(); }, ms || 15000);
-    return fetch(url, { cache: 'no-store', signal: ctl.signal }).then(function (r) {
-      clearTimeout(t);
-      return r.json().then(function (j) { return r.ok ? { kind: 'ok', json: j } : { kind: 'http', status: r.status, json: j }; },
-        function () { return { kind: 'http', status: r.status, json: null }; });
-    }, function () { clearTimeout(t); return { kind: 'network' }; });
-  }
-  function qs(f) {
-    return 'name=' + encodeURIComponent(f.name) + '&size=' + f.size + '&mtime=' + (f.lastModified || '');
-  }
-  var api = {
-    info: function () { return fetchJSON('/api/v1/info', 8000); },
-    outbox: function () { return fetchJSON('/api/v1/outbox', 10000); },
-    ping: function () { return fetchJSON('/api/v1/info', 8000).then(reach); },
-    check: function (f) { return fetchJSON('/api/v1/check?' + qs(f), 20000).then(reach); },
-    upload: function (f, onProgress) {
-      var xhr = new XMLHttpRequest(), done, stallT = null, waitT = null, settled = false;
-      var promise = new Promise(function (res) { done = res; });
-      function finish(v) { if (settled) return; settled = true; clearTimeout(stallT); clearTimeout(waitT); done(reach(v)); }
-      function arm() { clearTimeout(stallT); stallT = setTimeout(function () { xhr.abort(); finish({ kind: 'network' }); }, 60000); }
-      xhr.open('POST', '/api/v1/upload?' + qs(f));
-      xhr.upload.onprogress = function (e) { arm(); onProgress(e.loaded); };
-      xhr.upload.onload = function () {           // body fully sent: PC may now be checking duplicates
-        clearTimeout(stallT);
-        waitT = setTimeout(function () { xhr.abort(); finish({ kind: 'network' }); }, 600000);
-      };
-      xhr.onload = function () {
-        var j = null; try { j = JSON.parse(xhr.responseText); } catch (e) {}
-        finish(xhr.status === 200 ? { kind: 'ok', json: j } : { kind: 'http', status: xhr.status, json: j });
-      };
-      xhr.onerror = function () { finish({ kind: 'network' }); };
-      xhr.onabort = function () { finish({ kind: 'network' }); };
-      arm();
-      xhr.send(f);
-      return { promise: promise, abort: function () { xhr.abort(); } };
-    }
-  };
-  function reach(r) {
-    if (r.kind === 'network' && document.visibilityState === 'visible') showBanner(true);
-    else if (r.kind !== 'network') showBanner(false);
-    return r;
-  }
-  function showBanner(on) { $('banner').hidden = !on; }
-  var noteTimer = null;
-  function note(text, ms) {
-    $('note').textContent = text; $('note').hidden = false;
-    clearTimeout(noteTimer); noteTimer = setTimeout(function () { $('note').hidden = true; }, ms || 5000);
-  }
-
-  // ---------------- Send to PC ----------------
-  var speed = C.createSpeed(function () { return Date.now(); });
-  var queue = C.createQueue({
-    api: api, now: function () { return Date.now(); },
-    isHidden: function () { return document.visibilityState === 'hidden'; },
-    sleep: function (ms) { return new Promise(function (r) { setTimeout(r, ms); }); },
-    onChange: schedule
-  });
-  var rows = new Map(), rafPending = false, lastLive = 0, lastCur = null;
-
-  function schedule() { if (!rafPending) { rafPending = true; requestAnimationFrame(render); } }
-
-  var LABEL = {
-    waiting: ['Waiting', 'muted', '·'], checking: ['Checking', 'muted', '↻'], sending: ['Sending', 'muted', '↻'],
-    saved: ['Saved', 'ok', '✓'], renamed: ['Saved as', 'ok', '✓'], skipped: ['Already on PC', 'warn', '='],
-    failed: ['Failed', 'bad', '✗'], notsent: ['Not sent', 'bad', '✗'], paused: ['Paused', 'warn', '⏸']
-  };
-  function rowFor(it, list, chars) {
-    var r = rows.get(it);
-    if (!r) {
-      var li = document.createElement('li');
-      li.innerHTML = '<span class="st"></span><span class="fname"></span><span class="fsize"></span>';
-      r = { li: li, st: li.children[0], nm: li.children[1], sz: li.children[2], key: '' };
-      rows.set(it, r);
-    }
-    if (r.li.parentNode !== list) list.appendChild(r.li);
-    var L = LABEL[it.status] || ['', 'muted', ''];
-    var pct = it.size ? Math.floor(100 * it.sent / it.size) : 0;
-    var key = it.status + pct + (it.savedAs || '') + (it.reason || '') + '|' + chars;
-    if (key !== r.key) {
-      r.key = key;
-      r.st.className = 'st ' + L[1];
-      if (it.status === 'sending') r.st.innerHTML = '<span class="mini"><i style="width:' + pct + '%"></i></span>' + pct + '%';
-      else r.st.textContent = L[2] + ' ' + L[0];
-      var nm = it.status === 'renamed' ? '"' + it.savedAs + '"' : it.name;
-      r.nm.textContent = C.midTrunc(nm, chars);
-      r.nm.title = nm;
-      var prob = (it.status === 'failed' || it.status === 'notsent') && it.reason;
-      r.li.className = prob ? 'prob' : '';             // the reason gets its own line under the name
-      r.sz.textContent = prob ? it.reason : C.fmtBytes(it.size);
-    }
-    return r;
-  }
-  function nameChars(el) {
-    var w = (el && el.clientWidth) || 320;
-    return Math.max(12, Math.floor((w - 205) / 9.5));   // minus status + size columns
-  }
-  function render() {
-    rafPending = false;
-    var s = queue.stats(), items = queue.items();
-    if (!s.total) return;
-    speed.add(s.bytesDone);
-    if (s.finished) return renderDone(s, items);
-    $('send-ready').hidden = true; $('send-done').hidden = true; $('send-progress').hidden = false;
-    var pct = s.bytesTotal ? Math.floor(100 * s.bytesDone / s.bytesTotal) : 100;
-    $('p-fill').style.width = pct + '%';
-    $('p-bar').setAttribute('aria-valuenow', String(pct));
-    var title = s.stopped === 'disk_full' ? 'PC disk is full' :
-      s.paused && !s.active && !s.waiting ? 'Paused — continues when the screen is on' :
-      'Sending ' + Math.max(1, s.index) + ' of ' + s.total;
-    $('p-title').textContent = title;
-    var bps = speed.bps();
-    var eta = bps > 0 ? C.fmtEta((s.bytesTotal - s.bytesDone) / bps) : '';
-    $('p-stats').textContent = C.fmtBytes(s.bytesDone) + ' of ' + C.fmtBytes(s.bytesTotal) +
-      (bps ? ' · ' + C.fmtSpeed(bps) : '') + (eta ? ' · ' + eta : '');
-    var list = $('p-list');
-    var chars = nameChars(list);
-    items.forEach(function (it) { rowFor(it, list, chars); });
-    var cur = null;
-    for (var i = 0; i < items.length; i++) if (items[i].status === 'sending' || items[i].status === 'checking') { cur = rows.get(items[i]); break; }
-    // Follow the current file inside the list box only, and only when it changes - never scroll the page itself.
-    if (cur && cur !== lastCur) { lastCur = cur; list.scrollTop = Math.max(0, cur.li.offsetTop - list.clientHeight / 2); }
-    var t = Date.now();
-    if (t - lastLive > 5000) { lastLive = t; $('live').textContent = title + ', ' + pct + ' percent'; }
-  }
-  var doneShown = false;
-  function renderDone(s, items) {
-    if (doneShown) return;
-    doneShown = true;
-    stopAwake();
-    $('send-progress').hidden = true; $('send-ready').hidden = true; $('send-done').hidden = false;
-    var bad = s.failed + s.notsent;
-    $('d-icon').textContent = bad ? '!' : '✓';
-    $('d-icon').style.color = bad ? 'var(--bad)' : 'var(--ok)';
-    $('d-title').textContent = s.cancelled ? 'Stopped' : s.stopped === 'disk_full' ? 'PC disk is full' :
-      s.stopped === 'unreachable' ? "Can't reach the PC" : bad ? 'Finished with problems' : 'All done';
-    $('d-line1').textContent = (s.saved + s.renamed) + ' saved · ' + s.skipped + ' already on PC';
-    $('d-line2').textContent = s.renamed + ' renamed · ' + bad + ' not sent';
-    var secs = queue.elapsedSending() / 1000, sent = 0;
-    items.forEach(function (x) { if (x.status === 'saved' || x.status === 'renamed') sent += x.size; });
-    $('d-line3').textContent = sent ? C.fmtBytes(sent) + ' in ' + Math.max(1, Math.round(secs)) + ' s' +
-      (secs > 0.5 ? ' (' + C.fmtSpeed(sent / secs) + ')' : '') : '';
-    $('retry-btn').hidden = !bad;
-    $('retry-btn').textContent = 'Retry ' + bad + ' not sent';
-    var list = $('d-list');
-    var chars = nameChars($('send-done'));
-    items.forEach(function (it) { rowFor(it, list, chars); });
-    $('live').textContent = $('d-title').textContent + '. ' + $('d-line1').textContent;
-    var help = s.cancelled ? '' : s.stopped === 'disk_full' ? 'Free up space on the PC, then tap "' + $('retry-btn').textContent + '".' :
-      s.stopped === 'unreachable' ? 'Check that Ferry is still running on the PC and the phone is on the same Wi-Fi, then tap "' + $('retry-btn').textContent + '".' : '';
-    $('d-help').textContent = help; $('d-help').hidden = !help;
-    if (navigator.vibrate) { try { navigator.vibrate(200); } catch (e) {} }
-  }
-  function startAwake() {
-    var v = $('keepawake');
-    if (!v.getAttribute('src')) { v.hidden = true; return; }
-    try { var p = v.play(); if (p && p.catch) p.catch(function () {}); } catch (e) {}
-  }
-  function stopAwake() { try { $('keepawake').pause(); } catch (e) {} }
-
-  function picked(input) {
-    var files = Array.prototype.slice.call(input.files || []);
-    input.value = '';
-    if (!files.length) return;
-    startAwake();
-    if (!queue.isRunning() && queue.stats().finished) { queue.reset(); rows.clear(); $('p-list').innerHTML = ''; $('d-list').innerHTML = ''; }
-    speed.reset(); doneShown = false;
-    queue.add(files);
-    var total = files.reduce(function (a, f) { return a + f.size; }, 0);
-    api.info().then(function (r) {
-      if (r.kind === 'ok' && r.json.free_bytes != null && r.json.free_bytes < total) {
-        $('p-warn').textContent = 'The PC may not have enough free space (' + C.fmtBytes(r.json.free_bytes) + ' free).';
-        $('p-warn').hidden = false;
-      } else { $('p-warn').hidden = true; }
-    });
-    queue.run();
-  }
-  $('pick-media-btn').onclick = function () { startAwake(); $('pick-media').click(); };
-  $('pick-any-btn').onclick = function () { startAwake(); $('pick-any').click(); };
-  // Picker closed without choosing anything: nothing will start, so let the screen sleep again.
-  ['pick-media', 'pick-any'].forEach(function (id) {
-    $(id).addEventListener('cancel', function () { if (!queue.isRunning()) stopAwake(); });
-  });
-  $('pick-media').onchange = function () { picked(this); };
-  $('pick-any').onchange = function () { picked(this); };
-  $('cancel-btn').onclick = function () {
-    if (queue.elapsedSending() > 10000 && !confirm('Stop sending? Files already saved stay on the PC.')) return;
-    queue.cancel();
-  };
-  $('more-btn').onclick = function () {
-    queue.reset(); rows.clear(); $('p-list').innerHTML = ''; $('d-list').innerHTML = ''; doneShown = false;
-    $('send-done').hidden = true; $('send-ready').hidden = false; showBanner(false);
-  };
-  $('retry-btn').onclick = function () { showBanner(false); startAwake(); speed.reset(); doneShown = false; queue.retryFailed(); };
-  window.addEventListener('beforeunload', function (e) {
-    if (queue.isRunning()) { e.preventDefault(); e.returnValue = 'Uploads in progress'; return 'Uploads in progress'; }
-  });
-  document.addEventListener('visibilitychange', function () {
-    if (document.visibilityState === 'hidden') { queue.noteHidden(); return; }
-    if (queue.resumeVisible()) note('Paused while the screen was off — continuing');
-    if (activeTab === 'from' || isTV) refreshOutbox();
-  });
-
-  // ---------------- From PC ----------------
-  function setTab(t) {
-    activeTab = t;
-    $('tab-send').setAttribute('aria-selected', String(t === 'send'));
-    $('tab-from').setAttribute('aria-selected', String(t === 'from'));
-    $('pane-send').hidden = t !== 'send'; $('pane-from').hidden = t !== 'from';
-    if (t === 'from') refreshOutbox();
-  }
-  $('tab-send').onclick = function () { setTab('send'); };
-  $('tab-from').onclick = function () { setTab('from'); };
-  $('tabs').addEventListener('keydown', function (e) {
-    if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
-      var t = activeTab === 'send' ? 'from' : 'send'; setTab(t); $(t === 'send' ? 'tab-send' : 'tab-from').focus(); e.preventDefault();
-    }
-  });
-
-  function refreshOutbox() {
-    return api.outbox().then(function (r) {
-      if (r.kind !== 'ok') { if (r.kind === 'network' && document.visibilityState === 'visible') showBanner(true); return; }
-      showBanner(false);
-      lastOutbox = r.json;
-      var n = r.json.files.length;
-      $('badge').textContent = n ? '(' + n + ')' : '';
-      if (isTV) renderTV(r.json); else renderOutbox(r.json);
-    });
-  }
-  function dlLink(f) { return f.url; }
-  function renderOutbox(o) {
-    var files = o.files, list = $('o-list'), now = Date.now();
-    $('o-summary').textContent = files.length ? files.length + ' file' + (files.length > 1 ? 's' : '') + ' · ' + C.fmtBytes(o.total_size) : 'From PC';
-    $('o-empty').hidden = files.length > 0;
-    $('dl-all').hidden = files.length < 2; $('dl-all-hint').hidden = files.length < 2; $('o-zip').hidden = files.length < 2;
-    $('o-folders').hidden = !o.folders_ignored;
-    var keep = {};
-    files.forEach(function (f) { keep[f.id] = 1; });
-    Array.prototype.slice.call(list.children).forEach(function (el) { if (!keep[el.dataset.id]) list.removeChild(el); });
-    files.forEach(function (f, i) {
-      var a = list.querySelector('[data-id="' + f.id + '"]');
-      if (!a) {
-        a = document.createElement('a'); a.className = 'outrow'; a.dataset.id = f.id; a.href = dlLink(f);
-        a.setAttribute('download', f.name);
-        a.innerHTML = '<span class="meta"><span class="nm"></span><span class="small sub"></span></span><span class="dl" aria-hidden="true">⬇</span>';
-        a.querySelector('.nm').textContent = C.midTrunc(f.name, window.innerWidth < 480 ? 32 : 60);
-        a.querySelector('.nm').title = f.name;
-        a.addEventListener('click', function () {
-          var d = a.querySelector('.dl'); d.textContent = 'Started ↓'; a.style.pointerEvents = 'none';
-          setTimeout(function () { d.textContent = '⬇'; a.style.pointerEvents = ''; }, 3000);
-        });
-      }
-      a.querySelector('.sub').textContent = C.fmtBytes(f.size) + ' · ' + C.relTime(f.mtime, now);
-      a.setAttribute('aria-label', 'Download ' + f.name + ', ' + C.fmtBytes(f.size));
-      if (list.children[i] !== a) list.insertBefore(a, list.children[i] || null);
-    });
-  }
-  $('dl-all').onclick = function () {
-    if (!lastOutbox) return;
-    var files = lastOutbox.files.slice().reverse(), i = 0;
-    $('dl-all').disabled = true;
-    (function next() {
-      if (i >= files.length) { $('dl-all').disabled = false; note('Started ' + files.length + ' downloads'); return; }
-      var a = document.createElement('a'); a.href = dlLink(files[i]); a.setAttribute('download', files[i].name);
-      document.body.appendChild(a); a.click(); document.body.removeChild(a); i++;
-      setTimeout(next, 1000);
-    })();
-  };
-
-  function renderTV(o) {
-    var files = o.files, list = $('tv-list');
-    $('tv-summary').textContent = files.length ? files.length + ' file' + (files.length > 1 ? 's' : '') + ' from ' + $('pcname').textContent : 'From ' + $('pcname').textContent;
-    $('tv-empty').hidden = files.length > 0;
-    var sig = files.map(function (f) { return f.id; }).join(',');
-    if (list.dataset.sig === sig) return;
-    var hadFocus = list.contains(document.activeElement);
-    list.dataset.sig = sig; list.innerHTML = '';
-    files.forEach(function (f) {
-      var row = document.createElement('div'); row.className = 'tvrow';
-      row.innerHTML = '<div class="meta"><div class="nm" style="font-weight:600"></div><div class="small"></div></div><div class="btns"></div>';
-      row.querySelector('.nm').textContent = C.midTrunc(f.name, 40);
-      row.querySelector('.small').textContent = C.fmtBytes(f.size);
-      var btns = row.querySelector('.btns');
-      if (f.kind === 'video_playable') {
-        var p = document.createElement('a'); p.className = 'btn primary'; p.href = f.url + '?inline=1'; p.textContent = '▶ Play';
-        btns.appendChild(p);
-      }
-      var s = document.createElement('a'); s.className = 'btn ' + (f.kind === 'video_playable' ? 'secondary' : 'primary');
-      s.href = f.url; s.setAttribute('download', f.name); s.textContent = f.kind === 'apk' ? 'Install / Save' : 'Save';
-      btns.appendChild(s);
-      list.appendChild(row);
-    });
-    var first = list.querySelector('a');
-    if (first && (hadFocus || !document.activeElement || document.activeElement === document.body)) first.focus();
-  }
-
-  // ---------------- Boot ----------------
-  $('banner-retry').onclick = function () { boot(); };
-  function boot() {
-    return api.info().then(function (r) {
-      if (r.kind !== 'ok') { showBanner(true); return; }
-      showBanner(false);
-      info = r.json;
-      $('pcname').textContent = info.name;
-      $('inbox-label').textContent = info.inbox_label;
-      refreshOutbox();
-    });
-  }
-  if (isTV) {
-    document.body.classList.add('tv');
-    $('tabs').hidden = true; $('pane-send').hidden = true; $('pane-tv').hidden = false;
-  }
-  $('gps-hint').hidden = !SHOW_GPS_HINT;
-  boot();
-  setInterval(function () {
-    if (document.visibilityState !== 'visible') return;
-    if (isTV || activeTab === 'from') refreshOutbox();
-  }, 5000);
-  setInterval(function () {
-    if (document.visibilityState === 'visible' && !isTV && activeTab === 'send' && !queue.isRunning()) refreshOutbox();
-  }, 15000);
-})();
-</script>
-</body>
-</html>
-'''
-DIAG_HTML = r'''<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Ferry - device check</title>
-<link rel="icon" href="/favicon.svg" type="image/svg+xml">
-<style>
-body{font:17px system-ui,sans-serif;margin:0;background:#f8fafc;color:#0f172a}
-@media (prefers-color-scheme:dark){body{background:#0f172a;color:#e2e8f0}.card{background:#1e293b!important;border-color:#334155!important}a{color:#93c5fd}}
-main{max-width:620px;margin:0 auto;padding:14px 16px 40px}
-h1{font-size:1.3rem}h2{font-size:1.05rem;margin:0 0 8px}
-.card{background:#fff;border:1px solid #e2e8f0;border-radius:14px;padding:14px;margin-bottom:12px}
-button,a.b{display:inline-flex;align-items:center;min-height:46px;padding:8px 14px;margin:4px 6px 4px 0;border-radius:10px;border:2px solid #2563eb;
-background:#1d4ed8;color:#fff;font:inherit;font-weight:600;text-decoration:none;cursor:pointer}
-:focus-visible{outline:4px solid #f59e0b;outline-offset:2px}
-pre{white-space:pre-wrap;word-break:break-word;background:rgba(127,127,127,.12);padding:10px;border-radius:8px;font-size:.9rem;min-height:1.4em}
-video{width:24px;height:24px;background:#000;vertical-align:middle}
-</style>
-</head>
-<body>
-<main>
-<h1>Ferry device check <small style="font-weight:400">v{{VERSION}}</small></h1>
-<p>Run each test and note the result on DEVICE-CHECKLIST.txt. Nothing here is saved on the PC.</p>
-
-<div class="card"><h2>1. This device</h2><pre id="dev"></pre></div>
-
-<div class="card"><h2>2. Photo picker (GPS &amp; dates)</h2>
-<p>Pick <b>one photo taken with location on</b>, first with each button.</p>
-<button id="b-media" type="button">Photos &amp; videos picker</button>
-<button id="b-any" type="button">Any file picker</button>
-<input id="i-media" type="file" accept="image/*,video/*" hidden><input id="i-any" type="file" hidden>
-<pre id="pick"></pre></div>
-
-<div class="card"><h2>3. Keep screen awake</h2>
-<p>Tap Start, then put the phone down and don't touch it for 2 minutes.</p>
-<button id="b-awake" type="button">Start</button> <video id="v" muted loop playsinline src="{{KEEPAWAKE_SRC}}"></video>
-<pre id="awake"></pre></div>
-
-<div class="card"><h2>4. Speed</h2>
-<button id="b-down" type="button">Test download (200 MB)</button>
-<button id="b-up" type="button">Test upload (200 MB)</button>
-<pre id="speed"></pre></div>
-
-<div class="card"><h2>5. Downloads</h2>
-<a class="b" href="/api/v1/diag/test.zip" download>Test .zip</a>
-<a class="b" href="/api/v1/diag/ferry-test.apk" download>Test .apk</a>
-<p>The zip should open in the Files app and contain two text files. The .apk is a placeholder: Chrome may warn, and it will fail to install &mdash; that's expected. Note what Chrome shows.</p></div>
-
-<p><a href="/">&larr; Back to Ferry</a></p>
-</main>
-<script>
-(function () {
-  'use strict';
-  var $ = function (id) { return document.getElementById(id); };
-  $('dev').textContent = 'User agent: ' + navigator.userAgent +
-    '\nMode: ' + (/AFT|Silk/.test(navigator.userAgent) ? 'TV' : 'phone/desktop') +
-    '\nScreen: ' + innerWidth + 'x' + innerHeight + ' @' + devicePixelRatio + 'x' +
-    '\nTouch: ' + (matchMedia('(pointer: coarse)').matches ? 'yes' : 'no') +
-    '\nWake Lock API: ' + ('wakeLock' in navigator ? 'present' : 'absent') +
-    ' (secure context: ' + window.isSecureContext + ')';
-  function inspect(input, label) {
-    var f = input.files[0]; input.value = '';
-    if (!f) return;
-    $('pick').textContent += label + ': sending ' + f.name + ' ...\n';
-    var xhr = new XMLHttpRequest();
-    xhr.open('POST', '/api/v1/diag/inspect?name=' + encodeURIComponent(f.name) + '&mtime=' + (f.lastModified || ''));
-    xhr.onload = function () {
-      try {
-        var j = JSON.parse(xhr.responseText);
-        var age = j.age_seconds == null ? '?' : j.age_seconds < 120 ? j.age_seconds + ' s (looks like "now" - date NOT kept)' : Math.round(j.age_seconds / 86400) + ' days (original date kept)';
-        $('pick').textContent += label + ': ' + j.name + ' | ' + j.size + ' bytes | GPS: ' + j.gps.toUpperCase() + ' | file date age: ' + age + '\n';
-      } catch (e) { $('pick').textContent += label + ': error ' + xhr.status + '\n'; }
-    };
-    xhr.onerror = function () { $('pick').textContent += label + ': network error\n'; };
-    xhr.send(f);
-  }
-  $('b-media').onclick = function () { $('i-media').click(); };
-  $('b-any').onclick = function () { $('i-any').click(); };
-  $('i-media').onchange = function () { inspect(this, 'Photos & videos'); };
-  $('i-any').onchange = function () { inspect(this, 'Any file'); };
-
-  var t0 = 0, hidden = 0, timer = null;
-  $('b-awake').onclick = function () {
-    var v = $('v');
-    if (v.getAttribute('src')) { var p = v.play(); if (p && p.catch) p.catch(function () {}); }
-    t0 = Date.now(); hidden = 0; clearInterval(timer);
-    timer = setInterval(function () {
-      $('awake').textContent = 'Visible for ' + Math.round((Date.now() - t0) / 1000) + ' s' +
-        (hidden ? ' | screen went off ' + hidden + ' time(s) - keep-awake did NOT work' : ' | screen still on') +
-        (v.getAttribute('src') ? '' : ' | (no keep-awake video built in)');
-    }, 1000);
-  };
-  document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'hidden' && t0) hidden++; });
-
-  $('b-down').onclick = function () {
-    $('speed').textContent = 'Downloading...';
-    var t = performance.now();
-    fetch('/api/v1/diag/blob?mb=200', { cache: 'no-store' }).then(function (r) { return r.arrayBuffer(); }).then(function (b) {
-      var s = (performance.now() - t) / 1000;
-      $('speed').textContent = 'Download: ' + (b.byteLength / s / 1e6).toFixed(1) + ' MB/s';
-    }, function () { $('speed').textContent = 'Download failed'; });
-  };
-  $('b-up').onclick = function () {
-    $('speed').textContent = 'Uploading...';
-    var blob = new Blob([new Uint8Array(200 * 1000 * 1000)]);
-    var t = performance.now(), xhr = new XMLHttpRequest();
-    xhr.open('POST', '/api/v1/diag/sink');
-    xhr.onload = function () {
-      var s = (performance.now() - t) / 1000;
-      $('speed').textContent = 'Upload: ' + (blob.size / s / 1e6).toFixed(1) + ' MB/s';
-    };
-    xhr.onerror = function () { $('speed').textContent = 'Upload failed'; };
-    xhr.send(blob);
-  };
-})();
-</script>
-</body>
-</html>
-'''
 FAVICON_SVG = r'''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="512" height="512">
   <title>Ferry</title>
   <rect x="0" y="0" width="100" height="100" rx="22" fill="#1d4ed8"/>
@@ -3074,13 +2889,6 @@ FAVICON_SVG = r'''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" 
   <path d="M18 52 L82 52 L72 68 L28 68 Z" fill="#ffffff"/>
   <path d="M14 80 q9 -6 18 0 t18 0 t18 0 t18 0" fill="none" stroke="#93c5fd" stroke-width="5" stroke-linecap="round"/>
 </svg>'''
-ASSETS_B64: Dict[str, str] = {
-    "icon-192.png": "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",
-    "icon-512.png": "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",
-    "icon-maskable-512.png": "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AgAAQhEAABCKAACAUAQAAIQiAAAgFAEAAKEIAAAIRQAAQCgCAABCEQAAEIoAAIBQBAAAhCIAACAUAQAAoQgAAAhFAABAKAIAAEIRAAAQigAAgFAEAACEIgAAIBQBAAChCAAACEUAAEAoAgAAQhEAABCKAACAUAQAAIQiAAAgFAEAAKEIAAAIRQAAQCgCAABCEQAAEIoAAIBQBAAAhCIAACAUAQAAoQgAAAhFAABAKAIAAEIRAAAQigAAgFAEAACEIgAAIBQBAAChCAAACEUAAEAoAgAAQhEAABCKAACAUAQAAIQiAAAgFAEAAKEIAAAIRQAAQCgCAABCEQAAEIoAAIBQBAAAhCIAACAUAQAAoQgAAAhFAABAKAIAAEIRAAAQigAAgFAEAACEIgAAIBQBAAChCAAACEUAAEAoAgAAQhEAABCKAACAUAQAAIQiAAAgFAEAAKEIAAAIRQAAQCgCAABCEQAAEIoAAIBQBAAAhCIAACAUAQAAoQgAAAhFAABAKAIAAEIRAAAQigAAgFAEAACEIgAAIBQBAAChCAAACEUAAEAoAgAAQhEAABCKAACAUAQAAIQiAAAgFAEAAKEIAAAIRQAAQCgCAABCEQAAEIoAAIBQ/xfFLHTuVm7jBwAAAABJRU5ErkJggg==",
-    "keepawake.mp4": "AAAAIGZ0eXBpc29tAAACAGlzb21pc28yYXZjMW1wNDEAAAMTbW9vdgAAAGxtdmhkAAAAAAAAAAAAAAAAAAAD6AAAA+gAAQAAAQAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAgAAAj10cmFrAAAAXHRraGQAAAADAAAAAAAAAAAAAAABAAAAAAAAA+gAAAAAAAAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAABAAAAAABAAAAAQAAAAAAAkZWR0cwAAABxlbHN0AAAAAAAAAAEAAAPoAAAAAAABAAAAAAG1bWRpYQAAACBtZGhkAAAAAAAAAAAAAAAAAABAAAAAQABVxAAAAAAALWhkbHIAAAAAAAAAAHZpZGUAAAAAAAAAAAAAAABWaWRlb0hhbmRsZXIAAAABYG1pbmYAAAAUdm1oZAAAAAEAAAAAAAAAAAAAACRkaW5mAAAAHGRyZWYAAAAAAAAAAQAAAAx1cmwgAAAAAQAAASBzdGJsAAAAvHN0c2QAAAAAAAAAAQAAAKxhdmMxAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAABAAEABIAAAASAAAAAAAAAABFUxhdmM2MC4zMS4xMDIgbGlieDI2NAAAAAAAAAAAAAAAGP//AAAAMmF2Y0MBZAAK/+EAF2dkAAqs2V7ARAAAAwAEAAADAAg8SJZYAQAEaO+Py/34+AAAAAAQcGFzcAAAAAEAAAABAAAAFGJ0cnQAAAAAAAAWOAAAFjgAAAAYc3R0cwAAAAAAAAABAAAAAQAAQAAAAAAcc3RzYwAAAAAAAAABAAAAAQAAAAEAAAABAAAAFHN0c3oAAAAAAAACxwAAAAEAAAAUc3RjbwAAAAAAAAABAAADQwAAAGJ1ZHRhAAAAWm1ldGEAAAAAAAAAIWhkbHIAAAAAAAAAAG1kaXJhcHBsAAAAAAAAAAAAAAAALWlsc3QAAAAlqXRvbwAAAB1kYXRhAAAAAQAAAABMYXZmNjAuMTYuMTAwAAAACGZyZWUAAALPbWRhdAAAAqwGBf//qNxF6b3m2Ui3lizYINkj7u94MjY0IC0gY29yZSAxNjQgcjMxMDggMzFlMTlmOSAtIEguMjY0L01QRUctNCBBVkMgY29kZWMgLSBDb3B5bGVmdCAyMDAzLTIwMjMgLSBodHRwOi8vd3d3LnZpZGVvbGFuLm9yZy94MjY0Lmh0bWwgLSBvcHRpb25zOiBjYWJhYz0xIHJlZj0xIGRlYmxvY2s9MTotMzotMyBhbmFseXNlPTB4MzoweDMgbWU9aGV4IHN1Ym1lPTIgcHN5PTEgcHN5X3JkPTIuMDA6MC43MCBtaXhlZF9yZWY9MCBtZV9yYW5nZT0xNiBjaHJvbWFfbWU9MSB0cmVsbGlzPTAgOHg4ZGN0PTEgY3FtPTAgZGVhZHpvbmU9MjEsMTEgZmFzdF9wc2tpcD0xIGNocm9tYV9xcF9vZmZzZXQ9MCB0aHJlYWRzPTEgbG9va2FoZWFkX3RocmVhZHM9MSBzbGljZWRfdGhyZWFkcz0wIG5yPTAgZGVjaW1hdGU9MSBpbnRlcmxhY2VkPTAgYmx1cmF5X2NvbXBhdD0wIGNvbnN0cmFpbmVkX2ludHJhPTAgYmZyYW1lcz0zIGJfcHlyYW1pZD0yIGJfYWRhcHQ9MSBiX2JpYXM9MCBkaXJlY3Q9MSB3ZWlnaHRiPTEgb3Blbl9nb3A9MCB3ZWlnaHRwPTEga2V5aW50PTI1MCBrZXlpbnRfbWluPTEgc2NlbmVjdXQ9NDAgaW50cmFfcmVmcmVzaD0wIHJjX2xvb2thaGVhZD0xMCByYz1jcmYgbWJ0cmVlPTEgY3JmPTIzLjAgcWNvbXA9MC42MCBxcG1pbj0wIHFwbWF4PTY5IHFwc3RlcD00IGlwX3JhdGlvPTEuNDAgYXE9MToxLjIwAIAAAAATZYiEABfOf+z/wlX/2PZEor//8Q==",
-}
-# --- END GENERATED ---
 
 if __name__ == "__main__":
     sys.exit(run())

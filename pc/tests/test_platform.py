@@ -135,10 +135,12 @@ def test_resolve_overrides_and_errors(tmp_path):
 def test_cli():
     a = ferry.parse_args(["--port", "8800", "--no-open"])
     assert a.port == 8800 and a.no_open
-    with pytest.raises(SystemExit):
-        ferry.parse_args(["--port", "0"])
+    assert ferry.parse_args(["--port", "0"]).port == 0          # hidden test hook: any free port [B24]
+    for bad in ("-1", "65536"):
+        with pytest.raises(SystemExit):
+            ferry.parse_args(["--port", bad])
     r = subprocess.run([sys.executable, os.path.join(ROOT, "ferry.py"), "--help"], capture_output=True, text=True)
-    assert r.returncode == 0 and ".local" in r.stdout and "--selftest" in r.stdout
+    assert r.returncode == 0 and "--selftest" in r.stdout and "--inbox" in r.stdout
     r = subprocess.run([sys.executable, os.path.join(ROOT, "ferry.py"), "--version"], capture_output=True, text=True)
     assert ferry.VERSION in r.stdout
 
@@ -175,7 +177,7 @@ def test_selftest_runs(tmp_path, monkeypatch):
 def test_main_starts_and_stops_quickly(tmp_path, monkeypatch):
     monkeypatch.setenv("HOME", str(tmp_path))
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "cfg"))
-    monkeypatch.setattr(ferry, "STATE_FILE", str(tmp_path / "state.json"))
+    monkeypatch.setattr(ferry, "DATA_DIR", str(tmp_path))
     monkeypatch.setattr(ferry.State, "load", classmethod(lambda cls, path=None: cls(str(tmp_path / "state.json"))))
     # Windows resolves the folders through SHGetKnownFolderPath, not HOME: point it at tmp_path too.
     # resolve_folders binds win_known_folder as a default argument, so the fake is passed in explicitly.
@@ -190,7 +192,7 @@ def test_main_starts_and_stops_quickly(tmp_path, monkeypatch):
         port = so.getsockname()[1]
     stop = threading.Event()
     rc = {}
-    t = threading.Thread(target=lambda: rc.setdefault("v", ferry.main(["--port", str(port), "--no-open"], stop_event=stop)))
+    t = threading.Thread(target=lambda: rc.setdefault("v", ferry.main(["--port", str(port), "--no-open", "--discovery-port", "0"], stop_event=stop)))
     t.start()
     time.sleep(1.0)
     t0 = time.time()
@@ -199,20 +201,18 @@ def test_main_starts_and_stops_quickly(tmp_path, monkeypatch):
     assert not t.is_alive() and rc["v"] == 0
     assert time.time() - t0 < 3
     assert os.path.isdir(tmp_path / "Downloads" / "Phone") and os.path.isdir(tmp_path / "Desktop" / "Ferry outbox")
+    log = (tmp_path / ferry.LOG_NAME).read_text(encoding="utf-8")
+    assert "Ferry 2.0.0 started" in log and "Ferry stopped" in log
 
 
 def test_message_catalogue_present():
     src = open(os.path.join(ROOT, "ferry.py"), encoding="utf-8").read()
-    page = open(os.path.join(ROOT, "tools", "page.html"), encoding="utf-8").read()
     for msg in ("is already running in another window", "has reserved port", "is used by another program",
                 "No network connection found", "Can't use", "PC disk is full", "cancelled or connection lost",
                 "That file is no longer in the outbox.", "Windows treats this network as Public",
                 "Phone can't connect? Check", "Your PC's address changed", "Ferry hit an unexpected error",
-                "folders aren't sent", "syncs to OneDrive"):
+                "folders aren't sent", "syncs to OneDrive",
+                "Automatic discovery is off", "First time? Scan to install the Ferry app",
+                "The app is being copied, try again in a moment", "no app bundled", "Can't rotate ferry-log.txt"):
         assert msg in src, msg
-    for msg in ("Can't reach the PC. Is Ferry still running, and is the phone on the same Wi-Fi?",
-                "PC disk is full", "Paused while the screen was off", "Stop sending? Files already saved stay on the PC.",
-                "Nothing to send yet.", "Folders aren't sent.", "If Chrome asks to allow multiple downloads",
-                "Keep this screen on until it finishes.", "Add to Home screen"):
-        assert msg in page, msg
     assert re.search(r"Extract All", open(os.path.join(ROOT, "Ferry.bat")).read())

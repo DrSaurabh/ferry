@@ -5,6 +5,8 @@ import time
 import ferry
 from ferry import Config, build_banner, build_extras, qr_console_lines
 
+APP_LINE = ferry.app_banner_line("ok", {"version_name": "2.0.57"})
+
 
 def cfg(**kw):
     base = dict(port=8765, inbox="/home/u/Downloads/Phone", outbox="/home/u/Desktop/Ferry outbox",
@@ -50,20 +52,25 @@ def test_qr_rows_and_matrix_roundtrip():
 
 
 def test_qr_size_for_long_ip():
-    assert len(qr_console_lines("http://192.168.100.200:8765", True)) == 15
+    assert len(qr_console_lines("http://192.168.100.200:8765/", True)) == 15
 
 
 def test_qr_missing_library(monkeypatch):
     monkeypatch.setattr(ferry, "qrcodegen", None)
     assert qr_console_lines("http://x", True) == []
-    lines = build_banner(cfg(), "http://192.168.1.2:8765", [], 0)
+    lines = build_banner(cfg(), "http://192.168.1.2:8765/", [], 0, APP_LINE)
     assert any("qrcodegen.py is missing" in l for l in lines)
 
 
 def test_banner_budget():
-    url = "http://192.168.100.200:8765"
-    lines = build_banner(cfg(), url, qr_console_lines(url, True), 3)
-    assert len(lines) <= 22
+    url = "http://192.168.100.200:8765/"
+    lines = build_banner(cfg(), url, qr_console_lines(url, True), 3, APP_LINE)
+    assert len(lines) <= 23      # v1: 22; v2 adds the Fire TV and app lines, drops "Bookmark-friendly name" (B13)
+    text = "\n".join(lines)
+    assert "First time? Scan to install the Ferry app:" in text
+    assert "  App page:  http://192.168.100.200:8765/app" in lines
+    assert "  Fire TV:   in Downloader enter 192.168.100.200:8765/app" in lines
+    assert "  " + APP_LINE in lines and max(len(l) for l in lines if "█" not in l) <= 88
     # realistic worst case: first run (so no "address changed"), OneDrive desktop, non-192.168 primary
     extras = build_extras(cfg(first_run=True, onedrive_outbox=True), url, ["10.0.0.5"], None, "10.0.0.9", 8765)
     assert len(lines) + len(extras) + 1 <= 30   # +1 "Waiting for your phone..."
@@ -74,8 +81,9 @@ def test_banner_budget():
 
 def test_banner_glyphs_safe():
     allowed = set(" █▀▄─→↑↓=+-…") | set(chr(c) for c in range(32, 127))
-    url = "http://192.168.1.2:8765"
-    text = "\n".join(build_banner(cfg(), url, qr_console_lines(url, False), 1) +
+    url = "http://192.168.1.2:8765/"
+    text = "\n".join(build_banner(cfg(), url, qr_console_lines(url, False), 1, APP_LINE) +
+                     build_banner(cfg(), url, [], 1, ferry.app_banner_line("missing", None)) +
                      build_extras(cfg(first_run=True, onedrive_outbox=True), url, ["10.1.1.1"], "1.1.1.1", "10.0.0.2", 8765))
     assert set(text) - {"\n"} <= allowed, set(text) - allowed
 
@@ -83,6 +91,8 @@ def test_banner_glyphs_safe():
 def test_ip_changed_notice():
     ex = build_extras(cfg(), "u", [], "192.168.1.5", "192.168.1.9", 8765)
     assert any("address changed (was 192.168.1.5)" in l for l in ex)
+    assert "The Ferry app finds it by itself" in "\n".join(ex) and "enter 192.168.1.9 in Ferry > Settings" in ex[1]
+    assert not any("Bookmark" in l for l in build_extras(cfg(first_run=True), "u", [], None, "192.168.1.9", 8765))
     assert build_extras(cfg(), "u", [], "192.168.1.9", "192.168.1.9", 8765) == []
 
 
@@ -132,7 +142,8 @@ def test_state_roundtrip(tmp_path):
 
 def test_qr_encodes_exact_lowercase_url():
     """Field bug (vivo camera): an upper-case 'HTTP://' QR was treated as text and sent to Google search."""
-    url = "http://192.168.1.5:8765"
+    url = ferry.page_url("192.168.1.5", 8765)
+    assert url == "http://192.168.1.5:8765/"          # the QR opens the Get-the-app page
     lines = qr_console_lines(url, True)
     got = matrix_from_lines(lines, True)
     want = ferry.qr_matrix(url)
@@ -140,3 +151,10 @@ def test_qr_encodes_exact_lowercase_url():
     n = len(want)
     assert all(bool(got[y + 2][x + 2]) == want[y][x] for y in range(n) for x in range(n))
     assert len(lines) <= 15
+
+
+def test_app_banner_lines():
+    assert APP_LINE == "App: Ferry 2.0.57 is ready for your phone and TV"
+    assert ferry.app_banner_line("missing", None).startswith("! No app in this folder (app")
+    assert ferry.app_banner_line("invalid", None).endswith("get the full Ferry zip")
+    assert "being copied" in ferry.app_banner_line("copying", None)

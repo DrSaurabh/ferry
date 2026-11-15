@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Host side of an emulator suite (plan CP6, §5.2). Runs inside reactivecircus/android-emulator-runner.
 #   run_instrumented.sh <phone|tv|api25> [attempt]
-# Ph0b first version: starts v1 ferry.py from a temp copy of pc/ (--no-open --port --inbox --outbox) and
-# waits by polling /api/v1/info; installs the debug + androidTest APKs (no -g); runs the classes of
+# Starts ferry.py 2.0 from a temp copy of pc/ (--no-open --port --discovery-port off --inbox --outbox
+# --data-dir) and waits for its FERRY_READY line (Ph1); installs the debug + androidTest APKs (no -g); runs the classes of
 # suites/<suite>.txt in order; pulls screenshots, probe results, logcat. Exit 1 if anything failed.
 #
 # Env: FERRY_APKS (folder with the downloaded ferry-test-apks, default ./apks), FERRY_PYTHON (python3),
@@ -26,7 +26,7 @@ mkdir -p "$OUT" "$TMP"
 PIDS=()
 cleanup() {
   for p in "${PIDS[@]}"; do kill "$p" 2>/dev/null; done
-  for d in "$TMP"/*/; do cp "$d"pc/ferry-*.txt "$d"pc/ferry-*.log "$OUT/" 2>/dev/null; done
+  for d in "$TMP"/*/; do cp "$d"data/ferry-*.txt "$d"data/ferry-*.log "$OUT/" 2>/dev/null; done
   true
 }
 trap cleanup EXIT
@@ -43,11 +43,15 @@ start_pc() {
   cp -r "$ROOT/pc" "$d/pc"
   rm -rf "$d/pc/tests"
   for f in "$@"; do cp "$f" "$d/outbox/"; done
-  (cd "$d/pc" && exec "$PY" ferry.py --no-open --port "$port" --inbox "$d/inbox" --outbox "$d/outbox") \
-    > "$OUT/console-$name.txt" 2>&1 &
+  mkdir -p "$d/data"
+  (cd "$d/pc" && exec "$PY" -u ferry.py --no-open --port "$port" --discovery-port off \
+      --inbox "$d/inbox" --outbox "$d/outbox" --data-dir "$d/data") > "$OUT/console-$name.txt" 2>&1 &
   PIDS+=($!)
   for _ in $(seq 1 60); do
-    if curl -sf "http://127.0.0.1:$port/api/v1/info" > /dev/null; then log "pc $name ready on :$port"; return 0; fi
+    if grep -q "^FERRY_READY port=$port " "$OUT/console-$name.txt" 2>/dev/null &&
+       curl -sf "http://127.0.0.1:$port/api/v1/info" > /dev/null; then
+      log "pc $name ready: $(grep -m1 '^FERRY_READY' "$OUT/console-$name.txt")"; return 0
+    fi
     sleep 0.5
   done
   log "pc $name did not answer on :$port"; cat "$OUT/console-$name.txt"; return 1

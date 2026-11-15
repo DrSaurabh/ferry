@@ -11,80 +11,24 @@ from urllib.parse import quote
 import pytest
 
 import ferry
-
-
-class Srv:
-    def __init__(self, tmp_path):
-        self.inbox = tmp_path / "inbox"
-        self.outbox = tmp_path / "outbox"
-        self.inbox.mkdir()
-        self.outbox.mkdir()
-        self.out = io.StringIO()
-        cfg = ferry.Config(port=0, inbox=str(self.inbox), outbox=str(self.outbox),
-                           inbox_label="Downloads/Phone", outbox_label="Desktop/Ferry outbox")
-        self.console = ferry.Console(stream=self.out)
-        self.app = ferry.make_app(cfg, self.console, "127.0.0.1", is_win=False)
-        self.app.outbox.start_scan()
-        self.server = ferry.FerryServer(("127.0.0.1", 0), ferry.FerryHandler, app=self.app, exclusive=False)
-        self.port = self.server.server_address[1]
-        threading.Thread(target=self.server.serve_forever, kwargs={"poll_interval": 0.1}, daemon=True).start()
-
-    def req(self, method, path, body=None, headers=None):
-        c = http.client.HTTPConnection("127.0.0.1", self.port, timeout=10)
-        c.request(method, path, body=body, headers=headers or {})
-        r = c.getresponse()
-        data = r.read()
-        c.close()
-        return r, data
-
-    def json(self, method, path, body=None, headers=None):
-        r, d = self.req(method, path, body, headers)
-        return r.status, json.loads(d.decode("utf-8"))
-
-    def add_out(self, name, data):
-        p = self.outbox / name
-        p.write_bytes(data)
-        self.app.outbox.poll(now=0)
-        self.app.outbox.poll(now=100)
-        return self.app.outbox.newest()
-
-    def log(self):
-        time.sleep(0.15)
-        return self.out.getvalue()
-
-    def close(self):
-        self.server.shutdown()
-        self.server.server_close()
-        self.console.stop()
-
-
-@pytest.fixture
-def srv(tmp_path):
-    s = Srv(tmp_path)
-    yield s
-    s.close()
-
-
-def upload(srv, name, data, mtime=None):
-    q = "name=%s&size=%d" % (quote(name), len(data))
-    if mtime is not None:
-        q += "&mtime=%d" % mtime
-    return srv.json("POST", "/api/v1/upload?" + q, body=data, headers={"Content-Length": str(len(data))})
+from helpers import jpeg_with_gps, upload
 
 
 def test_page_and_info(srv):
     r, d = srv.req("GET", "/")
-    assert r.status == 200 and b"<title>Ferry</title>" in d and r.getheader("Cache-Control") == "no-store"
+    assert r.status == 200 and b"Get the Ferry app" in d and r.getheader("Cache-Control") == "no-store"
     assert b"{{" not in d
     st, j = srv.json("GET", "/api/v1/info")
-    assert st == 200 and j["app"] == "ferry" and j["protocol"] == 1
+    assert st == 200 and j["app"] == "ferry" and j["protocol"] == 2
+    assert j["capabilities"] == ["receive", "outbox", "check_batch", "app_update", "discovery"]
+    assert j["app_version_code"] is None and j["version"] == "2.0.0"
     assert j["inbox_label"] == "Downloads/Phone"
     assert str(srv.inbox) not in json.dumps(j)     # no full paths [U18]
     assert isinstance(j["free_bytes"], int)
 
 
 def test_head_everywhere(srv):
-    for p in ("/", "/api/v1/info", "/favicon.svg", "/diag"):
+    for p in ("/", "/api/v1/info", "/favicon.svg"):
         r, d = srv.req("HEAD", p)
         assert r.status == 200 and d == b"" and int(r.getheader("Content-Length")) > 0, p
 
@@ -193,18 +137,11 @@ def test_outbox_list_download_range(srv):
     assert of.id == 1
 
 
-def test_apk_mime_and_short_links(srv):
+def test_apk_mime(srv):
     srv.add_out("Kodi.apk", b"PK-apk")
-    srv.add_out("movie.mp4", b"mp4data")
-    r, _ = srv.req("GET", "/1")
-    assert r.status == 302 and r.getheader("Location") == "/api/v1/outbox/1/Kodi.apk"
-    r, _ = srv.req("HEAD", "/1")
-    assert r.status == 302
-    r, _ = srv.req("GET", "/new")
-    assert r.status == 302 and r.getheader("Location") == "/api/v1/outbox/2/movie.mp4"
     r, d = srv.req("GET", "/api/v1/outbox/1/whatever")
     assert r.getheader("Content-Type") == "application/vnd.android.package-archive" and d == b"PK-apk"
-    r, d = srv.req("GET", "/77")
+    r, d = srv.req("GET", "/api/v1/outbox/77/x")
     assert r.status == 404 and b"no longer in the outbox" in d
 
 
@@ -283,15 +220,12 @@ def test_play_logged_once(srv):
     assert srv.log().count("playing") == 1
 
 
-def test_assets_and_manifest(srv):
-    for p, t in (("/icon-192.png", "image/png"), ("/icon-512.png", "image/png"), ("/icon-maskable-512.png", "image/png"),
-                 ("/favicon.svg", "image/svg+xml")):
+def test_favicon_only(srv):
+    r, d = srv.req("GET", "/favicon.svg")
+    assert r.status == 200 and r.getheader("Content-Type") == "image/svg+xml" and d.startswith(b"<svg")
+    for p in ("/icon-192.png", "/icon-512.png", "/icon-maskable-512.png", "/manifest.webmanifest"):
         r, d = srv.req("GET", p)
-        assert r.status == 200 and r.getheader("Content-Type") == t and len(d) > 100, p
-    r, d = srv.req("GET", "/icon-192.png")
-    assert d[:8] == b"\x89PNG\r\n\x1a\n"
-    st, m = srv.json("GET", "/manifest.webmanifest")
-    assert m["name"] == "Ferry" and any(i["purpose"] == "maskable" for i in m["icons"])
+        assert r.status == 404, p
 
 
 def test_not_found(srv):
@@ -301,38 +235,7 @@ def test_not_found(srv):
     assert st == 404
 
 
-def test_qr_page(srv):
-    r, d = srv.req("GET", "/qr")
-    assert r.status == 200 and b"<svg" in d
-
-
-def test_diag_endpoints(srv):
-    r, d = srv.req("GET", "/api/v1/diag/blob?mb=2")
-    assert len(d) == 2000000
-    st, j = srv.json("POST", "/api/v1/diag/sink", body=b"x" * 10000, headers={"Content-Length": "10000"})
-    assert j["bytes"] == 10000
-    r, d = srv.req("GET", "/api/v1/diag/test.zip")
-    assert zipfile.ZipFile(io.BytesIO(d)).testzip() is None
-    r, d = srv.req("GET", "/api/v1/diag/ferry-test.apk")
-    assert r.getheader("Content-Type") == "application/vnd.android.package-archive"
-    st, j = srv.json("POST", "/api/v1/diag/inspect?name=x.jpg&mtime=1700000000000", body=b"\xff\xd8\xff\xd9",
-                     headers={"Content-Length": "4"})
-    assert j["gps"] in ("none", "unknown") and j["size"] == 4
-    assert os.listdir(srv.inbox) == []
-
-
 def test_exif_gps_detection():
-    def jpeg_with_gps(lat_nonzero=True):
-        import struct
-        # TIFF little endian: IFD0 with 1 entry (GPS pointer) -> GPS IFD with GPSLatitude (tag 2)
-        tiff = bytearray(b"II*\x00" + struct.pack("<I", 8))
-        tiff += struct.pack("<H", 1) + struct.pack("<HHII", 0x8825, 4, 1, 26) + struct.pack("<I", 0)
-        # GPS IFD at 26: 1 entry, latitude RATIONAL x3 at offset 44
-        tiff += struct.pack("<H", 1) + struct.pack("<HHII", 2, 5, 3, 44) + struct.pack("<I", 0)
-        vals = (12, 1, 34, 1, 56, 1) if lat_nonzero else (0, 1, 0, 1, 0, 1)
-        tiff += struct.pack("<6I", *vals)
-        app1 = b"Exif\x00\x00" + bytes(tiff)
-        return b"\xff\xd8" + b"\xff\xe1" + struct.pack(">H", len(app1) + 2) + app1 + b"\xff\xd9"
     assert ferry.exif_gps_status(jpeg_with_gps(True)) == "present"
     assert ferry.exif_gps_status(jpeg_with_gps(False)) == "zeroed"
     assert ferry.exif_gps_status(b"not a jpeg") == "unknown"
