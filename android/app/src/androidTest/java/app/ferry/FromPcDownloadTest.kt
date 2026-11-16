@@ -127,7 +127,10 @@ class FromPcDownloadTest {
                 val names = rows()
                 Probe.record("download_rows", names)
                 assertEquals(listOf("report (1).pdf", "report.pdf"), names)
-                SendHelpers.waitText("as report (1).pdf", 10_000)
+                // B82: the row's "Saved … as report (1).pdf" is proven from app state above (`savedAs`); UiAutomator's
+                // copy of Compose text lagged twice (main run 75, Ph9 run 4) while the screen showed it, so it is only recorded.
+                Probe.record("uiautomator_sees_saved_as", SendHelpers.device.hasObject(androidx.test.uiautomator.By.textContains("as report (1).pdf")))
+                Thread.sleep(1_000)
                 SendHelpers.settle()
                 Shots.take("from-pc-downloaded-twice")
 
