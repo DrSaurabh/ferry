@@ -83,6 +83,7 @@ fun TvPlayerScreen(s: Screen.TvPlayer, onBack: () -> Unit) {
         TvPlayerState.host = host
         TvPlayerState.resumeOffer = offer?.posMs
         onDispose {
+            TvPlayerState.closedAtMs = host.player.currentPosition
             savePosition()
             AppGraph.log("player", "closed ${s.name} at ${host.player.currentPosition / 1000} s")
             TvPlayerState.host = null
@@ -214,4 +215,6 @@ object TvPlayerState {
     @Volatile var resumeOffer: Long? = null
     @Volatile var resumeFocused = false
     @Volatile var controllerVisible = false
+    /** Playback position when the player screen last closed (tests: what the resume store should hold). */
+    @Volatile var closedAtMs: Long? = null
 }

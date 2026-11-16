@@ -52,8 +52,12 @@ class TvSlideshowTest {
             assertTrue("auto-advance gaps $gaps ms should be about 3 s", gaps.size >= 2 && gaps.all { it in 2_500..4_500 })
 
             // broken.jpg: the message, then the slideshow moves on.
-            SendHelpers.waitUntil("broken.jpg message shown", 40_000) { "broken.jpg" in TvViewerState.failedShown }
-            SendHelpers.waitText(Probe.context.getString(R.string.cant_show_photo), 3_000)
+            // broken.jpg may come first (row order) and be past by now: wait for its message on screen (the slideshow
+            // loops, so it comes round again within one pass of 6 × 3 s).
+            SendHelpers.waitUntil("broken.jpg message shown", 40_000) {
+                TvViewerState.messageVisible && TvViewerState.name == "broken.jpg"
+            }
+            SendHelpers.waitText(Probe.context.getString(R.string.cant_show_photo), 1_800)
             SendHelpers.settle()
             Shots.take("tv-slideshow-broken")
             SendHelpers.waitUntil("moved on past broken.jpg", 6_000) { TvViewerState.name != "broken.jpg" }

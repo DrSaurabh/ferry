@@ -48,8 +48,12 @@ class TvResumeTest {
             SendHelpers.device.pressBack()
             SendHelpers.waitUntil("home again", 10_000) { t.screen() is Screen.TvHome }
             val saved = checkNotNull(AppGraph.resume.get(key)) { "position not saved for $key" }
-            Probe.record("resume_saved", "left at $left ms, saved ${saved.posMs} ms of ${saved.durMs} ms")
-            assertTrue("saved position ≈ where we left", saved.posMs in (left - 1_500)..(left + 3_000))
+            // UiAutomator's pressBack waits for an idle UI, which a playing video delays, so the player closes a few
+            // seconds after `left`: the store must hold the position at the moment the screen closed.
+            val closedAt = checkNotNull(TvPlayerState.closedAtMs)
+            Probe.record("resume_saved", "left at $left ms, closed at $closedAt ms, saved ${saved.posMs} ms of ${saved.durMs} ms")
+            assertTrue("closed after we pressed Back", closedAt >= left - 500)
+            assertTrue("saved position = where the player closed", saved.posMs in (closedAt - 500)..(closedAt + 500))
             t.waitFocus("focus back on big.mp4") { t.current == card }
 
             // Reopen: the question, Resume focused; one OK continues there.
