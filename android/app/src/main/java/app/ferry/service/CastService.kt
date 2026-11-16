@@ -21,6 +21,7 @@ import app.ferry.core.cast.CastClient
 import app.ferry.core.cast.CastFileServer
 import app.ferry.core.model.CastItem
 import app.ferry.core.model.CastRequest
+import app.ferry.core.model.CastState
 import app.ferry.core.model.ControlRequest
 import app.ferry.core.net.FerryException
 import kotlinx.coroutines.CancellationException
@@ -154,7 +155,7 @@ class CastService : Service() {
                 continue
             }
             reach.ok(SystemClock.elapsedRealtime())
-            c.update(id) { it.copy(tvState = st) }
+            if (st.kind != CastState.IDLE) c.update(id) { it.copy(tvState = st) } // the Remote keeps the last item shown
             if (watch.onState(st)) {
                 AppGraph.log("cast", "the TV shows nothing any more: session over")
                 end(id, CastProblem.StoppedOnTv)

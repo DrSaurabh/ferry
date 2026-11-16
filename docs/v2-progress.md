@@ -52,3 +52,4 @@ Ph8b · step 1 (Media3 PlayerView player, keys via TvKeys, resume store + dialog
 Ph8b · step 1 green (PlayerView renders under the platform theme) · 28a49c0 · android 43856813724 · step 2: viewer/slideshow + TV tests 2,3,4,7
 Ph8b · step 2 pushed (cb69a55) but CI blocked: GitHub Actions billing ('payments failed / spending limit'), Linux jobs not started · cb69a55 · android 43858951281 · after billing fix: dispatch emulators=tv on ph8b, then fast-forward main
 Ph9 · step 1 (both sides, CastStateMapperTest, CastLoopbackTest, TvCastReceiveTest) · pending · pending · push [emu:phone] [emu:tv]
+Ph9 · phone+TV suites green (CastLoopbackTest, TvCastReceiveTest) · ddcb630 · android 43915490033 · Remote keeps last state; final [emu] run
