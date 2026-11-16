@@ -46,3 +46,4 @@ Ph8a · step 1 (TV home rows, focus memory, thumbnails, install dialog, keep-scr
 Ph8a · run 1: fast jobs green; TV: banner off-screen, API 30 kills app on install-permission change (B72), PcNotFound focus → fixes · pending · pending · push [emu:tv]
 Ph8a · run 2: focus test + install (not allowed) PASS; touch mode left over → B73; idle line pinned · pending · pending · push [emu:tv]
 Ph8a · run 3: all TV classes pass but a test race in the allowed-install bytes check · pending · pending · push [emu:tv]
+Ph8a · TV suite green on branch · d3e9239 · android 43850552821 · fast-forward main
