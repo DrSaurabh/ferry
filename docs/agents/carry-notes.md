@@ -32,3 +32,11 @@
 - Ph10 screenshot tour: Play on TV with several TVs / no TV, Remote "Starting…", each way a cast ends.
 - Ph10 DEVICE-CHECKLIST (real devices, Stage 7 can't test): TV discovery by broadcast on the real LAN; Fire TV with UDP 8765 taken by another app (fallback to last-used TV); casting from the vivo with screen off; Fire TV playback of vivo HEVC/HDR video and HEIC photos on Fire OS 6/7.
 - Tests: UiAutomator's view of Compose text can lag (B57, B82) — assert on app state; use text only for screenshots.
+## Done in Ph10 (all Ph10 items above)
+- Wording pass (B83), TV "this TV", plurals, install dialog focus, Remote icons, casting icon, screenshot tour (B84), README + DEVICE-CHECKLIST (B85), handoff `docs/v2-handoff.md`.
+## For Stage 7 (code audit) / later
+- CI flake: `ScreenOffUploadTest` "notification with MB/s" fails on some cold-boot attempt-2 runs (Ph6, Ph10 run 2); attempt 1 passes. Not investigated in Ph10 (run_instrumented.sh control flow untouched).
+- UiAutomator's view of Compose text/buttons lags (B57, B82, B86): any remaining `SendHelpers.tap("<text>")`/`waitText` on a just-changed screen is a flake candidate.
+- Test-only hooks in product code: `ConnectionManager.showForTest`, `Casting.showForTest`, `InstallFlow.mainFocused` (B84).
+- Real-device items: `pc/DEVICE-CHECKLIST.txt` (user) and `docs/v2-handoff.md` §6.
+

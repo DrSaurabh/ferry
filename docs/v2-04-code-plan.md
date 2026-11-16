@@ -1070,6 +1070,8 @@ Phase ids are **Ph0a–Ph10** (not P…, which are the phone requirements). Orde
 
 ## 7. Traceability
 
+**Status after Ph10 (2026-11-16) ✓**: every automated test named in §7.1 and §7.2 exists and passed in the Ph10 `main` run (see the build log, Ph10); C6 is covered by `pc/tests/test_readme.py`. The "Only on real devices" column, §7.2's real-device halves and §7.4 are the user's `pc/DEVICE-CHECKLIST.txt` and `docs/v2-handoff.md` §6. Tests added after this plan: `TvInstallAllowedTest` (B72), `TvCastReceiveTest` (B80), `PhonePermissionTour`, `PhoneScreenshotTour`, `PhoneDialogsTour` (Ph10, B84).
+
 ### 7.1 Requirements → phases → tests
 | Req | Summary | Phase(s) | Automated tests (CI) | Only on real devices |
 |---|---|---|---|---|
