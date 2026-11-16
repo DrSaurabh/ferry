@@ -38,15 +38,14 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewmodel.compose.viewModel
 import app.ferry.AppGraph
-import app.ferry.BuildConfig
 import app.ferry.R
+import app.ferry.cast.CastPhase
 import app.ferry.core.upload.Phase
 import app.ferry.net.ConnectionState
 import app.ferry.ui.common.TransferMath
 import app.ferry.ui.common.TransferWords
 import app.ferry.ui.common.StatusDot
 import app.ferry.ui.common.UpdateBanner
-import app.ferry.ui.common.comingSoon
 import app.ferry.ui.common.rememberSendFlow
 import app.ferry.media.SendRequest
 import app.ferry.ui.common.statusText
@@ -68,6 +67,7 @@ class HomeViewModel : ViewModel() {
     val transfer = AppGraph.transfers.state
     val interrupted = AppGraph.interrupted
     val outbox = AppGraph.outbox
+    val cast = AppGraph.casting.session
     fun tryAgain() = AppGraph.connection.refresh()
 
     /** The user has seen the interrupted-transfer banner [A8]. */
@@ -80,7 +80,7 @@ class HomeViewModel : ViewModel() {
 /**
  * Home (design §4.1, plan §4.3): "→ PC" + status, the four big buttons, banners. "Send other files" works from
  * Ph5b, "Send photos & videos" (permission flow → picker) from Ph6, "From PC" (with the outbox count) and the update
- * banner from Ph7; the buttons of later phases are placeholders ([comingSoon]; disabled on release builds, which are not given to the user).
+ * banner from Ph7, "Play on TV" (+ a card back to the running cast's Remote) from Ph9.
  */
 @Composable
 fun HomeScreen(nav: Navigator, vm: HomeViewModel = viewModel()) {
@@ -90,7 +90,7 @@ fun HomeScreen(nav: Navigator, vm: HomeViewModel = viewModel()) {
     val transfer by vm.transfer.collectAsState()
     val interrupted by vm.interrupted.collectAsState()
     val outbox by vm.outbox.collectAsState()
-    val later = BuildConfig.DEBUG
+    val cast by vm.cast.collectAsState()
     // The From PC badge: the outbox is listed once per connection (From PC refreshes it every 5 s itself).
     val connectedApi = (conn as? ConnectionState.Connected)?.api
     LaunchedEffect(connectedApi) { if (connectedApi != null) AppGraph.refreshOutbox() }
@@ -147,6 +147,12 @@ fun HomeScreen(nav: Navigator, vm: HomeViewModel = viewModel()) {
                     }
                 }
             }
+            cast?.takeIf { it.phase != CastPhase.Ended }?.let { c ->
+                // A cast is running (Ph9): back to its Remote
+                Card(Modifier.fillMaxWidth().clickable { nav.push(Screen.Remote) }.testTag("home-cast")) {
+                    Text(stringResource(R.string.cast_now, c.tvName), Modifier.padding(16.dp), style = MaterialTheme.typography.titleMedium)
+                }
+            }
             if (interrupted > 0 && transfer == null) {
                 // After a kill: the vivo steps, prominently [A8]
                 Card(Modifier.fillMaxWidth().testTag("home-interrupted")) {
@@ -161,17 +167,15 @@ fun HomeScreen(nav: Navigator, vm: HomeViewModel = viewModel()) {
                 }
             }
             for (label in listOf(R.string.btn_send_photos, R.string.btn_send_files, R.string.btn_from_pc, R.string.btn_play_tv)) {
-                val ready = label == R.string.btn_send_files || label == R.string.btn_send_photos || label == R.string.btn_from_pc
                 Button(
                     onClick = {
                         when (label) {
                             R.string.btn_send_files -> chooseFiles.launch(arrayOf("*/*"))
                             R.string.btn_send_photos -> gate.open()
                             R.string.btn_from_pc -> nav.push(Screen.FromPc)
-                            else -> comingSoon(ctx)
+                            else -> nav.push(Screen.PlayOnTv) // Ph9
                         }
                     },
-                    enabled = ready || later,
                     modifier = Modifier.fillMaxWidth().heightIn(min = 64.dp),
                 ) {
                     val text = if (label == R.string.btn_from_pc && outboxCount > 0) stringResource(R.string.btn_from_pc_count, outboxCount)

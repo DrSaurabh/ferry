@@ -178,4 +178,36 @@
     <string name="channel_transfers">Transfers</string>
     <string name="channel_results">Results</string>
     <string name="channel_casting">Casting</string>
+
+    <!-- Ph9: Play on TV, Remote, casting notification (design §4.1.5, §6). Wording pass in Ph10. -->
+    <string name="your_tv">your TV</string>
+    <string name="cast_finding">Looking for your TV…</string>
+    <string name="cast_tv">TV: %1$s</string>
+    <string name="cast_choose_tv">Choose a TV:</string>
+    <string name="cast_find_again">Find again</string>
+    <string name="cast_videos">Videos</string>
+    <string name="cast_photos">Photo slideshow</string>
+    <string name="cast_nothing">These files can't be played on the TV.</string>
+    <string name="cast_now">Playing on %1$s → Remote</string>
+    <string name="cast_starting">Starting on %1$s…</string>
+    <string name="cast_playing_on">Playing on %1$s</string>
+    <string name="cast_paused">Paused</string>
+    <string name="cast_ended">Stopped.</string>
+    <string name="cast_cant_serve">Ferry couldn't share these files with the TV. Try again.</string>
+    <string name="cast_cant_reach_tv">Can't reach the TV. On the TV, open Ferry and leave it on its home screen.</string>
+    <string name="cast_tv_refused">The TV didn't accept this. Try again.</string>
+    <string name="cast_stopped_on_tv">Stopped on the TV.</string>
+    <string name="cast_lost_tv">Lost connection to the TV.</string>
+    <string name="remote_title">Remote</string>
+    <string name="remote_nothing">Nothing is playing on the TV.</string>
+    <string name="remote_pause">Pause</string>
+    <string name="remote_play">Play</string>
+    <string name="remote_next">Next</string>
+    <string name="remote_prev">Previous</string>
+    <string name="remote_stop">Stop</string>
+    <string name="remote_toggle">Play or pause</string>
+    <string name="remote_back10">Back 10 seconds</string>
+    <string name="remote_fwd10">Forward 10 seconds</string>
+    <string name="remote_interval">Seconds per photo</string>
+    <string name="remote_interval_s">%1$d s</string>
 </resources>

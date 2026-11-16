@@ -171,6 +171,21 @@ push_pick_photos() {
   scan_media /sdcard/Pictures/AlbumB/PICK_B3.jpg
 }
 
+# Ph9 cast loopback test: a 60 s video in Movies/ and three photos in Pictures/Cast, made by the shell and touched
+# (newest in the picker), one scan_volume; the video row is logged (media_row only looks at images).
+push_cast_media() {
+  local f
+  adbs mkdir -p /sdcard/Movies /sdcard/Pictures/Cast > /dev/null
+  for f in "Movies/CAST_60s.mp4 cast.mp4" "Pictures/Cast/CAST_1.jpg photo2.jpg" "Pictures/Cast/CAST_2.jpg photo3.jpg" \
+           "Pictures/Cast/CAST_3.jpg photo4.jpg"; do
+    set -- $f
+    push_media "$2" "/sdcard/$1"
+    adbs touch "/sdcard/$1" > /dev/null
+  done
+  scan_media /sdcard/Pictures/Cast/CAST_3.jpg
+  log "push_cast_media: video row: $(adbs "content query --uri content://media/external/video/media --projection _display_name:owner_package_name:is_pending --where \"_display_name='CAST_60s.mp4'\"" 2>&1 | grep -m1 'Row:')"
+}
+
 # ---------- host checks after classes (Ph5a, verify_inbox.py) ----------
 verify() {
   local out

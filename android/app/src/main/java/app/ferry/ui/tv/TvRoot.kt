@@ -11,6 +11,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
@@ -26,13 +27,19 @@ import app.ferry.ui.nav.Screen
 
 /**
  * TV layout root (design §5.1, plan §4.9): the top screen of the back stack. Home (or "PC not found") has the
- * overscan padding [A25] and the header; the Player is full screen. Back on Home finishes the activity.
+ * overscan padding [A25] and the header; the Player is full screen. Back on Home finishes the activity. A cast from the
+ * phone (Ph9) is drawn instead of all of it while it lasts.
  */
 @Composable
 fun TvRoot(nav: Navigator, vm: TvViewModel = viewModel()) {
     val conn by vm.connection.collectAsState()
+    val cast by CastSinkImpl.show.collectAsState()
     Surface(Modifier.fillMaxSize().testTag("tv-root"), color = MaterialTheme.colorScheme.background) {
-        when (val s = nav.current) {
+        val showing = cast
+        // A cast from the phone shows on top of whatever is showing (design §5.5); Back ends it (B78).
+        if (showing != null) {
+            key(showing.id) { TvCastScreen(showing) }
+        } else when (val s = nav.current) {
             is Screen.TvPlayer -> TvPlayerScreen(s) { nav.pop() }
             is Screen.TvViewer -> TvViewerScreen(s) { nav.pop() }
             else -> Column(

@@ -134,6 +134,17 @@ class ConnectionManager(
         }
     }
 
+    /** TVs with Ferry open that answer a broadcast now (`device_type "tv"`, Play on TV, design §3.5) [P9]. */
+    suspend fun discoverTvs(): List<Peer> {
+        val d = discoveryClient() ?: return emptyList()
+        return try {
+            d.discover().filter { it.deviceType == "tv" }
+        } catch (e: IOException) {
+            log("discover TVs failed: $e")
+            emptyList()
+        }
+    }
+
     private fun checkUpdate(api: FerryApi) {
         scope.launch {
             val info = try {

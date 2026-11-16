@@ -28,6 +28,11 @@ class Prefs(ctx: Context) : PcStore {
         get() = host(K_LAST_TV)
         set(v) = putHost(K_LAST_TV, v)
 
+    /** That TV's name (shown before it has answered again). */
+    var lastTvName: String?
+        get() = sp.getString(K_LAST_TV_NAME, null)
+        set(v) = sp.edit().putString(K_LAST_TV_NAME, v).apply()
+
     var slideshowSeconds: Int
         get() = sp.getInt(K_SLIDESHOW, 5)
         set(v) = sp.edit().putInt(K_SLIDESHOW, v).apply()
@@ -71,6 +76,7 @@ class Prefs(ctx: Context) : PcStore {
         const val K_MANUAL = "manual_pc"
         const val K_CHOSEN = "chosen_pc_name"
         const val K_LAST_TV = "last_tv"
+        const val K_LAST_TV_NAME = "last_tv_name"
         const val K_SLIDESHOW = "slideshow_seconds"
         const val K_WELCOME = "welcome_done"
         const val K_INTERRUPTED = "interrupted_count"

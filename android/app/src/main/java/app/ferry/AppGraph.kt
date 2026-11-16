@@ -54,6 +54,13 @@ object AppGraph {
     lateinit var downloads: Downloads
         private set
 
+    /** Phone → TV casting (Ph9): the session, driven by CastService. */
+    lateinit var casting: app.ferry.cast.Casting
+        private set
+
+    /** This process runs the TV's cast receiver (TV mode, or the debug loopback on a phone). */
+    @Volatile var castReceiverOn = false
+
     /** The app update download (Ph7) [C3]. */
     lateinit var updater: AppUpdater
         private set
@@ -112,6 +119,7 @@ object AppGraph {
             sinkFor = { f -> (if (isTv) DownloadSinks.forApk(app) else DownloadSinks.forPhone(app))(f) }, // TV: APKs only [PB18]
             log = { log("download", it) },
         )
+        casting = app.ferry.cast.Casting { log("cast", it) }
         updater = AppUpdater(scope, File(app.filesDir, "update"), { connection.api() }, { connection.relocate() }) { log("update", it) }
         interrupted.value = prefs.interruptedCount
         network.start()

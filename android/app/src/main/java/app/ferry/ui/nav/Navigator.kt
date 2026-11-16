@@ -11,6 +11,10 @@ sealed interface Screen {
     object Transfer : Screen
     object FromPc : Screen
     data class Picker(val mode: app.ferry.media.PickerMode) : Screen
+    /** Phone → TV (Ph9): choose the TV, then Videos / Photo slideshow. */
+    object PlayOnTv : Screen
+    /** Phone → TV (Ph9): the remote control of the cast that is running. */
+    object Remote : Screen
     object TvHome : Screen
     /** The TV video player (Ph8b); [url] is absolute; [resumeKey] = `name|size|mtime` (null: no resume). */
     data class TvPlayer(val name: String, val url: String, val resumeKey: String? = null) : Screen

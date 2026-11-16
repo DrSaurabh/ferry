@@ -11,6 +11,10 @@ import app.ferry.AppGraph
 import app.ferry.FerryApp
 import app.ferry.MainActivity
 import app.ferry.R
+import app.ferry.cast.CastPhase
+import app.ferry.cast.CastSession
+import app.ferry.cast.CastStateMapper
+import app.ferry.core.model.ControlRequest
 import app.ferry.core.download.DownloadStatus
 import app.ferry.core.upload.EngineState
 import app.ferry.net.ConnectionState
@@ -27,6 +31,7 @@ import app.ferry.ui.common.TransferWords
 object Notifications {
     const val ID_PROGRESS = 101
     const val ID_RESULTS = 102
+    const val ID_CAST = 103
 
     fun progress(ctx: Context, s: EngineState?): Notification {
         val w = TransferWords(ctx.resources)
@@ -114,6 +119,55 @@ object Notifications {
             b.setContentTitle(ctx.getString(R.string.notif_downloading, "")).setProgress(0, 0, true)
         }
         return b.build()
+    }
+
+    /**
+     * The casting notification (design §6, plan §4.4): "Playing on <TV>", the item and Paused / its position, actions
+     * Pause/Play, Next, Stop; a tap opens the Remote [A24].
+     */
+    fun cast(ctx: Context, s: CastSession?): Notification {
+        val b = NotificationCompat.Builder(ctx, FerryApp.CH_CASTING)
+            .setSmallIcon(R.drawable.ic_stat_ferry)
+            .setOngoing(true)
+            .setOnlyAlertOnce(true)
+            .setSilent(true)
+            .setCategory(NotificationCompat.CATEGORY_TRANSPORT)
+            .setContentIntent(openScreen(ctx, MainActivity.OPEN_REMOTE, 5))
+            .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
+        val tv = s?.tvName ?: ctx.getString(R.string.your_tv)
+        if (s == null || s.phase != CastPhase.Playing) {
+            b.setContentTitle(ctx.getString(R.string.cast_starting, tv))
+        } else {
+            b.setContentTitle(ctx.getString(R.string.cast_playing_on, tv))
+            val st = s.tvState
+            if (st != null && st.title != null) {
+                val parts = listOfNotNull(st.title, CastStateMapper.progress(st).takeIf { it.isNotEmpty() },
+                    if (!st.playing) ctx.getString(R.string.cast_paused) else null)
+                b.setContentText(parts.joinToString(" · "))
+            }
+            val playing = st?.playing != false
+            b.addAction(0, ctx.getString(if (playing) R.string.remote_pause else R.string.remote_play), castAction(ctx, ControlRequest.TOGGLE, 6))
+            if (s.count > 1) b.addAction(0, ctx.getString(R.string.remote_next), castAction(ctx, ControlRequest.NEXT, 7))
+        }
+        b.addAction(0, ctx.getString(R.string.remote_stop), castAction(ctx, ControlRequest.STOP, 8))
+        return b.build()
+    }
+
+    fun notifyCast(ctx: Context, n: Notification) {
+        try {
+            NotificationManagerCompat.from(ctx).notify(ID_CAST, n)
+        } catch (e: SecurityException) {
+        }
+    }
+
+    /** Pause / Next / Stop on the casting notification → CastService (getForegroundService on 26+, getService on 25). */
+    private fun castAction(ctx: Context, action: String, code: Int): PendingIntent {
+        val i = Intent(ctx, CastService::class.java).setAction(
+            if (action == ControlRequest.STOP) CastService.ACTION_STOP else CastService.ACTION_CONTROL,
+        ).putExtra(CastService.EXTRA_ACTION, action)
+        val flags = PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        return if (Build.VERSION.SDK_INT >= 26) PendingIntent.getForegroundService(ctx, code, i, flags)
+        else PendingIntent.getService(ctx, code, i, flags)
     }
 
     private fun openTransfer(ctx: Context): PendingIntent = openScreen(ctx, MainActivity.OPEN_TRANSFER, 0)

@@ -18,6 +18,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -32,6 +33,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import app.ferry.AppGraph
 import app.ferry.R
+import app.ferry.core.model.ControlRequest
 import app.ferry.ui.nav.Screen
 import coil.ImageLoader
 import coil.compose.AsyncImage
@@ -39,6 +41,7 @@ import coil.memory.MemoryCache
 import coil.request.ImageRequest
 import coil.size.Precision
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
 import okhttp3.Call
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.CopyOnWriteArraySet
@@ -53,9 +56,17 @@ data class TvPhoto(val name: String, val url: String, val key: String)
  * a full interval before the slideshow moves on, B76); overlay "3 / 24 · name" for 2 s after each key and photo
  * change. A photo that can't be decoded shows "Can't show this photo" and the slideshow moves on after 2 s [A20].
  * The viewer (OK on one photo) is the same screen, started paused at that photo. Keys through [TvKeys] (B74).
+ *
+ * A cast from the phone (Ph9, design §5.5) uses the same screen with the phone's [intervalMs] and the phone's
+ * [commands] (toggle / play / pause / next / prev / interval); the remote's keys keep working too [T5].
  */
 @Composable
-fun TvViewerScreen(s: Screen.TvViewer, onBack: () -> Unit) {
+fun TvViewerScreen(
+    s: Screen.TvViewer,
+    onBack: () -> Unit,
+    intervalMs: Long? = null,
+    commands: Flow<ControlRequest>? = null,
+) {
     val ctx = LocalContext.current
     val photos = s.photos
     val n = photos.size
@@ -65,7 +76,7 @@ fun TvViewerScreen(s: Screen.TvViewer, onBack: () -> Unit) {
     var overlay by remember(s) { mutableIntStateOf(0) } // bumped → the overlay shows for 2 s
     var overlayShown by remember { mutableStateOf(false) }
     val failed = remember(s) { mutableStateMapOf<Int, Boolean>() }
-    val intervalMs = AppGraph.prefs.slideshowSeconds.coerceIn(1, 60) * 1000L
+    var interval by remember(s) { mutableLongStateOf(intervalMs ?: (AppGraph.prefs.slideshowSeconds.coerceIn(1, 60) * 1000L)) }
     val dm = ctx.resources.displayMetrics
     val (w, h) = dm.widthPixels to dm.heightPixels
     val loader = remember { TvViewerImages.loader(ctx) }
@@ -79,18 +90,34 @@ fun TvViewerScreen(s: Screen.TvViewer, onBack: () -> Unit) {
     DisposableEffect(s) {
         TvViewerState.open(n, s.slideshow)
         if (n > 0) TvViewerState.moved(index, photos[index].name, "open")
-        AppGraph.log("tv", "viewer: $n photos from ${s.start}, slideshow=${s.slideshow}, ${intervalMs / 1000} s")
+        AppGraph.log("tv", "viewer: $n photos from ${s.start}, slideshow=${s.slideshow}, ${interval / 1000} s")
         onDispose { TvViewerState.close() }
     }
     LaunchedEffect(playing) { TvViewerState.playing = playing }
+    LaunchedEffect(interval) { TvViewerState.intervalMs = interval }
+    // The phone's Remote (cast): the same actions as the remote's keys.
+    LaunchedEffect(s, commands) {
+        commands?.collect { c ->
+            when (c.action) {
+                ControlRequest.TOGGLE -> { playing = !playing; overlay++ }
+                ControlRequest.PLAY -> { playing = true; overlay++ }
+                ControlRequest.PAUSE -> { playing = false; overlay++ }
+                ControlRequest.NEXT -> { go(index + 1, "phone"); restart++ }
+                ControlRequest.PREV -> { go(index - 1, "phone"); restart++ }
+                ControlRequest.INTERVAL -> c.intervalMs?.takeIf { it > 0 }?.let { interval = it; restart++; overlay++ }
+                else -> {}
+            }
+            Unit
+        }
+    }
     // Auto-advance; a photo that failed moves on after the message's 2 s [A20].
-    LaunchedEffect(index, playing, restart, failed[index]) {
+    LaunchedEffect(index, playing, restart, failed[index], interval) {
         if (!playing || n < 2) return@LaunchedEffect
         if (failed[index] == true) {
             delay(2_000)
             go(index + 1, "skip")
         } else {
-            delay(intervalMs)
+            delay(interval)
             go(index + 1, "auto")
         }
     }
@@ -213,6 +240,7 @@ object TvViewerState {
     @Volatile var count = 0
     @Volatile var slideshow = false
     @Volatile var playing = false
+    @Volatile var intervalMs = 0L
     @Volatile var index = -1
     @Volatile var name: String? = null
     @Volatile var overlayVisible = false

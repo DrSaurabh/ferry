@@ -29,7 +29,9 @@ import app.ferry.AppGraph
 import app.ferry.R
 import app.ferry.core.download.DownloadStatus
 import app.ferry.core.upload.Phase
+import app.ferry.cast.CastPhase
 import app.ferry.install.ApkInstaller
+import app.ferry.ui.tv.CastSinkImpl
 import app.ferry.install.UpdateProgress
 import app.ferry.net.UpdateState
 import app.ferry.ui.theme.FerryAmber
@@ -37,7 +39,7 @@ import app.ferry.ui.theme.FerryAmber
 /**
  * "Ferry 2.0.7 is available → Update" (design §4.6) [C3], phone and TV (focusable). Tap → the APK is downloaded
  * into `files/update/Ferry.apk` (progress in the banner), size and sha256 are checked, then the system installer
- * opens (through [InstallFlow]: "Allow Ferry to install apps" first if needed). While a transfer or download runs the
+ * opens (through [InstallFlow]: "Allow Ferry to install apps" first if needed). While a transfer, download or cast runs the
  * banner says "Update after this finishes" and does nothing [B21] (installing restarts Ferry).
  */
 @Composable
@@ -47,8 +49,12 @@ fun UpdateBanner(state: UpdateState, modifier: Modifier = Modifier) {
     val progress by AppGraph.updater.progress.collectAsState()
     val transfer by AppGraph.transfers.state.collectAsState()
     val downloads by AppGraph.downloads.state.collectAsState()
+    val cast by AppGraph.casting.session.collectAsState()
+    val tvCast by CastSinkImpl.show.collectAsState()
+    // Ph9: casting counts too (phone sending to a TV, or this TV showing a cast) [B21].
     val busy = (transfer != null && transfer?.phase != Phase.Finished) ||
-        downloads.values.any { it is DownloadStatus.Queued || it is DownloadStatus.Running }
+        downloads.values.any { it is DownloadStatus.Queued || it is DownloadStatus.Running } ||
+        (cast != null && cast?.phase != CastPhase.Ended) || tvCast != null
     val installer = rememberInstallFlow()
     var installWhenReady by remember { mutableStateOf(false) }
     val p = progress

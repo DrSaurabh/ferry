@@ -18,3 +18,5 @@ app.ferry.CancelAndWaitingTest | make_big_jpeg /sdcard/DCIM/Camera/BIG_300MB.jpg
 # Ph7: From PC downloads [P7] (empty Download/Ferry first) and the app update through PC-U [C3].
 app.ferry.FromPcDownloadTest | clear_downloads |
 app.ferry.UpdateBannerTest | |
+# Ph9: casting through the loopback (the TV's receiver in this app, debug CAST_RECEIVER) [P9] [T5].
+app.ferry.CastLoopbackTest | push_cast_media |

@@ -4,7 +4,8 @@
 Run locally once (needs Pillow and ffmpeg); the results are committed, CI never runs this.
     python3 android/ci/make_fixtures.py
 Writes: gps.jpg (EXIF with GPS, checked with ferry.exif_gps_status == "present"),
-photo1..5.jpg, broken.jpg, small.mp4, report.pdf (Ph7: the From PC download test).
+photo1..5.jpg, broken.jpg, small.mp4, report.pdf (Ph7: the From PC download test), cast.mp4 (Ph9: 60 s,
+for the cast loopback test).
 """
 import os
 import subprocess
@@ -71,6 +72,15 @@ def report_pdf(path, pages=40):
         f.write(out)
 
 
+def cast_mp4(path):
+    """Ph9 cast loopback test: 60 s (small.mp4's 6 s end before pause and +10 s can be checked), small and light."""
+    subprocess.run(["ffmpeg", "-y", "-loglevel", "error",
+                    "-f", "lavfi", "-i", "testsrc2=size=426x240:rate=15",
+                    "-f", "lavfi", "-i", "sine=frequency=330",
+                    "-t", "60", "-c:v", "libx264", "-preset", "veryfast", "-crf", "34", "-pix_fmt", "yuv420p",
+                    "-c:a", "aac", "-b:a", "32k", "-movflags", "+faststart", path], check=True)
+
+
 def main():
     os.makedirs(OUT, exist_ok=True)
     gps_jpeg(os.path.join(OUT, "gps.jpg"))
@@ -86,6 +96,8 @@ def main():
                     "-t", "6", "-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p",
                     "-c:a", "aac", "-b:a", "64k", "-movflags", "+faststart",
                     os.path.join(OUT, "small.mp4")], check=True)
+
+    cast_mp4(os.path.join(OUT, "cast.mp4"))
 
     sys.path.insert(0, PC)
     import ferry  # noqa: E402

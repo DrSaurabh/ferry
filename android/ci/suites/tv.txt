@@ -7,6 +7,8 @@ app.ferry.TvSlideshowTest | |
 app.ferry.TvInstallTest | |
 app.ferry.TvInstallAllowedTest | allow_installs |
 app.ferry.TvPcNotFoundTest | |
+# Ph9: receiving casts in TV mode (discovery reply, cast on top of Home, remote + phone controls, lost phone) [T5].
+app.ferry.TvCastReceiveTest | |
 app.ferry.TvScreenshotTour | |
 # Ph0b probe (throw-away; LongPauseProbe was replaced by TvLongPauseTest in Ph8b):
 app.ferry.probe.HostReachProbe | |

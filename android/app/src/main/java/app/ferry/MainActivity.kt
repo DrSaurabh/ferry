@@ -11,13 +11,15 @@ import app.ferry.ui.nav.Screen
 import app.ferry.ui.phone.PhoneRoot
 import app.ferry.ui.theme.FerryTheme
 import app.ferry.ui.theme.TvTheme
+import app.ferry.ui.tv.CastReceiverHost
 import app.ferry.ui.tv.KeepScreenOn
 import app.ferry.ui.tv.TvKeys
 import app.ferry.ui.tv.TvRoot
 
 /**
  * The single activity (plan §4.2): phone layout (edge-to-edge, FerryTheme) or TV layout (TvTheme).
- * Debug builds only: extras `app.ferry.debug.UI = tv|phone` and `app.ferry.debug.NET = any` [PR2] [B27].
+ * Debug builds only: extras `app.ferry.debug.UI = tv|phone`, `app.ferry.debug.NET = any` [PR2] and
+ * `app.ferry.debug.CAST_RECEIVER = true` (the TV's cast receiver in phone mode, for the loopback test) [B27].
  */
 class MainActivity : ComponentActivity() {
     /** The back stack (tests read the top screen). */
@@ -39,6 +41,10 @@ class MainActivity : ComponentActivity() {
         }
         val nav = Navigator(start)
         this.nav = nav
+        // Receiving casts (design §5.5): TV mode; on a phone only with the debug extra (emulator loopback test, B27).
+        val receiver = tv || (BuildConfig.DEBUG && intent?.getBooleanExtra(DeviceMode.EXTRA_CAST_RECEIVER, false) == true)
+        AppGraph.castReceiverOn = receiver
+        if (receiver) lifecycle.addObserver(CastReceiverHost(this))
         if (savedInstanceState == null) openFrom(intent)
         if (tv) {
             KeepScreenOn.poke(this) // opening Ferry counts as a key press (design §5.1 [A10])
@@ -64,12 +70,13 @@ class MainActivity : ComponentActivity() {
         openFrom(intent)
     }
 
-    /** Extra `open = transfer | fromPc` (from the notifications) pushes that screen (plan §4.2) [A24]. */
+    /** Extra `open = transfer | fromPc | remote` (from the notifications) pushes that screen (plan §4.2) [A24]. */
     private fun openFrom(i: Intent?) {
         if (AppGraph.isTv) return
         when (i?.getStringExtra(EXTRA_OPEN)) {
             OPEN_TRANSFER -> nav?.show(Screen.Transfer)
             OPEN_FROM_PC -> nav?.show(Screen.FromPc)
+            OPEN_REMOTE -> nav?.show(Screen.Remote)
         }
     }
 
@@ -82,5 +89,6 @@ class MainActivity : ComponentActivity() {
         const val EXTRA_OPEN = "open"
         const val OPEN_TRANSFER = "transfer"
         const val OPEN_FROM_PC = "fromPc"
+        const val OPEN_REMOTE = "remote"
     }
 }
