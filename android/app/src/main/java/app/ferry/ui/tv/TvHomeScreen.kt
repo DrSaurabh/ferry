@@ -47,6 +47,7 @@ import app.ferry.AppGraph
 import app.ferry.R
 import app.ferry.core.model.OutFile
 import app.ferry.net.ConnectionState
+import app.ferry.player.ResumeRule
 import app.ferry.ui.common.Format
 import app.ferry.ui.common.UpdateBanner
 import app.ferry.ui.common.comingSoon
@@ -138,7 +139,7 @@ fun TvHomeScreen(vm: TvViewModel, conn: ConnectionState.Connected, nav: Navigato
         AppGraph.log("tv", "OK on $row/$i ${c.title}")
         val f = c.file
         when (c.kind) {
-            CardKind.Video -> if (f != null) nav.push(Screen.TvPlayer(f.name, conn.api.absoluteUrl(f.url)))
+            CardKind.Video -> if (f != null) nav.push(Screen.TvPlayer(f.name, conn.api.absoluteUrl(f.url), ResumeRule.key(f.name, f.size, f.mtime)))
             CardKind.Apk -> if (f != null) vm.installing.value = f
             CardKind.Slideshow, CardKind.Photo -> comingSoon(ctx) // viewer and slideshow: Ph8b
             CardKind.Other -> {} // "Open these on your phone or PC": no action [A12]

@@ -15,6 +15,7 @@ object LaunchHelpers {
         AppGraph.prefs.clear()
         AppGraph.prefs.manual = HostPort.parse(Probe.pc)
         AppGraph.prefs.welcomeDone = welcomeDone
+        AppGraph.resume.clear() // TV video positions (Ph8b)
     }
 
     /** MainActivity with the debug extras the suite asks for (`-e app.ferry.debug.NET any` on API 25 [PR2]). */

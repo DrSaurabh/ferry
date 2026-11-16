@@ -12,8 +12,8 @@ sealed interface Screen {
     object FromPc : Screen
     data class Picker(val mode: app.ferry.media.PickerMode) : Screen
     object TvHome : Screen
-    /** Ph8a: the interim TV player (Ph8b: the real one); [url] is absolute. */
-    data class TvPlayer(val name: String, val url: String) : Screen
+    /** The TV video player (Ph8b); [url] is absolute; [resumeKey] = `name|size|mtime` (null: no resume). */
+    data class TvPlayer(val name: String, val url: String, val resumeKey: String? = null) : Screen
 }
 
 /**

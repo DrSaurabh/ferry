@@ -33,7 +33,7 @@ fun TvRoot(nav: Navigator, vm: TvViewModel = viewModel()) {
     val conn by vm.connection.collectAsState()
     Surface(Modifier.fillMaxSize().testTag("tv-root"), color = MaterialTheme.colorScheme.background) {
         when (val s = nav.current) {
-            is Screen.TvPlayer -> TvPlayerScreen(s.name, s.url) { nav.pop() }
+            is Screen.TvPlayer -> TvPlayerScreen(s) { nav.pop() }
             else -> Column(
                 Modifier.fillMaxSize().padding(horizontal = 48.dp, vertical = 27.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp),

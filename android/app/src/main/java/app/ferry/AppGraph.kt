@@ -7,6 +7,7 @@ import android.util.Log
 import app.ferry.core.SystemClock
 import app.ferry.core.log.RingLog
 import app.ferry.data.Prefs
+import app.ferry.data.ResumeStore
 import app.ferry.media.MediaRepo
 import app.ferry.media.UploadItemFactory
 import coil.ImageLoader
@@ -123,6 +124,9 @@ object AppGraph {
         log("app", "app start ${BuildConfig.VERSION_NAME} ${Build.MANUFACTURER} ${Build.MODEL} API ${Build.VERSION.SDK_INT}" +
             if (isTv) " (TV)" else "")
     }
+
+    /** TV video positions (Ph8b, design §5.2). */
+    val resume: ResumeStore by lazy { ResumeStore(app) }
 
     /** Picker thumbnails (Coil + MediaStore thumbnails, plan §4.7); created on first use. */
     val thumbnails: ImageLoader by lazy { MediaRepo.thumbnailLoader(app) }

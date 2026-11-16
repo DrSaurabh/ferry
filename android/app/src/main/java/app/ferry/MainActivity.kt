@@ -12,6 +12,7 @@ import app.ferry.ui.phone.PhoneRoot
 import app.ferry.ui.theme.FerryTheme
 import app.ferry.ui.theme.TvTheme
 import app.ferry.ui.tv.KeepScreenOn
+import app.ferry.ui.tv.TvKeys
 import app.ferry.ui.tv.TvRoot
 
 /**
@@ -51,6 +52,8 @@ class MainActivity : ComponentActivity() {
     /** TV: every key press keeps the screen on for another 30 min on Home (design §5.1 [A10] [H24]). */
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
         if (AppGraph.isTv && event.action == KeyEvent.ACTION_DOWN) KeepScreenOn.poke(this)
+        // Player / Viewer keys go to the screen itself, whatever has focus (B74).
+        if (AppGraph.isTv && TvKeys.dispatch(event)) return true
         return super.dispatchKeyEvent(event)
     }
 

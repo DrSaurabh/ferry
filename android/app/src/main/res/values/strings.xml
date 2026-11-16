@@ -129,6 +129,9 @@
     <string name="tv_other_files">Open these on your phone or PC</string>
     <string name="cant_play_format">This TV can\'t play this video format (%1$s)</string>
     <string name="cant_play_sound">This TV can\'t play this video\'s sound (%1$s)</string>
+    <string name="cant_play">Can\'t play this video. Press Back and try again.</string>
+    <string name="resume_from">Resume from %1$s</string>
+    <string name="start_over">Start over</string>
     <string name="cant_show_photo">Can\'t show this photo</string>
     <string name="cant_show_format">Can\'t show this photo format</string>
     <string name="lost_phone">Lost connection to the phone</string>

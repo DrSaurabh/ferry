@@ -110,12 +110,16 @@ class TvLaunchAndFocusTest {
                 Probe.instrumentation.runOnMainSync { playing = TvPlayerState.player?.isPlaying == true }
                 if (!playing) Thread.sleep(250)
             }
-            Probe.record("interim_player_playing", playing) // asserted by Ph8b's player tests
+            Probe.record("player_playing", playing) // asserted by TvLongPauseTest / TvResumeTest (Ph8b)
             var keptOn = false
             sc.onActivity { a -> keptOn = KeepScreenOn.isOn(a) }
             assertTrue("screen kept on while the player shows", keptOn)
-            SendHelpers.settle()
-            Shots.take("tv-player-interim")
+            // Up shows the display-only controller (Ph8b: media3 PlayerView under the platform theme [PA18]).
+            SendHelpers.device.pressDPadUp()
+            SendHelpers.waitUntil("controller shown", 5_000) { TvPlayerState.controllerVisible }
+            Thread.sleep(300)
+            Shots.take("tv-player-controller")
+            assertEquals("Up must not leave the player", 2, t.stackSize())
 
             // Back → Home with the focus on the same card [A13].
             SendHelpers.device.pressBack()
