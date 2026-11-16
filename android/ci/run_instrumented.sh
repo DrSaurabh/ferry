@@ -114,6 +114,8 @@ grant() {
   if err=$(adb shell pm grant "$PKG" "android.permission.$1" 2>&1 | tr -d '\r') && [ -z "$err" ]; then log "granted $1"
   else log "grant $1 refused: $(echo "$err" | grep -m1 -i exception)"; fi
 }
+# Ph8a (B72): what the user does in "Install unknown apps"; on API 30 it kills the app, so it runs between classes.
+allow_installs() { adbs appops set "$PKG" REQUEST_INSTALL_PACKAGES allow > /dev/null 2>&1; log "allow_installs: $(adbs appops get "$PKG" REQUEST_INSTALL_PACKAGES)"; }
 push_media() { adb push "$CI/fixtures/$1" "$2" > /dev/null && log "pushed $1 -> $2"; }
 
 # Media shown to Ferry must be created and indexed by the shell user, never by Ferry (plan §4.14).
@@ -310,6 +312,8 @@ if how=$(pull_files probe "$OUT"); then cp "$OUT/probe/results.txt" "$OUT/probe-
 adb logcat -d > "$OUT/logcat.txt" 2>&1 || true
 echo "----- app log lines (tag Ferry) in logcat ($suite) -----"
 grep -E ' (I|W|E) Ferry *:' "$OUT/logcat.txt" | tail -80
+echo "----- app crashes in logcat ($suite) -----"
+grep -A40 'FATAL EXCEPTION' "$OUT/logcat.txt" | grep -E 'AndroidRuntime' | head -120
 echo "----- FERRY_PROBE lines in logcat ($suite) -----"
 grep 'FERRY_PROBE' "$OUT/logcat.txt" | sed 's/^.*FERRY_PROBE[^:]*: //'
 # Artifacts can't be downloaded into the agent workspace (proxy), so screenshots also go into the job

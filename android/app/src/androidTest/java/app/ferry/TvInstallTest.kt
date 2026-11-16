@@ -19,14 +19,18 @@ import java.util.Collections
 /**
  * TV suite class 5 (plan §4.14) [T4]: D-pad to the Apps row, OK on `Test.apk` → progress dialog → the APK is
  * downloaded into `files/apk/<id>.apk` → (if Ferry may not install apps yet) "Allow Ferry to install apps." →
- * **Open Settings** → `MANAGE_UNKNOWN_APP_SOURCES` for `package:app.ferry` (caught); the test allows it (`appops`),
- * goes Home and back, and Ferry opens the installer by itself: `ACTION_VIEW` of the FileProvider URI with the APK
- * MIME type and a read grant; the bytes behind it equal the PC's file. When the installer returns, `files/apk` is
- * emptied. Both system screens are caught and blocked by an `ActivityMonitor` (as Ph7's `UpdateBannerTest`, B64).
+ * **Open Settings** → `MANAGE_UNKNOWN_APP_SOURCES` for `package:app.ferry` (caught); once installs are allowed,
+ * Ferry opens the installer: `ACTION_VIEW` of the FileProvider URI with the APK MIME type and a read grant; the
+ * bytes behind it equal the PC's file. When the installer returns, `files/apk` is emptied. Both system screens are caught and blocked by an `ActivityMonitor` (as Ph7's `UpdateBannerTest`, B64).
+ * Run twice (B72): first not allowed (ends at the settings screen), then [TvInstallAllowedTest] after the host allowed
+ * installs (API 30 kills the app when that setting changes, so the test cannot change it from inside).
  */
 @RunWith(AndroidJUnit4::class)
-class TvInstallTest {
+open class TvInstallTest {
     private val ctx get() = Probe.context
+
+    /** TvInstallAllowedTest: the host ran `appops set app.ferry REQUEST_INSTALL_PACKAGES allow` before the class. */
+    protected open val mustBeAllowed = false
 
     /** Records (and blocks) the two system screens; reads the installer's URI at once, as the installer would. */
     private class Recorder : Instrumentation.ActivityMonitor() {
@@ -87,7 +91,11 @@ class TvInstallTest {
 
                 val allowedAtFirst = ApkInstaller.canInstall(ctx)
                 Probe.record("can_install_at_first", allowedAtFirst)
+                if (mustBeAllowed) assertTrue("the host allowed installs before this class", allowedAtFirst)
                 if (!allowedAtFirst) {
+                    // Not allowed yet: the explanation, then Open Settings → Ferry's "Install unknown apps" screen.
+                    // The class ends here: on API 30 changing that setting kills the app process (Android 11 remounts
+                    // storage for installers), so the host allows it and TvInstallAllowedTest does the rest (B72).
                     SendHelpers.waitText(ctx.getString(R.string.install_allow))
                     SendHelpers.settle()
                     Shots.take("tv-install-allow")
@@ -98,11 +106,7 @@ class TvInstallTest {
                     val s = rec.intents.first { it.action == Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES }
                     Probe.record("settings_intent", s.data)
                     assertEquals("package:app.ferry", s.data.toString())
-                    Probe.record("appops", SendHelpers.shell("appops set app.ferry REQUEST_INSTALL_PACKAGES allow").trim())
-                    SendHelpers.waitUntil("install allowed", 10_000) { ApkInstaller.canInstall(ctx) }
-                    SendHelpers.device.pressHome()
-                    Thread.sleep(1_500)
-                    ctx.startActivity(Intent(ctx, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                    return@use
                 }
                 SendHelpers.waitUntil("installer opened", 20_000) { rec.intents.any { it.action == Intent.ACTION_VIEW } }
                 val v = rec.intents.first { it.action == Intent.ACTION_VIEW }
@@ -126,4 +130,9 @@ class TvInstallTest {
             Probe.instrumentation.removeMonitor(rec)
         }
     }
+}
+
+/** Second run of [TvInstallTest] after the host allowed installs (suite line, B72): the installer path. */
+class TvInstallAllowedTest : TvInstallTest() {
+    override val mustBeAllowed = true
 }

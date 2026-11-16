@@ -29,6 +29,9 @@ class TvViewModel : ViewModel() {
     @Volatile var currentTitle: String? = null
     @Volatile var bannerFocused = false
 
+    /** The focused button on "PC not found" ("try", "enter", …), for tests. */
+    @Volatile var pcNotFoundFocus: String? = null
+
     fun onCardFocus(f: RowFocus, title: String, has: Boolean) {
         if (has) {
             focus = f

@@ -43,3 +43,4 @@ Ph7 · phone + api25 green on branch · 54048d5 · android 43830880560 · TV che
 Ph7 · TV suite green on branch · c9b0d25 · android 43832627570 · fast-forward main
 Ph7 · main fast-forwarded · 364760b · main android 43834864623 green (all 8 jobs; Ferry-2.0.70 on dist) · DONE
 Ph8a · step 1 (TV home rows, focus memory, thumbnails, install dialog, keep-screen-on, 3 TV tests) · pending · pending · push [emu:tv], wait for CI
+Ph8a · run 1: fast jobs green; TV: banner off-screen, API 30 kills app on install-permission change (B72), PcNotFound focus → fixes · pending · pending · push [emu:tv]

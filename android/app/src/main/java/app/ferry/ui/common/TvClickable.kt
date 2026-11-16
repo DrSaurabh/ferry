@@ -6,14 +6,17 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.unit.dp
 import app.ferry.ui.theme.FerryAmber
+import kotlinx.coroutines.delay
 
 /**
  * The one way a TV card takes focus and clicks (plan §4.9 [PA14]): `onFocusChanged` (focus ring 3 dp amber +
@@ -33,4 +36,34 @@ fun Modifier.tvClickable(shape: Shape, onFocus: (Boolean) -> Unit = {}, onClick:
         }
         .border(3.dp, if (focused) FerryAmber else Color.Transparent, shape)
         .clickable(onClick = onClick)
+}
+
+/**
+ * The same focus ring for Material buttons on the TV ("PC not found", dialogs): their own focus overlay is hard to
+ * see from the sofa (Ph8a screenshots), so they get the amber 3 dp outline as well. Put it first in the button's
+ * modifier; it watches the button's own focus target.
+ */
+fun Modifier.tvFocusRing(shape: Shape, onFocus: (Boolean) -> Unit = {}): Modifier = composed {
+    var focused by remember { mutableStateOf(false) }
+    this
+        .onFocusChanged {
+            if (it.hasFocus != focused) {
+                focused = it.hasFocus
+                onFocus(it.hasFocus)
+            }
+        }
+        .border(3.dp, if (focused) FerryAmber else Color.Transparent, shape)
+}
+
+/**
+ * Gives [requester] focus once it is attached (plan §6 Ph8b risks: "if `requestFocus` races composition, retry
+ * after another frame"): up to 10 frames, until [isFocused] says it worked.
+ */
+suspend fun requestFocusSoon(requester: FocusRequester, isFocused: () -> Boolean) {
+    for (i in 1..10) {
+        runCatching { requester.requestFocus() }
+        withFrameNanos {}
+        if (isFocused()) return
+        delay(50)
+    }
 }

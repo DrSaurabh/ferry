@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
@@ -12,6 +13,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -30,7 +32,9 @@ import app.ferry.R
 import app.ferry.core.HostPort
 import app.ferry.net.BroadcastAddress
 import app.ferry.net.ConnectionState
+import app.ferry.ui.common.requestFocusSoon
 import app.ferry.ui.common.statusText
+import app.ferry.ui.common.tvFocusRing
 
 /**
  * "Can't find your PC" on the TV (design §5.1 [A18], plan §4.9): Try again, the PCs that answered, Enter
@@ -38,7 +42,7 @@ import app.ferry.ui.common.statusText
  * "older Ferry" in the same place.
  */
 @Composable
-fun TvPcNotFound(@Suppress("UNUSED_PARAMETER") vm: TvViewModel, conn: ConnectionState) {
+fun TvPcNotFound(vm: TvViewModel, conn: ConnectionState) {
     val first = remember { FocusRequester() }
     var editing by remember { mutableStateOf(false) }
     var text by remember { mutableStateOf("") }
@@ -54,19 +58,24 @@ fun TvPcNotFound(@Suppress("UNUSED_PARAMETER") vm: TvViewModel, conn: Connection
         editing = false
         AppGraph.connection.refresh()
     }
-    LaunchedEffect(Unit) { runCatching { first.requestFocus() } }
+    DisposableEffect(Unit) { onDispose { vm.pcNotFoundFocus = null } }
+    LaunchedEffect(Unit) { requestFocusSoon(first) { vm.pcNotFoundFocus == "try" } }
+    val pill = RoundedCornerShape(50)
+    fun ring(name: String) = Modifier.tvFocusRing(pill) { has ->
+        if (has) vm.pcNotFoundFocus = name else if (vm.pcNotFoundFocus == name) vm.pcNotFoundFocus = null
+    }
     Column(verticalArrangement = Arrangement.spacedBy(16.dp), modifier = Modifier.testTag("tv-pc-not-found")) {
         Text(stringResource(R.string.tv_pc_not_found), style = MaterialTheme.typography.headlineMedium)
         Text(statusText(conn), style = MaterialTheme.typography.titleMedium)
         Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-            Button(onClick = { AppGraph.connection.refresh() }, modifier = Modifier.focusRequester(first)) {
+            Button(onClick = { AppGraph.connection.refresh() }, modifier = ring("try").focusRequester(first)) {
                 Text(stringResource(R.string.try_again))
             }
             OutlinedButton(onClick = {
                 text = BroadcastAddress.firstThreeOctets(AppGraph.network.ownIpv4)
                 bad = false
                 editing = true
-            }) { Text(stringResource(R.string.enter_address)) }
+            }, modifier = ring("enter")) { Text(stringResource(R.string.enter_address)) }
         }
         val candidates = (conn as? ConnectionState.NotFound)?.candidates.orEmpty()
         if (candidates.isNotEmpty()) {
@@ -75,7 +84,7 @@ fun TvPcNotFound(@Suppress("UNUSED_PARAMETER") vm: TvViewModel, conn: Connection
                 OutlinedButton(onClick = {
                     AppGraph.prefs.manual = HostPort(p.host, p.port)
                     AppGraph.connection.refresh()
-                }) { Text("${p.name}  ${p.host}:${p.port}") }
+                }, modifier = ring("pc-${p.host}")) { Text("${p.name}  ${p.host}:${p.port}") }
             }
         }
         if (editing) {
@@ -92,7 +101,7 @@ fun TvPcNotFound(@Suppress("UNUSED_PARAMETER") vm: TvViewModel, conn: Connection
                     keyboardActions = KeyboardActions(onDone = { save() }),
                     modifier = Modifier.width(420.dp).testTag("tv-address-field"),
                 )
-                Button(onClick = { save() }) { Text(stringResource(R.string.settings_save)) }
+                Button(onClick = { save() }, modifier = ring("save")) { Text(stringResource(R.string.settings_save)) }
             }
             if (bad) Text(stringResource(R.string.settings_address_bad), color = MaterialTheme.colorScheme.error)
         }

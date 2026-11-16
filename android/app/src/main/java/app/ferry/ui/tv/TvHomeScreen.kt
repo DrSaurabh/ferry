@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -93,8 +94,8 @@ fun TvHomeScreen(vm: TvViewModel, conn: ConnectionState.Connected, nav: Navigato
     val counts = rows.map { it.key to it.cards.size }
     val empty = outbox != null && rows.isEmpty()
 
-    // LazyColumn items: 0 banner, 1 idle line, [empty state], then one item per row.
-    val firstRowItem = 2 + (if (empty) 1 else 0)
+    // LazyColumn items: 0 idle line, [empty state], then one item per row.
+    val firstRowItem = 1 + (if (empty) 1 else 0)
     val column = rememberLazyListState()
     val rowStates = remember { mutableMapOf<String, LazyListState>() }
     val requesters = remember { mutableMapOf<RowFocus, FocusRequester>() }
@@ -104,7 +105,7 @@ fun TvHomeScreen(vm: TvViewModel, conn: ConnectionState.Connected, nav: Navigato
         if (placed && TvFocusLogic.exists(vm.focus, counts)) return@LaunchedEffect
         val t = TvFocusLogic.target(vm.focus, counts) ?: return@LaunchedEffect
         val rowIndex = rows.indexOfFirst { it.key == t.row }
-        column.scrollToItem(firstRowItem + rowIndex)
+        column.scrollToItem(if (rowIndex == 0) 0 else firstRowItem + rowIndex) // first row: keep the idle line in view
         withFrameNanos {}
         rowStates[t.row]?.scrollToItem(t.index)
         withFrameNanos {}
@@ -144,8 +145,9 @@ fun TvHomeScreen(vm: TvViewModel, conn: ConnectionState.Connected, nav: Navigato
         }
     }
 
+    // The banner sits above the list, so it is on screen whenever it exists (it may arrive after focus was placed).
+    UpdateBanner(update, Modifier.onFocusChanged { vm.bannerFocused = it.isFocused })
     LazyColumn(state = column, verticalArrangement = Arrangement.spacedBy(20.dp), modifier = Modifier.testTag("tv-home")) {
-        item(key = "banner") { UpdateBanner(update, Modifier.onFocusChanged { vm.bannerFocused = it.isFocused }) }
         item(key = "idle") {
             Column {
                 Text(stringResource(R.string.tv_ready), style = MaterialTheme.typography.titleLarge, modifier = Modifier.testTag("tv-idle"))
@@ -197,7 +199,12 @@ private fun TvRow(
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(r.title, style = MaterialTheme.typography.titleMedium)
         if (r.note != null) Text(r.note, style = MaterialTheme.typography.bodySmall)
-        LazyRow(state = state, horizontalArrangement = Arrangement.spacedBy(16.dp), modifier = Modifier.testTag("row-${r.key}")) {
+        LazyRow(
+            state = state,
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp), // room for the ring and the 1.05 scale
+            modifier = Modifier.testTag("row-${r.key}"),
+        ) {
             itemsIndexed(r.cards, key = { _, c -> c.key }) { i, c ->
                 val m = Modifier
                     .testTag("card-${r.key}-$i")

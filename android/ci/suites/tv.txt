@@ -2,6 +2,7 @@
 # Ph8a: classes 1, 5, 6 (TvLaunchAndFocusTest replaces Ph4's TvLaunchTest [PB20])
 app.ferry.TvLaunchAndFocusTest | |
 app.ferry.TvInstallTest | |
+app.ferry.TvInstallAllowedTest | allow_installs |
 app.ferry.TvPcNotFoundTest | |
 # Ph0b probes (throw-away; LongPauseProbe goes in Ph8b):
 app.ferry.probe.HostReachProbe | |

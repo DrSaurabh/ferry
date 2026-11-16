@@ -3,6 +3,7 @@ package app.ferry.ui.tv
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -12,6 +13,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -28,6 +31,8 @@ import app.ferry.core.model.OutFile
 import app.ferry.install.ApkInstaller
 import app.ferry.ui.common.Format
 import app.ferry.ui.common.InstallFlow
+import app.ferry.ui.common.requestFocusSoon
+import app.ferry.ui.common.tvFocusRing
 import app.ferry.ui.phone.FromPcActions
 import app.ferry.ui.phone.downloadText
 import java.io.File
@@ -61,7 +66,9 @@ fun TvInstallDialog(file: OutFile, installer: InstallFlow, onClose: () -> Unit) 
     }
     val failed = st is DownloadStatus.Failed || st is DownloadStatus.Cancelled
     val button = remember { FocusRequester() }
-    LaunchedEffect(failed) { runCatching { button.requestFocus() } }
+    var buttonFocused by remember { mutableStateOf(false) }
+    LaunchedEffect(failed) { requestFocusSoon(button) { buttonFocused } }
+    val ring = Modifier.tvFocusRing(RoundedCornerShape(50)) { buttonFocused = it }.focusRequester(button)
     AlertDialog(
         onDismissRequest = {
             if (!failed) FromPcActions.cancel(ctx, file.id)
@@ -88,12 +95,12 @@ fun TvInstallDialog(file: OutFile, installer: InstallFlow, onClose: () -> Unit) 
         },
         confirmButton = {
             if (failed) {
-                TextButton(onClick = onClose, modifier = Modifier.focusRequester(button)) { Text(stringResource(R.string.ok)) }
+                TextButton(onClick = onClose, modifier = ring) { Text(stringResource(R.string.ok)) }
             } else {
                 TextButton(onClick = {
                     FromPcActions.cancel(ctx, file.id)
                     onClose()
-                }, modifier = Modifier.focusRequester(button)) { Text(stringResource(R.string.cancel)) }
+                }, modifier = ring) { Text(stringResource(R.string.cancel)) }
             }
         },
         modifier = Modifier.testTag("tv-install"),

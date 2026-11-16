@@ -5,6 +5,7 @@ import android.net.Uri
 import android.os.Build
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -96,6 +97,7 @@ class InstallFlow internal constructor(private val ctx: Context) {
     @Composable
     fun Overlay() {
         if (!askAllow) return
+        val ring = if (AppGraph.isTv) Modifier.tvFocusRing(RoundedCornerShape(50)) else Modifier // TV: visible focus
         AlertDialog(
             onDismissRequest = { dismiss() },
             text = {
@@ -106,15 +108,15 @@ class InstallFlow internal constructor(private val ctx: Context) {
             },
             confirmButton = {
                 if (showSteps) {
-                    TextButton(onClick = { dismiss() }) { Text(stringResource(R.string.ok)) }
+                    TextButton(onClick = { dismiss() }, ring) { Text(stringResource(R.string.ok)) }
                 } else {
-                    TextButton(onClick = { openSettings() }, Modifier.testTag("install-open-settings")) {
+                    TextButton(onClick = { openSettings() }, ring.testTag("install-open-settings")) {
                         Text(stringResource(R.string.open_settings))
                     }
                 }
             },
             dismissButton = {
-                if (!showSteps) TextButton(onClick = { away = false; dismiss() }) { Text(stringResource(R.string.cancel)) }
+                if (!showSteps) TextButton(onClick = { away = false; dismiss() }, ring) { Text(stringResource(R.string.cancel)) }
             },
             modifier = Modifier.testTag("install-allow"),
         )
