@@ -43,6 +43,13 @@ class ShareToFerryTest {
         e
     }
 
+    /** The system's URI grants that mention the helper (who holds Ferry's read grant), into the job log. */
+    private fun grants(stage: String) {
+        val lines = SendHelpers.shell("dumpsys activity permissions").lines()
+        val hits = lines.indices.filter { lines[it].contains(helper) || lines[it].contains("owner", ignoreCase = true) }
+        Probe.record("grants_$stage", hits.flatMap { listOf(lines[it]) }.joinToString(" | ") { it.trim() }.take(3000).ifEmpty { "none" })
+    }
+
     @After
     fun screenOn() = SendHelpers.wakeAndUnlock()
 
@@ -55,6 +62,7 @@ class ShareToFerryTest {
         SendHelpers.waitUntil("helper files written", 30_000) {
             SendHelpers.shell("run-as $helper ls -l files/share").contains(names[0])
         }
+        grants("before_share")
         Probe.record("helper_files", SendHelpers.shell("run-as $helper ls -l files/share").replace('\n', ';'))
 
         // Control: without the share's grant Ferry can't read the helper's file.
@@ -85,6 +93,7 @@ class ShareToFerryTest {
         // B45: the grant outlives the share activity (held by the service's start).
         val afterActivity = tryOpen(uri(names[2]))
         Probe.record("open_after_share_activity_destroyed", afterActivity ?: "ok")
+        grants("after_share_activity_destroyed")
         assertEquals("Ferry lost the read grant when the share activity finished (B45)", null, afterActivity)
 
         // Screen off during the 30 MB item.
@@ -105,6 +114,7 @@ class ShareToFerryTest {
         SendHelpers.waitUntil("service stopped", 30_000) { SendHelpers.logged("service stopped:") }
         Thread.sleep(1_000)
         Probe.record("open_after_service_stopped", tryOpen(uri(names[2])) ?: "still readable")
+        grants("after_service_stopped")
 
         LaunchHelpers.launch(open = MainActivity.OPEN_TRANSFER).use {
             SendHelpers.waitText("3 saved", 15_000)

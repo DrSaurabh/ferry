@@ -29,3 +29,4 @@ Ph5a · service + sending core + 3 phone tests green on branch · 913f655 · and
 Ph5a · main run 43772946067 red (phone: test-rule frame clock crash, retry EACCES) → fixed B49/B50, branch green · e450b87 · android 43775378782 · fast-forward main again
 Ph5a · main fast-forwarded · c561f73 · main android 43776311221 green (all 8 jobs; Ferry-2.0.55 on dist) · DONE
 Ph5b · step 1 pushed (share activity, send flow, Send other files, sharehelper, 2 phone tests) · pending · pending · wait for CI
+Ph5b · step 1 green (share, Send other files, helper, share + screen-off tests) · fb65b26 · android 43778273856 · run 2 records grant owners, then fast-forward main
