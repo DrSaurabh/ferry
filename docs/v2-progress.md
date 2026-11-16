@@ -40,3 +40,4 @@ Ph6 · main fast-forwarded · 6a7abbd · main android 43811579040 green (all 8 j
 Ph7 · step 1 (downloads, From PC, installer, update, 3 tests) · pending · pending · push [emu:phone][emu:api25], wait for CI
 Ph7 · run 1: fast jobs + api25 green, phone FromPc PASS, UpdateBanner B66 fix, harness B67 · pending · pending · push [emu:phone][emu:api25]
 Ph7 · phone + api25 green on branch · 54048d5 · android 43830880560 · TV check (dispatch), then fast-forward main
+Ph7 · TV suite green on branch · c9b0d25 · android 43832627570 · fast-forward main
