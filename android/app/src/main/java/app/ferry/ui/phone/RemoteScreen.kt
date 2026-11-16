@@ -10,6 +10,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -17,6 +20,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
@@ -29,6 +33,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -45,7 +50,7 @@ import app.ferry.core.model.ControlRequest
 import app.ferry.ui.nav.Navigator
 
 /**
- * The Remote (design §4.1.5, plan §4.3): title, position / duration (video) or "3 / 24" (photos), ⏮ ⏯ ⏭ ⏹,
+ * The Remote (design §4.1.5, plan §4.3): title, position / duration (video) or "3 / 24" (photos), previous / play-pause / next / stop icons,
  * −10 s / +10 s for a video, 3 / 5 / 10 s per photo for a slideshow. While it is visible the TV is asked for its
  * state every second (CastService). Each button carries a fixed description (tests find it with UiAutomator).
  * Also opened by tapping the casting notification [A24].
@@ -122,9 +127,11 @@ private fun RemoteControls(s: CastSession, vm: CastViewModel, ctx: android.conte
     val st = s.tvState
     val playing = st?.playing != false
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-        RemoteButton("⏮", R.string.remote_prev, Modifier.weight(1f)) { vm.control(ControlRequest.PREV) }
-        RemoteButton(if (playing) "⏸" else "▶", R.string.remote_toggle, Modifier.weight(1f)) { vm.control(ControlRequest.TOGGLE) }
-        RemoteButton("⏭", R.string.remote_next, Modifier.weight(1f)) { vm.control(ControlRequest.NEXT) }
+        RemoteIconButton(R.drawable.ic_prev, R.string.remote_prev, Modifier.weight(1f)) { vm.control(ControlRequest.PREV) }
+        RemoteIconButton(if (playing) R.drawable.ic_pause else R.drawable.ic_play, R.string.remote_toggle, Modifier.weight(1f)) {
+            vm.control(ControlRequest.TOGGLE)
+        }
+        RemoteIconButton(R.drawable.ic_next, R.string.remote_next, Modifier.weight(1f)) { vm.control(ControlRequest.NEXT) }
     }
     if (s.kind == CastRequest.VIDEO) {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
@@ -150,7 +157,20 @@ private fun RemoteControls(s: CastSession, vm: CastViewModel, ctx: android.conte
         onClick = { vm.stop(ctx) },
         colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
         modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp).semantics { contentDescription = ctx.getString(R.string.remote_stop) },
-    ) { Text("⏹  " + stringResource(R.string.remote_stop), style = MaterialTheme.typography.titleMedium) }
+    ) {
+        Icon(painterResource(R.drawable.ic_stop), contentDescription = null)
+        Spacer(Modifier.width(8.dp))
+        Text(stringResource(R.string.remote_stop), style = MaterialTheme.typography.titleMedium)
+    }
+}
+
+/** ⏮ ⏯ ⏭ as drawn icons (Ph10): the ⏸ / ⏹ characters render as colour emoji on Android 14. */
+@Composable
+private fun RemoteIconButton(icon: Int, desc: Int, modifier: Modifier, onClick: () -> Unit) {
+    val d = stringResource(desc)
+    Button(onClick = onClick, modifier = modifier.heightIn(min = 64.dp).semantics { contentDescription = d }) {
+        Icon(painterResource(icon), contentDescription = null, modifier = Modifier.size(32.dp))
+    }
 }
 
 @Composable

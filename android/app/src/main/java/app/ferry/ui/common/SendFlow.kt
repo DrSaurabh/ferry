@@ -137,5 +137,5 @@ fun PreparingCard() {
 fun sendingToast(ctx: Context, count: Int) {
     val pc = (AppGraph.connection.state.value as? app.ferry.net.ConnectionState.Connected)?.name
         ?: AppGraph.prefs.chosenName ?: ctx.getString(R.string.your_pc)
-    Toast.makeText(ctx.applicationContext, ctx.getString(R.string.share_toast, count, pc), Toast.LENGTH_SHORT).show()
+    Toast.makeText(ctx.applicationContext, ctx.resources.getQuantityString(R.plurals.share_toast, count, count, pc), Toast.LENGTH_SHORT).show()
 }

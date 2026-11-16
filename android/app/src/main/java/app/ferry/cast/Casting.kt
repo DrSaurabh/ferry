@@ -69,6 +69,12 @@ class Casting(private val log: (String) -> Unit) {
 
     fun take(id: Int): CastPlan? = plans.remove(id)
 
+    /** Screenshot tour only (Ph10): shows [s] on the Remote / Home without a running cast (null clears it). */
+    @androidx.annotation.VisibleForTesting
+    fun showForTest(s: CastSession?) {
+        _session.value = s
+    }
+
     /** Changes session [id] (ignored once a newer session replaced it). */
     fun update(id: Int, f: (CastSession) -> CastSession) {
         synchronized(this) {

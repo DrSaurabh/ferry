@@ -2,6 +2,8 @@
 #   Class | host steps before it | host check after it
 # Ph4:
 app.ferry.PhoneLaunchTest | |
+# Ph10: the real first "Send photos & videos" without any media permission (refused once; screenshot tour).
+app.ferry.PhonePermissionTour | |
 # Ph0b probe (throw-away; RedactionProbe was replaced by the GPS tests in Ph5a):
 app.ferry.probe.HostReachProbe | |
 # Ph6: first of the media classes, on the fresh install with only "Select photos" access [A15].
@@ -20,3 +22,6 @@ app.ferry.FromPcDownloadTest | clear_downloads |
 app.ferry.UpdateBannerTest | |
 # Ph9: casting through the loopback (the TV's receiver in this app, debug CAST_RECEIVER) [P9] [T5].
 app.ferry.CastLoopbackTest | push_cast_media |
+# Ph10: screenshot tour (states the other classes do not reach; dialogs drawn on their own).
+app.ferry.PhoneScreenshotTour | |
+app.ferry.PhoneDialogsTour | |

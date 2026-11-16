@@ -76,7 +76,7 @@ class UpdateBannerTest {
                 val allowedAtFirst = ApkInstaller.canInstall(ctx)
                 Probe.record("can_install_at_first", allowedAtFirst)
                 if (!allowedAtFirst) {
-                    SendHelpers.waitText(ctx.getString(R.string.install_allow))
+                    SendHelpers.waitText(ctx.getString(R.string.install_allow).take(30))
                     SendHelpers.settle()
                     Shots.take("update-allow-install")
                     SendHelpers.tap(ctx.getString(R.string.open_settings))

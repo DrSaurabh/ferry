@@ -261,7 +261,7 @@ SDK=$(adbs getprop ro.build.version.sdk)
 cat "$OUT/device.txt" >> "$RESULTS"
 
 case $suite in
-  tv) start_pc_tv || exit 1 ;;
+  tv) { start_pc_tv && start_pc E 18768; } || exit 1 ;;   # PC-E: empty outbox (Ph10 tour: empty TV home)
   phone) { start_pc A 18765 &&
            start_pc B 18766 "$CI/fixtures/report.pdf" "$CI/fixtures/small.mp4" "$CI/fixtures/photo1.jpg" &&
            start_pc_update; } || exit 1 ;;
@@ -272,7 +272,7 @@ GPS_NAME=IMG_20250101_120000.jpg
 GPS_SHA=$(sha256sum "$CI/fixtures/gps.jpg" | cut -d' ' -f1)
 # Where the app keeps screenshots/probe files [CP16]: the shell can't read Android/data on API 30 TV (Ph0b).
 case $suite in tv) STORE=internal ;; *) STORE=external ;; esac
-INST_ARGS=(-e pcA 10.0.2.2:18765 -e pcB 10.0.2.2:18766 -e pcU 10.0.2.2:18767 -e suite "$suite" -e store "$STORE" -e gpsName "$GPS_NAME" -e gpsSha "$GPS_SHA" -e bigName BIG_300MB.jpg -e screenOffName SCREENOFF_280MB.jpg)
+INST_ARGS=(-e pcA 10.0.2.2:18765 -e pcB 10.0.2.2:18766 -e pcU 10.0.2.2:18767 -e pcE 10.0.2.2:18768 -e suite "$suite" -e store "$STORE" -e gpsName "$GPS_NAME" -e gpsSha "$GPS_SHA" -e bigName BIG_300MB.jpg -e screenOffName SCREENOFF_280MB.jpg)
 # API 25 image: its only network is reported as cellular, so the app uses the debug NET=any override [PR2].
 if [ "$suite" = api25 ]; then INST_ARGS+=(-e app.ferry.debug.NET any); fi
 

@@ -10,11 +10,14 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
@@ -39,6 +42,11 @@ class InstallFlow internal constructor(private val ctx: Context) {
     /** The user was sent to the settings (or shown the steps): check again on return. */
     private var away = false
 
+    companion object {
+        /** TV: the dialog's main button has the focus (tests read this; UiAutomator can't see Compose focus well). */
+        @Volatile var mainFocused = false
+    }
+
     /** How often the system installer was opened by this flow (TV: `files/apk` is emptied after it returns). */
     var installerOpened by mutableStateOf(0)
         private set
@@ -55,6 +63,7 @@ class InstallFlow internal constructor(private val ctx: Context) {
             AppGraph.log("install", "not allowed to install apps yet: asking")
             pending = apk
             showSteps = false
+            mainFocused = false
             askAllow = true
         }
     }
@@ -97,20 +106,26 @@ class InstallFlow internal constructor(private val ctx: Context) {
     @Composable
     fun Overlay() {
         if (!askAllow) return
-        val ring = if (AppGraph.isTv) Modifier.tvFocusRing(RoundedCornerShape(50)) else Modifier // TV: visible focus
+        val tv = AppGraph.isTv
+        // TV: the main button (Open Settings, or OK under the steps) has the focus first, so one OK press goes on
+        // (Ph10 carry note: Cancel used to be focused first). Visible amber ring as on every TV button.
+        val main = remember { FocusRequester() }
+        val ring = if (tv) Modifier.tvFocusRing(RoundedCornerShape(50)) else Modifier
+        val mainRing = if (tv) Modifier.tvFocusRing(RoundedCornerShape(50)) { mainFocused = it }.focusRequester(main) else Modifier
+        if (tv) LaunchedEffect(showSteps) { requestFocusSoon(main) { mainFocused } }
         AlertDialog(
             onDismissRequest = { dismiss() },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(stringResource(R.string.install_allow))
+                    Text(stringResource(if (tv) R.string.install_allow_tv else R.string.install_allow))
                     if (showSteps) Text(stringResource(stepsText()), Modifier.testTag("install-steps"))
                 }
             },
             confirmButton = {
                 if (showSteps) {
-                    TextButton(onClick = { dismiss() }, ring) { Text(stringResource(R.string.ok)) }
+                    TextButton(onClick = { dismiss() }, mainRing) { Text(stringResource(R.string.ok)) }
                 } else {
-                    TextButton(onClick = { openSettings() }, ring.testTag("install-open-settings")) {
+                    TextButton(onClick = { openSettings() }, mainRing.testTag("install-open-settings")) {
                         Text(stringResource(R.string.open_settings))
                     }
                 }

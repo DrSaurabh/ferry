@@ -157,7 +157,7 @@ fun HomeScreen(nav: Navigator, vm: HomeViewModel = viewModel()) {
                 // After a kill: the vivo steps, prominently [A8]
                 Card(Modifier.fillMaxWidth().testTag("home-interrupted")) {
                     Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text(stringResource(R.string.interrupted, interrupted), style = MaterialTheme.typography.titleMedium)
+                        Text(LocalContext.current.resources.getQuantityString(R.plurals.interrupted, interrupted, interrupted), style = MaterialTheme.typography.titleMedium)
                         Text(stringResource(R.string.vivo_steps), style = MaterialTheme.typography.bodyMedium)
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             OutlinedButton(onClick = { nav.push(Screen.Settings) }) { Text(stringResource(R.string.btn_settings)) }

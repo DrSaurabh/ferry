@@ -68,7 +68,7 @@ class TransferWords(private val r: Resources) {
     private fun stopLine(s: Summary, pcName: String): String? = when (val stop = s.stop) {
         is StopReason.DiskFull -> stop.missingBytes?.takeIf { it > 0 }
             ?.let { r.getString(R.string.pc_disk_full_need, Format.size(it)) } ?: r.getString(R.string.pc_disk_full)
-        StopReason.PcNotFound -> r.getString(R.string.gave_up_waiting, pcName, s.notSent)
+        StopReason.PcNotFound -> r.getQuantityString(R.plurals.gave_up_waiting, s.notSent, pcName, s.notSent)
         StopReason.OldPc -> r.getString(R.string.status_old_pc)
         StopReason.TimeLimit -> r.getString(R.string.time_limit)
         StopReason.Cancelled, null -> null

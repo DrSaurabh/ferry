@@ -74,6 +74,12 @@ class ConnectionManager(
         }
     }
 
+    /** Screenshot tour only (Ph10): shows [s] as if a locate had found it, until the next locate. */
+    @androidx.annotation.VisibleForTesting
+    fun showForTest(s: ConnectionState) {
+        _state.value = s
+    }
+
     /** The PC in use, or null. */
     fun api(): FerryApi? = (_state.value as? ConnectionState.Connected)?.api
 

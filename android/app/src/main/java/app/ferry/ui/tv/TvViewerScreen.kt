@@ -187,7 +187,7 @@ fun TvViewerScreen(
             }
         }
         if (overlayShown && n > 0) {
-            val paused = if (playing) "" else "  ·  ⏸"
+            val paused = if (playing) "" else "  ·  " + stringResource(R.string.cast_paused) // text, not ⏸ (emoji on some fonts)
             Text(
                 "${index + 1} / $n  ·  ${photos[index].name}$paused",
                 style = MaterialTheme.typography.titleMedium,

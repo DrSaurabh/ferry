@@ -74,7 +74,6 @@ import app.ferry.media.SendRequest
 import app.ferry.ui.common.Format
 import app.ferry.ui.common.MediaAccess
 import app.ferry.ui.common.PartialAccessBanner
-import app.ferry.ui.common.comingSoon
 import app.ferry.ui.common.mediaAccess
 import app.ferry.ui.common.rememberSendFlow
 import app.ferry.ui.nav.Navigator
@@ -275,7 +274,7 @@ fun PickerScreen(nav: Navigator, mode: PickerMode, onCast: ((List<MediaPick>) ->
                         when {
                             mode == PickerMode.Send -> flow.send(SendRequest.Picks(picks))
                             onCast != null -> onCast(picks)
-                            else -> comingSoon(ctx)
+                            else -> {}
                         }
                     }) { Text(stringResource(if (mode == PickerMode.Send) R.string.picker_send else R.string.picker_play)) }
                 }
@@ -355,7 +354,7 @@ private fun AlbumList(albums: List<Album>, onOpen: (Album) -> Unit) {
                 )
                 Column(Modifier.weight(1f)) {
                     Text(a.name, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    Text(stringResource(R.string.picker_album_count, a.count), style = MaterialTheme.typography.bodyMedium)
+                    Text(LocalContext.current.resources.getQuantityString(R.plurals.picker_album_count, a.count, a.count), style = MaterialTheme.typography.bodyMedium)
                 }
                 Spacer(Modifier.size(0.dp))
             }

@@ -94,7 +94,7 @@ fun PlayOnTvScreen(nav: Navigator, vm: CastViewModel) {
                         }
                         else -> {
                             Text(stringResource(R.string.tv_not_found), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.testTag("cast-no-tv"))
-                            OutlinedButton(onClick = { vm.find() }) { Text(stringResource(R.string.try_again)) }
+                            OutlinedButton(onClick = { vm.find() }) { Text(stringResource(R.string.cast_find_again)) } // the text says "tap Find again"
                         }
                     }
                 }

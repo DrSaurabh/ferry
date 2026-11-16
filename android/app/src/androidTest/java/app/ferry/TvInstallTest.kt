@@ -8,6 +8,7 @@ import app.ferry.install.ApkInstaller
 import app.ferry.net.ConnectionState
 import app.ferry.probe.Probe
 import app.ferry.probe.Shots
+import app.ferry.ui.common.InstallFlow
 import okhttp3.Request
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -18,8 +19,8 @@ import java.util.Collections
 
 /**
  * TV suite class 5 (plan §4.14) [T4]: D-pad to the Apps row, OK on `Test.apk` → progress dialog → the APK is
- * downloaded into `files/apk/<id>.apk` → (if Ferry may not install apps yet) "Allow Ferry to install apps." →
- * **Open Settings** → `MANAGE_UNKNOWN_APP_SOURCES` for `package:app.ferry` (caught); once installs are allowed,
+ * downloaded into `files/apk/<id>.apk` → (if Ferry may not install apps yet) "Ferry needs your permission to install
+ * apps…" with **Open Settings** focused (Ph10) → one OK press → `MANAGE_UNKNOWN_APP_SOURCES` for `package:app.ferry` (caught); once installs are allowed,
  * Ferry opens the installer: `ACTION_VIEW` of the FileProvider URI with the APK MIME type and a read grant; the
  * bytes behind it equal the PC's file. When the installer returns, `files/apk` is emptied. Both system screens are caught and blocked by an `ActivityMonitor` (as Ph7's `UpdateBannerTest`, B64).
  * Run twice (B72): first not allowed (ends at the settings screen), then [TvInstallAllowedTest] after the host allowed
@@ -97,10 +98,12 @@ open class TvInstallTest {
                     // Not allowed yet: the explanation, then Open Settings → Ferry's "Install unknown apps" screen.
                     // The class ends here: on API 30 changing that setting kills the app process (Android 11 remounts
                     // storage for installers), so the host allows it and TvInstallAllowedTest does the rest (B72).
-                    SendHelpers.waitText(ctx.getString(R.string.install_allow))
+                    // Ph10: Open Settings has the focus first (it used to be Cancel), so one OK press on the remote goes on.
+                    SendHelpers.waitUntil("Open Settings focused", 10_000) { InstallFlow.mainFocused }
+                    runCatching { SendHelpers.waitText(ctx.getString(R.string.install_allow_tv).take(30), 5_000) }
                     SendHelpers.settle()
                     Shots.take("tv-install-allow")
-                    SendHelpers.tap(ctx.getString(R.string.open_settings))
+                    SendHelpers.device.pressDPadCenter()
                     SendHelpers.waitUntil("unknown-sources screen", 10_000) {
                         rec.intents.any { it.action == Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES }
                     }

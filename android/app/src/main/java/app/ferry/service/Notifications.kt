@@ -127,7 +127,7 @@ object Notifications {
      */
     fun cast(ctx: Context, s: CastSession?): Notification {
         val b = NotificationCompat.Builder(ctx, FerryApp.CH_CASTING)
-            .setSmallIcon(R.drawable.ic_stat_ferry)
+            .setSmallIcon(R.drawable.ic_stat_cast) // a TV, not the upload arrow (Ph10)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
             .setSilent(true)
