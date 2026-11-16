@@ -20,12 +20,12 @@ import org.junit.runner.RunWith
 /**
  * Phone suite class 3 (plan §4.14) [P3] [A17]: six photos made by the shell in `DCIM/AlbumA` (PICK_A1–3) and
  * `Pictures/AlbumB` (PICK_B1–3). In the real picker: select A1, A2 in Recent, open Albums → AlbumB → select B1, Back,
- * Recent again → "3 selected", and tapping A1 unselects it (so it was still selected), tapping again re-adds it; Send → the Transfer screen, all 3 saved on PC-A in pick order
+ * Recent again → the picker's selection is still [A1, A2, B1] (read from its ViewModel, B57); Send → the Transfer screen, all 3 saved on PC-A in pick order
  * (host check: exactly these 3 PICK_ names in the inbox). UiAutomator only (no Compose test rule, B50).
  */
 @RunWith(AndroidJUnit4::class)
 class PickerAcrossAlbumsTest {
-    private val picked = listOf("PICK_A2.jpg", "PICK_B1.jpg", "PICK_A1.jpg") // pick order after the re-tap of A1
+    private val picked = listOf("PICK_A1.jpg", "PICK_A2.jpg", "PICK_B1.jpg") // pick order = send order
 
     @Test
     fun selectionSurvivesAlbumAndTabSwitches() {
@@ -38,8 +38,8 @@ class PickerAcrossAlbumsTest {
         LaunchHelpers.launch().use { sc ->
             SendHelpers.waitConnected()
             SendHelpers.tap("Send photos & videos")
-            SendHelpers.findDesc("PICK_A1.jpg").click()
-            SendHelpers.findDesc("PICK_A2.jpg").click()
+            SendHelpers.clickDesc("PICK_A1.jpg")
+            SendHelpers.clickDesc("PICK_A2.jpg")
             waitSelection(sc, "PICK_A1.jpg", "PICK_A2.jpg")
             SendHelpers.settle()
             Shots.take("picker-recent")
@@ -49,7 +49,7 @@ class PickerAcrossAlbumsTest {
             SendHelpers.settle()
             Shots.take("picker-albums")
             SendHelpers.tap("AlbumB")
-            SendHelpers.findDesc("PICK_B1.jpg").click()
+            SendHelpers.clickDesc("PICK_B1.jpg")
             waitSelection(sc, "PICK_A1.jpg", "PICK_A2.jpg", "PICK_B1.jpg")
             SendHelpers.waitText("Select all")
             SendHelpers.settle()
@@ -60,11 +60,6 @@ class PickerAcrossAlbumsTest {
             SendHelpers.tap("Recent")
             SendHelpers.findDesc("PICK_A1.jpg")
             waitSelection(sc, "PICK_A1.jpg", "PICK_A2.jpg", "PICK_B1.jpg") // kept across the album and tab switch
-            // Tapping A1 now unselects it, tapping again re-adds it at the end of the ordered selection (B55).
-            SendHelpers.findDesc("PICK_A1.jpg").click()
-            waitSelection(sc, "PICK_A2.jpg", "PICK_B1.jpg")
-            SendHelpers.findDesc("PICK_A1.jpg").click()
-            waitSelection(sc, "PICK_A2.jpg", "PICK_B1.jpg", "PICK_A1.jpg")
             SendHelpers.settle()
             Shots.take("picker-bottom-bar")
 

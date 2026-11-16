@@ -127,6 +127,23 @@ object SendHelpers {
         throw AssertionError("no '$desc' on screen")
     }
 
+    /**
+     * Clicks a picker cell; a node that went stale (the cell recomposed, B57) throws before anything is clicked,
+     * so it is looked up again and clicked once.
+     */
+    fun clickDesc(desc: String) {
+        repeat(3) { i ->
+            try {
+                findDesc(desc).click()
+                return
+            } catch (e: androidx.test.uiautomator.StaleObjectException) {
+                Probe.record("stale_retry", "$desc #${i + 1}")
+                Thread.sleep(300)
+            }
+        }
+        throw AssertionError("'$desc' kept going stale")
+    }
+
     /** Engine runs that have finished so far (each logs "finished: Summary(…)"), to wait for the next one. */
     fun finishedRuns(): Int = AppGraph.ringLog.snapshot().count { it.contains(" engine finished:") }
 }
