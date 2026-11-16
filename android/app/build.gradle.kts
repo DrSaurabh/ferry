@@ -13,10 +13,15 @@ val ferryRun = System.getenv("FERRY_RUN_NUMBER")?.toIntOrNull()
 val ferryVersionCode = if (ferryRelease && ferryRun != null) 20000 + ferryRun else 1
 val ferryVersionName = if (ferryRelease && ferryRun != null) "2.0.$ferryRun" else "2.0.0-dev"
 
-// Release signing [H18]: the keystore is committed to this private repo (android/signing/).
+// Release signing [H38]: the keystore is committed ENCRYPTED (android/signing/ferry-release.jks.enc).
+// CI decrypts it before the build; the passphrase (also store/key password) is the repository
+// secret FERRY_SIGNING_PASS. Without it the release APK is left unsigned and check_apk.py fails.
 val signingProps = Properties().apply {
     rootProject.file("signing/signing.properties").inputStream().use { load(it) }
 }
+val signingPass: String? = System.getenv("FERRY_SIGNING_PASS")?.takeIf { it.isNotEmpty() }
+val signingStore = rootProject.file(signingProps.getProperty("storeFile"))
+val canSign = signingPass != null && signingStore.exists()
 
 android {
     namespace = "app.ferry"
@@ -30,16 +35,18 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
     signingConfigs {
-        create("release") {
-            storeFile = rootProject.file(signingProps.getProperty("storeFile"))
-            storePassword = signingProps.getProperty("storePassword")
-            keyAlias = signingProps.getProperty("keyAlias")
-            keyPassword = signingProps.getProperty("keyPassword")
+        if (canSign) {
+            create("release") {
+                storeFile = signingStore
+                storePassword = signingPass
+                keyAlias = signingProps.getProperty("keyAlias")
+                keyPassword = signingPass
+            }
         }
     }
     buildTypes {
         release {
-            signingConfig = signingConfigs.getByName("release")
+            if (canSign) signingConfig = signingConfigs.getByName("release")
             isMinifyEnabled = false
         }
     }

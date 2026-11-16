@@ -75,8 +75,17 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
       - name: CI script tests
         run: python -m pytest -q android/ci
+      - name: Decrypt the release signing key (H38)
+        env: { FERRY_SIGNING_PASS: "${{ secrets.FERRY_SIGNING_PASS }}" }
+        run: |
+          if [ -z "$FERRY_SIGNING_PASS" ]; then
+            echo "::error::Repository secret FERRY_SIGNING_PASS is missing: the release APK cannot be signed (see android/signing/signing.properties)."
+            exit 1
+          fi
+          openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -in android/signing/ferry-release.jks.enc -out android/signing/ferry-release.jks -pass env:FERRY_SIGNING_PASS
       - name: Unit tests, lint (NewApi), release + debug + androidTest APKs, share helper APK (CP21)
         working-directory: android
+        env: { FERRY_SIGNING_PASS: "${{ secrets.FERRY_SIGNING_PASS }}" }
         run: ./gradlew --no-daemon :app:testDebugUnitTest :app:lintDebug :app:assembleRelease :app:assembleDebug :app:assembleDebugAndroidTest :sharehelper:assembleDebug
       - name: Check the release APK (manifest, certificate, libraries, version) and write Ferry.apk.json
         run: |

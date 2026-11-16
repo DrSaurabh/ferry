@@ -20,3 +20,6 @@ pc/dist/
 dist/
 ci-out/
 apks/
+
+# decrypted signing key (CI only)
+android/signing/ferry-release.jks
