@@ -27,3 +27,8 @@
 - Ph9: player and viewer keep the TV screen on while showing; a cast must too. Update banner busy rule must count casting.
 - Ph10: wording pass for B75 strings (`cant_play`, `resume_from`, `start_over`) and "Can't show this photo"; screenshot tour's "paused" shot of small.mp4 is at the very end — pause mid-video instead.
 - Tests: the test tool's Back press can take several seconds during playback; read positions from what the app recorded, not from before the key press.
+## Added after Ph9
+- Ph10 wording: B81 strings; Remote pause/stop symbols render as colour emoji on Android 14 (use icons); casting notification uses the upload-arrow icon.
+- Ph10 screenshot tour: Play on TV with several TVs / no TV, Remote "Starting…", each way a cast ends.
+- Ph10 DEVICE-CHECKLIST (real devices, Stage 7 can't test): TV discovery by broadcast on the real LAN; Fire TV with UDP 8765 taken by another app (fallback to last-used TV); casting from the vivo with screen off; Fire TV playback of vivo HEVC/HDR video and HEIC photos on Fire OS 6/7.
+- Tests: UiAutomator's view of Compose text can lag (B57, B82) — assert on app state; use text only for screenshots.
