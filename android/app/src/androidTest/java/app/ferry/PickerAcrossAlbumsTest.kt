@@ -15,13 +15,13 @@ import org.junit.runner.RunWith
 
 /**
  * Phone suite class 3 (plan §4.14) [P3] [A17]: six photos made by the shell in `DCIM/AlbumA` (PICK_A1–3) and
- * `Pictures/AlbumB` (PICK_B1–3). In the real picker: select 2 in Recent, open Albums → AlbumB → select 1, Back,
- * Recent again → still selected, "3 selected"; Send → the Transfer screen, all 3 saved on PC-A in pick order
+ * `Pictures/AlbumB` (PICK_B1–3). In the real picker: select A1, A2 in Recent, open Albums → AlbumB → select B1, Back,
+ * Recent again → "3 selected", and tapping A1 unselects it (so it was still selected), tapping again re-adds it; Send → the Transfer screen, all 3 saved on PC-A in pick order
  * (host check: exactly these 3 PICK_ names in the inbox). UiAutomator only (no Compose test rule, B50).
  */
 @RunWith(AndroidJUnit4::class)
 class PickerAcrossAlbumsTest {
-    private val picked = listOf("PICK_A1.jpg", "PICK_A2.jpg", "PICK_B1.jpg")
+    private val picked = listOf("PICK_A2.jpg", "PICK_B1.jpg", "PICK_A1.jpg") // pick order after the re-tap of A1
 
     @Test
     fun selectionSurvivesAlbumAndTabSwitches() {
@@ -54,13 +54,12 @@ class PickerAcrossAlbumsTest {
             SendHelpers.device.pressBack() // album grid → album list
             SendHelpers.waitText("AlbumA")
             SendHelpers.tap("Recent")
-            val a1 = SendHelpers.findDesc("PICK_A1.jpg")
-            val a2 = SendHelpers.findDesc("PICK_A2.jpg")
-            val a3 = SendHelpers.findDesc("PICK_A3.jpg")
-            Probe.record("picker_checked", "A1=${a1.isChecked} A2=${a2.isChecked} A3=${a3.isChecked}")
-            assertTrue("A1 still selected after the album switch", a1.isChecked)
-            assertTrue("A2 still selected after the album switch", a2.isChecked)
-            assertTrue("A3 not selected", !a3.isChecked)
+            SendHelpers.waitText("3 selected")
+            // Still selected after the album round trip: tapping A1 now UNselects it (2 left), tapping again re-adds
+            // it at the end of the ordered selection (B55; UiAutomator's isChecked is not reliable for these cells).
+            SendHelpers.findDesc("PICK_A1.jpg").click()
+            SendHelpers.waitText("2 selected")
+            SendHelpers.findDesc("PICK_A1.jpg").click()
             SendHelpers.waitText("3 selected")
             SendHelpers.settle()
             Shots.take("picker-bottom-bar")

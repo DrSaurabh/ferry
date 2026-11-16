@@ -32,3 +32,4 @@ Ph5b · step 1 pushed (share activity, send flow, Send other files, sharehelper,
 Ph5b · step 1 green (share, Send other files, helper, share + screen-off tests) · fb65b26 · android 43778273856 · run 2 records grant owners, then fast-forward main
 Ph5b · run 2 green (grant owners recorded) · f771f26 · android 43780214930 · fast-forward main
 Ph5b · main fast-forwarded · 37e3040 · main android 43782223057 green (all 8 jobs; dist updated) · DONE
+Ph6 · step 1 pushed (picker, MediaRepo, permission flow, 2 phone tests) · de8e0e5 · pending · wait for CI
