@@ -23,3 +23,7 @@
 - Ph9: a cast must keep the TV screen on (Ph8a keeps it on for 30 min after a key press and while the player is showing).
 - Ph10: on the TV, the "Allow Ferry to install apps" dialog focuses Cancel first; `tv_storage_full` (B71) needs the wording pass. B72: on Fire OS 8, allowing unknown-app installs kills Ferry's process; the README should say "press OK on the APK again".
 - CI flake: FromPcDownloadTest failed once on attempt 1 (10 s text wait); the build log has a suggested fix if it recurs.
+## Added after Ph8b
+- Ph9: player and viewer keep the TV screen on while showing; a cast must too. Update banner busy rule must count casting.
+- Ph10: wording pass for B75 strings (`cant_play`, `resume_from`, `start_over`) and "Can't show this photo"; screenshot tour's "paused" shot of small.mp4 is at the very end — pause mid-video instead.
+- Tests: the test tool's Back press can take several seconds during playback; read positions from what the app recorded, not from before the key press.
