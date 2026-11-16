@@ -10,6 +10,7 @@ import app.ferry.cast.CastPhase
 import app.ferry.cast.CastProblem
 import app.ferry.core.HostPort
 import app.ferry.core.model.CastState
+import app.ferry.media.PickerMode
 import app.ferry.probe.Probe
 import app.ferry.probe.Shots
 import app.ferry.ui.nav.Screen
@@ -83,7 +84,7 @@ class CastLoopbackTest {
 
             // ---- Videos → picker (videos only, one) → Play on TV → Remote.
             SendHelpers.tap(str(R.string.cast_videos))
-            SendHelpers.waitUntil("video picker", 10_000) { screen(sc) == Screen.Picker(app.ferry.media.PickerMode.CastVideo) }
+            SendHelpers.waitUntil("video picker", 10_000) { screen(sc) == Screen.Picker(PickerMode.CastVideo) }
             SendHelpers.clickDesc("CAST_60s.mp4")
             SendHelpers.tap(str(R.string.picker_play))
             SendHelpers.waitUntil("Remote on screen", 15_000) { screen(sc) == Screen.Remote }
@@ -147,7 +148,7 @@ class CastLoopbackTest {
             SendHelpers.tap(str(R.string.btn_play_tv))
             SendHelpers.waitUntil("TV chosen again", 15_000) { vm.chosen.value != null }
             SendHelpers.tap(str(R.string.cast_photos))
-            SendHelpers.waitUntil("photo picker", 10_000) { screen(sc) == Screen.Picker(app.ferry.media.PickerMode.CastPhotos) }
+            SendHelpers.waitUntil("photo picker", 10_000) { screen(sc) == Screen.Picker(PickerMode.CastPhotos) }
             for (name in listOf("CAST_1.jpg", "CAST_2.jpg", "CAST_3.jpg")) SendHelpers.clickDesc(name)
             SendHelpers.tap(str(R.string.picker_play))
             SendHelpers.waitUntil("Remote on screen", 15_000) { screen(sc) == Screen.Remote }

@@ -6,7 +6,9 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import app.ferry.AppGraph
 import app.ferry.R
+import app.ferry.cast.CastPhase
 import app.ferry.cast.CastPlan
+import app.ferry.cast.CastProblem
 import app.ferry.core.HostPort
 import app.ferry.core.cast.CastClient
 import app.ferry.core.model.CastRequest
@@ -104,7 +106,7 @@ class CastViewModel : ViewModel() {
                 CastService.start(ctx, id)
             } catch (e: Exception) { // e.g. Ferry left the screen while preparing (no service start from the background)
                 AppGraph.log("cast", "cast service not started: $e")
-                AppGraph.casting.update(id) { it.copy(phase = app.ferry.cast.CastPhase.Ended, problem = app.ferry.cast.CastProblem.CantServe) }
+                AppGraph.casting.update(id) { it.copy(phase = CastPhase.Ended, problem = CastProblem.CantServe) }
                 return@launch
             }
             onStarted()

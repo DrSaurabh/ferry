@@ -41,7 +41,7 @@ fun TvRoot(nav: Navigator, vm: TvViewModel = viewModel()) {
             key(showing.id) { TvCastScreen(showing) }
         } else when (val s = nav.current) {
             is Screen.TvPlayer -> TvPlayerScreen(s) { nav.pop() }
-            is Screen.TvViewer -> TvViewerScreen(s) { nav.pop() }
+            is Screen.TvViewer -> TvViewerScreen(s, onBack = { nav.pop() })
             else -> Column(
                 Modifier.fillMaxSize().padding(horizontal = 48.dp, vertical = 27.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp),

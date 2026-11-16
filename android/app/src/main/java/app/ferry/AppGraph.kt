@@ -4,6 +4,7 @@ import android.app.Application
 import android.os.Build
 import android.provider.Settings
 import android.util.Log
+import app.ferry.cast.Casting
 import app.ferry.core.SystemClock
 import app.ferry.core.log.RingLog
 import app.ferry.data.Prefs
@@ -55,7 +56,7 @@ object AppGraph {
         private set
 
     /** Phone → TV casting (Ph9): the session, driven by CastService. */
-    lateinit var casting: app.ferry.cast.Casting
+    lateinit var casting: Casting
         private set
 
     /** This process runs the TV's cast receiver (TV mode, or the debug loopback on a phone). */
@@ -119,7 +120,7 @@ object AppGraph {
             sinkFor = { f -> (if (isTv) DownloadSinks.forApk(app) else DownloadSinks.forPhone(app))(f) }, // TV: APKs only [PB18]
             log = { log("download", it) },
         )
-        casting = app.ferry.cast.Casting { log("cast", it) }
+        casting = Casting { log("cast", it) }
         updater = AppUpdater(scope, File(app.filesDir, "update"), { connection.api() }, { connection.relocate() }) { log("update", it) }
         interrupted.value = prefs.interruptedCount
         network.start()

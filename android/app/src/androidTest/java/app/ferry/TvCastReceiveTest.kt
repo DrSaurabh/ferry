@@ -1,6 +1,5 @@
 package app.ferry
 
-import android.app.Activity
 import android.view.KeyEvent
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import app.ferry.core.HostPort
@@ -75,7 +74,7 @@ class TvCastReceiveTest {
             SendHelpers.waitUntil("the TV reports the video playing", 15_000) { state().let { it.kind == "video" && it.playing && it.positionMs > 1_000 } }
             assertTrue("Home stays under the cast (back stack unchanged)", t.screen() is Screen.TvHome)
             var keptOn = false
-            sc.onActivity { a: Activity -> keptOn = KeepScreenOn.isOn(a) }
+            sc.onActivity { a -> keptOn = KeepScreenOn.isOn(a) }
             assertTrue("screen kept on during a cast", keptOn)
             SendHelpers.settle()
             Shots.take("tv-cast-video")
