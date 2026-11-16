@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.ContentUris
 import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.ParcelFileDescriptor
 import android.provider.MediaStore
 import app.ferry.core.upload.EngineState
 import app.ferry.net.ConnectionState
@@ -43,7 +44,24 @@ object SendHelpers {
         }
     }
 
-    private val device get() = UiDevice.getInstance(Probe.instrumentation)
+    val device: UiDevice get() = UiDevice.getInstance(Probe.instrumentation)
+
+    /** A shell command as the shell user (dumpsys, am start, run-as); its output. */
+    fun shell(cmd: String): String {
+        val pfd = Probe.instrumentation.uiAutomation.executeShellCommand(cmd)
+        return ParcelFileDescriptor.AutoCloseInputStream(pfd).use { it.readBytes().toString(Charsets.UTF_8) }
+    }
+
+    /** Screen on again after `UiDevice.sleep()`, keyguard (no PIN on the emulator) dismissed for later classes. */
+    fun wakeAndUnlock() {
+        device.wakeUp()
+        shell("wm dismiss-keyguard")
+        Thread.sleep(500)
+        Probe.record("screen_on_again", device.isScreenOn)
+    }
+
+    /** The RingLog contains [text] (app events such as "share activity destroyed"). */
+    fun logged(text: String): Boolean = AppGraph.ringLog.snapshot().any { it.contains(text) }
 
     /**
      * Polling wait without a Compose test rule (Ph5a B50): the rule's test frame clock ran layout off the main thread

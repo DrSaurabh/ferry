@@ -6,4 +6,4 @@ dependencyResolutionManagement {
     repositories { google(); mavenCentral() }
 }
 rootProject.name = "Ferry"
-include(":core", ":app")
+include(":core", ":app", ":sharehelper")

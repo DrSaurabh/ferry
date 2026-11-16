@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <queries>
+        <package android:name="app.ferry" />
+    </queries>
+    <application android:label="Ferry share helper">
+        <activity
+            android:name=".ShareActivity"
+            android:exported="true"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+        <!-- Not exported: Ferry can read these files only through the grant of the share (plan §4.14 class 4). -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="app.ferry.sharehelper.files"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/paths" />
+        </provider>
+    </application>
+</manifest>

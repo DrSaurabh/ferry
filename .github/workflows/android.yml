@@ -75,9 +75,9 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
       - name: CI script tests
         run: python -m pytest -q android/ci
-      - name: Unit tests, lint (NewApi), release + debug + androidTest APKs
+      - name: Unit tests, lint (NewApi), release + debug + androidTest APKs, share helper APK (CP21)
         working-directory: android
-        run: ./gradlew --no-daemon :app:testDebugUnitTest :app:lintDebug :app:assembleRelease :app:assembleDebug :app:assembleDebugAndroidTest
+        run: ./gradlew --no-daemon :app:testDebugUnitTest :app:lintDebug :app:assembleRelease :app:assembleDebug :app:assembleDebugAndroidTest :sharehelper:assembleDebug
       - name: Check the release APK (manifest, certificate, libraries, version) and write Ferry.apk.json
         run: |
           BT=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
@@ -95,6 +95,7 @@ jobs:
           cat out/ferry-apk/Ferry.apk.json
           cp android/app/build/outputs/apk/debug/app-debug.apk out/test-apks/
           cp android/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk out/test-apks/
+          cp android/sharehelper/build/outputs/apk/debug/sharehelper-debug.apk out/test-apks/
       - uses: actions/upload-artifact@v4
         with: { name: ferry-apk, path: out/ferry-apk/ }
       - uses: actions/upload-artifact@v4

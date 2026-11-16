@@ -28,3 +28,4 @@ Ph5a · step 1 pushed (service, factory, coordinator, screen, tests) · 7ae60a2 
 Ph5a · service + sending core + 3 phone tests green on branch · 913f655 · android 43772061781 · fast-forward main
 Ph5a · main run 43772946067 red (phone: test-rule frame clock crash, retry EACCES) → fixed B49/B50, branch green · e450b87 · android 43775378782 · fast-forward main again
 Ph5a · main fast-forwarded · c561f73 · main android 43776311221 green (all 8 jobs; Ferry-2.0.55 on dist) · DONE
+Ph5b · step 1 pushed (share activity, send flow, Send other files, sharehelper, 2 phone tests) · pending · pending · wait for CI

@@ -1,6 +1,9 @@
 package app.ferry.ui.phone
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -43,6 +46,8 @@ import app.ferry.ui.common.TransferWords
 import app.ferry.ui.common.StatusDot
 import app.ferry.ui.common.UpdateBanner
 import app.ferry.ui.common.comingSoon
+import app.ferry.ui.common.rememberSendFlow
+import app.ferry.media.SendRequest
 import app.ferry.ui.common.statusText
 import app.ferry.ui.nav.Navigator
 import app.ferry.ui.nav.Screen
@@ -62,8 +67,8 @@ class HomeViewModel : ViewModel() {
 }
 
 /**
- * Home (design §4.1, plan §4.3): "→ PC" + status, the four big buttons, banners. In Ph4 the buttons of later
- * phases are placeholders ([comingSoon]; disabled on release builds, which are not given to the user).
+ * Home (design §4.1, plan §4.3): "→ PC" + status, the four big buttons, banners. "Send other files" works from
+ * Ph5b; the buttons of later phases are placeholders ([comingSoon]; disabled on release builds, which are not given to the user).
  */
 @Composable
 fun HomeScreen(nav: Navigator, vm: HomeViewModel = viewModel()) {
@@ -73,65 +78,75 @@ fun HomeScreen(nav: Navigator, vm: HomeViewModel = viewModel()) {
     val transfer by vm.transfer.collectAsState()
     val interrupted by vm.interrupted.collectAsState()
     val later = BuildConfig.DEBUG
-    Column(
-        Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing).verticalScroll(rememberScrollState())
-            .padding(16.dp).testTag("home"),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("Ferry", style = MaterialTheme.typography.headlineMedium, color = MaterialTheme.colorScheme.primary)
-            val pc = (conn as? ConnectionState.Connected)?.name
-            if (pc != null) Text("  → $pc", style = MaterialTheme.typography.titleMedium, maxLines = 1)
-            Spacer(Modifier.weight(1f))
-            TextButton(onClick = { nav.push(Screen.Settings) }) { Text(stringResource(R.string.btn_settings)) }
+    Box(Modifier.fillMaxSize()) {
+        // "Send other files (documents, APKs…)" [A19]: the system chooser (SAF), any type, several files.
+        val flow = rememberSendFlow(onStarted = { nav.push(Screen.Transfer) })
+        val chooseFiles = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
+            AppGraph.log("send", "documents chosen: ${uris.size}")
+            if (uris.isNotEmpty()) flow.send(SendRequest.Uris(uris, "documents"))
         }
-        Card(Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    StatusDot(conn)
-                    Text(statusText(conn), Modifier.padding(start = 12.dp).testTag("status"), style = MaterialTheme.typography.bodyLarge)
-                }
-                if (conn !is ConnectionState.Connected && conn !is ConnectionState.Looking) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedButton(onClick = vm::tryAgain) { Text(stringResource(R.string.try_again)) }
-                        if (conn !is ConnectionState.OldPc) {
-                            OutlinedButton(onClick = { nav.push(Screen.Settings) }) { Text(stringResource(R.string.enter_address)) }
+        Column(
+            Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing).verticalScroll(rememberScrollState())
+                .padding(16.dp).testTag("home"),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("Ferry", style = MaterialTheme.typography.headlineMedium, color = MaterialTheme.colorScheme.primary)
+                val pc = (conn as? ConnectionState.Connected)?.name
+                if (pc != null) Text("  → $pc", style = MaterialTheme.typography.titleMedium, maxLines = 1)
+                Spacer(Modifier.weight(1f))
+                TextButton(onClick = { nav.push(Screen.Settings) }) { Text(stringResource(R.string.btn_settings)) }
+            }
+            Card(Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        StatusDot(conn)
+                        Text(statusText(conn), Modifier.padding(start = 12.dp).testTag("status"), style = MaterialTheme.typography.bodyLarge)
+                    }
+                    if (conn !is ConnectionState.Connected && conn !is ConnectionState.Looking) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            OutlinedButton(onClick = vm::tryAgain) { Text(stringResource(R.string.try_again)) }
+                            if (conn !is ConnectionState.OldPc) {
+                                OutlinedButton(onClick = { nav.push(Screen.Settings) }) { Text(stringResource(R.string.enter_address)) }
+                            }
                         }
                     }
                 }
             }
-        }
-        UpdateBanner(update, onClick = { comingSoon(ctx) })
-        transfer?.let { t ->
-            // Ongoing (or last) transfer card → Transfer screen (design §4.1)
-            val words = remember(ctx) { TransferWords(ctx.resources) }
-            Card(Modifier.fillMaxWidth().clickable { nav.push(Screen.Transfer) }.testTag("home-transfer")) {
-                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text(words.headline(t), style = MaterialTheme.typography.titleMedium)
-                    if (t.phase != Phase.Finished) LinearProgressIndicator(progress = { TransferMath.fraction(t) }, Modifier.fillMaxWidth())
-                    Text(stringResource(R.string.transfer_card_open), color = MaterialTheme.colorScheme.primary)
-                }
-            }
-        }
-        if (interrupted > 0 && transfer == null) {
-            // After a kill: the vivo steps, prominently [A8]
-            Card(Modifier.fillMaxWidth().testTag("home-interrupted")) {
-                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(stringResource(R.string.interrupted, interrupted), style = MaterialTheme.typography.titleMedium)
-                    Text(stringResource(R.string.vivo_steps), style = MaterialTheme.typography.bodyMedium)
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedButton(onClick = { nav.push(Screen.Settings) }) { Text(stringResource(R.string.btn_settings)) }
-                        TextButton(onClick = vm::dismissInterrupted) { Text(stringResource(R.string.ok)) }
+            UpdateBanner(update, onClick = { comingSoon(ctx) })
+            transfer?.let { t ->
+                // Ongoing (or last) transfer card → Transfer screen (design §4.1)
+                val words = remember(ctx) { TransferWords(ctx.resources) }
+                Card(Modifier.fillMaxWidth().clickable { nav.push(Screen.Transfer) }.testTag("home-transfer")) {
+                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text(words.headline(t), style = MaterialTheme.typography.titleMedium)
+                        if (t.phase != Phase.Finished) LinearProgressIndicator(progress = { TransferMath.fraction(t) }, Modifier.fillMaxWidth())
+                        Text(stringResource(R.string.transfer_card_open), color = MaterialTheme.colorScheme.primary)
                     }
                 }
             }
+            if (interrupted > 0 && transfer == null) {
+                // After a kill: the vivo steps, prominently [A8]
+                Card(Modifier.fillMaxWidth().testTag("home-interrupted")) {
+                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(stringResource(R.string.interrupted, interrupted), style = MaterialTheme.typography.titleMedium)
+                        Text(stringResource(R.string.vivo_steps), style = MaterialTheme.typography.bodyMedium)
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            OutlinedButton(onClick = { nav.push(Screen.Settings) }) { Text(stringResource(R.string.btn_settings)) }
+                            TextButton(onClick = vm::dismissInterrupted) { Text(stringResource(R.string.ok)) }
+                        }
+                    }
+                }
+            }
+            for (label in listOf(R.string.btn_send_photos, R.string.btn_send_files, R.string.btn_from_pc, R.string.btn_play_tv)) {
+                val ready = label == R.string.btn_send_files
+                Button(
+                    onClick = { if (ready) chooseFiles.launch(arrayOf("*/*")) else comingSoon(ctx) },
+                    enabled = ready || later,
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 64.dp),
+                ) { Text(stringResource(label), style = MaterialTheme.typography.titleMedium) }
+            }
         }
-        for (label in listOf(R.string.btn_send_photos, R.string.btn_send_files, R.string.btn_from_pc, R.string.btn_play_tv)) {
-            Button(
-                onClick = { comingSoon(ctx) },
-                enabled = later,
-                modifier = Modifier.fillMaxWidth().heightIn(min = 64.dp),
-            ) { Text(stringResource(label), style = MaterialTheme.typography.titleMedium) }
-        }
+        flow.Overlay()
     }
 }

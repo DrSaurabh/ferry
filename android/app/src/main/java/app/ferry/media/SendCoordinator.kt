@@ -85,8 +85,19 @@ object SendCoordinator {
         if (p.grantUris.isNotEmpty()) {
             val clip = ClipData.newRawUri("ferry", p.grantUris[0])
             for (u in p.grantUris.drop(1)) clip.addItem(ClipData.Item(u))
-            i.clipData = clip
-            i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            val withGrant = Intent(i).apply {
+                clipData = clip
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            try {
+                ContextCompat.startForegroundService(ctx, withGrant)
+                AppGraph.log("send", "service started with the read grant for ${p.grantUris.size} URI(s)")
+                return
+            } catch (e: SecurityException) {
+                // A provider that does not let Ferry pass its grant on: those files are read while the process
+                // lives (in-process hand-over); nothing is lost, the engine marks unreadable ones as failed.
+                AppGraph.log("send", "grant forwarding refused: $e")
+            }
         }
         ContextCompat.startForegroundService(ctx, i)
     }

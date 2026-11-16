@@ -7,4 +7,7 @@ app.ferry.probe.HostReachProbe | |
 # Ph5a: media classes. Run 1 without ACCESS_MEDIA_LOCATION (B1 negative control), then grant it.
 app.ferry.GpsNegativeControlTest | grant READ_MEDIA_IMAGES; grant READ_MEDIA_VIDEO; push_media gps.jpg /sdcard/DCIM/Camera/IMG_20250101_120000.jpg; scan_media /sdcard/DCIM/Camera/IMG_20250101_120000.jpg | check_negative
 app.ferry.GpsOriginalTest | grant ACCESS_MEDIA_LOCATION | check_original
+# Ph5b: Share → Ferry from the helper app (another UID, grant only) and the screen-off upload.
+app.ferry.ShareToFerryTest | | check_share
+app.ferry.ScreenOffUploadTest | make_big_jpeg /sdcard/DCIM/Camera/SCREENOFF_280MB.jpg 280; scan_media /sdcard/DCIM/Camera/SCREENOFF_280MB.jpg | check_screen_off
 app.ferry.CancelAndWaitingTest | make_big_jpeg /sdcard/DCIM/Camera/BIG_300MB.jpg 300; scan_media /sdcard/DCIM/Camera/BIG_300MB.jpg | check_no_partials A

@@ -74,6 +74,7 @@
     <string name="partial_access">Ferry can only see some photos → Allow all</string>
     <string name="media_rationale">Choose Allow all. If vivo asks again, choose Allow.</string>
     <string name="share_toast">Sending %1$d files to %2$s</string>
+    <string name="share_nothing">Nothing to send: Ferry sends files, photos and videos.</string>
 
     <!-- Update and install (C3, T4) -->
     <string name="update_available">Ferry %1$s is available → Update</string>

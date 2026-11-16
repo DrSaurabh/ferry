@@ -11,12 +11,18 @@
       no ferry temp file (.ferry-*.part) is left in the inbox.
   verify_inbox.py uploads     --log FERRY_LOG --name NAME --expect saved,skipped [--label PC-A]
       the PC's request log has exactly these upload outcomes for NAME, in this order.
+  verify_inbox.py pattern     --inbox DIR --name NAME --index K --size N [--label PC-A]
+      (Ph5b) the inbox copy is byte-identical to the share helper's file K of N bytes (same rule as
+      android/sharehelper ShareActivity.pattern).
+  verify_inbox.py size        --inbox DIR --name NAME --size N [--label PC-A]
+      (Ph5b) the inbox copy exists and has exactly N bytes.
 
 Prints one line per check; exit 1 on failure.
 """
 import argparse
 import hashlib
 import os
+import struct
 import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "pc"))
@@ -84,15 +90,48 @@ def check_uploads(log_path, name, expect):
     return got == expect, "%s uploads: %s (expected %s)" % (name, got, expect)
 
 
+def helper_pattern(k, size):
+    """The share helper's file k (android/sharehelper ShareActivity.pattern): 4096-byte blocks; block b starts
+    with the 8-byte big-endian (k << 56 | b), then byte j = (j*31 + k*7 + b) mod 256 for j = 8..4095."""
+    base = bytes((j * 31 + k * 7) & 0xFF for j in range(8, 4096))
+    out = []
+    for b in range((size + 4095) // 4096):
+        table = bytes((i + b) & 0xFF for i in range(256))
+        out.append(struct.pack(">Q", (k << 56) | b) + base.translate(table))
+    return b"".join(out)[:size]
+
+
+def check_pattern(inbox, name, k, size):
+    p = os.path.join(inbox, name)
+    if not os.path.isfile(p):
+        return False, "%s: missing in the inbox (%s)" % (name, sorted(os.listdir(inbox)))
+    with open(p, "rb") as f:
+        got = f.read()
+    want = helper_pattern(k, size)
+    if got == want:
+        return True, "%s: identical to the shared file (%d bytes)" % (name, size)
+    return False, "%s: NOT identical (%d bytes, expected %d)" % (name, len(got), size)
+
+
+def check_size(inbox, name, size):
+    p = os.path.join(inbox, name)
+    if not os.path.isfile(p):
+        return False, "%s: missing in the inbox (%s)" % (name, sorted(os.listdir(inbox)))
+    n = os.path.getsize(p)
+    return n == size, "%s: %d bytes (expected %d)" % (name, n, size)
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser()
-    ap.add_argument("mode", choices=["identical", "redacted", "no-partials", "uploads"])
+    ap.add_argument("mode", choices=["identical", "redacted", "no-partials", "uploads", "pattern", "size"])
     ap.add_argument("--inbox")
     ap.add_argument("--name")
     ap.add_argument("--fixture")
     ap.add_argument("--mtime-s")
     ap.add_argument("--log")
     ap.add_argument("--expect", default="")
+    ap.add_argument("--index", type=int)
+    ap.add_argument("--size", type=int)
     ap.add_argument("--label", default="PC")
     a = ap.parse_args(argv)
     if a.mode == "identical":
@@ -101,6 +140,10 @@ def main(argv=None):
         ok, text = check_redacted(a.inbox, a.name, a.fixture)
     elif a.mode == "no-partials":
         ok, text = check_no_partials(a.inbox)
+    elif a.mode == "pattern":
+        ok, text = check_pattern(a.inbox, a.name, a.index, a.size)
+    elif a.mode == "size":
+        ok, text = check_size(a.inbox, a.name, a.size)
     else:
         ok, text = check_uploads(a.log, a.name, [e for e in a.expect.split(",") if e])
     print("%s %s%s" % (a.label, text, "" if ok else "  ** FAILED **"))

@@ -123,6 +123,19 @@ check_original() {
   verify uploads --log "$TMP/A/data/ferry-log.txt" --name "$GPS_NAME" --expect saved,skipped --label PC-A
 }
 check_no_partials() { sleep 2; verify no-partials --inbox "$TMP/$1/inbox" --label "PC-$1"; }
+# Ph5b: the three files the share helper sent (android/sharehelper ShareActivity.FILES) arrived byte-identical.
+check_share() {
+  sleep 1
+  verify pattern --inbox "$TMP/A/inbox" --name ferry-share-big.bin --index 1 --size $((30 * 1048576)) --label PC-A
+  verify pattern --inbox "$TMP/A/inbox" --name ferry-share-notes.txt --index 2 --size 20000 --label PC-A
+  verify pattern --inbox "$TMP/A/inbox" --name ferry-share-small.bin --index 3 --size 300000 --label PC-A
+}
+# Ph5b: the screen-off upload has the size of the phone's file.
+check_screen_off() {
+  local n=SCREENOFF_280MB.jpg size
+  size=$(adbs stat -c %s "/sdcard/DCIM/Camera/$n")
+  verify size --inbox "$TMP/A/inbox" --name "$n" --size "$size" --label PC-A
+}
 
 # ---------- one test class ----------
 # Pass rule (plan §4.14 [PA16]): INSTRUMENTATION_CODE: -1 and an "OK (" line, and none of the failure marks.
@@ -171,7 +184,7 @@ GPS_NAME=IMG_20250101_120000.jpg
 GPS_SHA=$(sha256sum "$CI/fixtures/gps.jpg" | cut -d' ' -f1)
 # Where the app keeps screenshots/probe files [CP16]: the shell can't read Android/data on API 30 TV (Ph0b).
 case $suite in tv) STORE=internal ;; *) STORE=external ;; esac
-INST_ARGS=(-e pcA 10.0.2.2:18765 -e pcB 10.0.2.2:18766 -e suite "$suite" -e store "$STORE" -e gpsName "$GPS_NAME" -e gpsSha "$GPS_SHA" -e bigName BIG_300MB.jpg)
+INST_ARGS=(-e pcA 10.0.2.2:18765 -e pcB 10.0.2.2:18766 -e suite "$suite" -e store "$STORE" -e gpsName "$GPS_NAME" -e gpsSha "$GPS_SHA" -e bigName BIG_300MB.jpg -e screenOffName SCREENOFF_280MB.jpg)
 # API 25 image: its only network is reported as cellular, so the app uses the debug NET=any override [PR2].
 if [ "$suite" = api25 ]; then INST_ARGS+=(-e app.ferry.debug.NET any); fi
 
@@ -181,6 +194,11 @@ adb uninstall "$PKG.test" > /dev/null 2>&1
 adb shell rm -rf "/sdcard/Android/data/$PKG" > /dev/null 2>&1
 adb install -r "$APKS/app-debug.apk" || exit 1
 adb install -r "$APKS/app-debug-androidTest.apk" || exit 1
+# Phone: the share helper app (another UID) for ShareToFerryTest [CP21].
+if [ "$suite" = phone ]; then
+  adb uninstall "$PKG.sharehelper" > /dev/null 2>&1
+  adb install -r "$APKS/sharehelper-debug.apk" || exit 1
+fi
 if [ "$SDK" -ge 33 ]; then grant POST_NOTIFICATIONS; fi
 adb logcat -c
 

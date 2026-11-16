@@ -328,3 +328,31 @@ def test_verify_uploads_matches_a_real_ferry_log_line(tmp_path):
     rl.request("10.0.2.16", "vivo", "POST", "/api/v1/upload?name=IMG.jpg&size=5&mtime=1", "", 200, 5, 3, "saved IMG.jpg", "")
     rl.stop()
     assert verify_inbox.upload_outcomes(str(tmp_path / ferry.LOG_NAME), "IMG.jpg") == ["saved"]
+
+
+# ---------- verify_inbox.py share helper pattern (Ph5b) ----------
+def test_helper_pattern_layout():
+    data = verify_inbox.helper_pattern(2, 4096 + 10)
+    assert len(data) == 4106
+    assert data[:8] == bytes([2, 0, 0, 0, 0, 0, 0, 0])
+    assert data[8] == (8 * 31 + 2 * 7) & 0xFF
+    assert data[4096:4104] == bytes([2, 0, 0, 0, 0, 0, 0, 1])
+    assert data[4104] == (8 * 31 + 2 * 7 + 1) & 0xFF
+    assert data[4105] == (9 * 31 + 2 * 7 + 1) & 0xFF
+
+
+def test_check_pattern_and_size(tmp_path):
+    (tmp_path / "a.bin").write_bytes(verify_inbox.helper_pattern(3, 300000))
+    assert verify_inbox.check_pattern(str(tmp_path), "a.bin", 3, 300000)[0]
+    assert not verify_inbox.check_pattern(str(tmp_path), "a.bin", 1, 300000)[0]
+    assert not verify_inbox.check_pattern(str(tmp_path), "a.bin", 3, 299999)[0]
+    assert not verify_inbox.check_pattern(str(tmp_path), "missing.bin", 3, 1)[0]
+    assert verify_inbox.check_size(str(tmp_path), "a.bin", 300000)[0]
+    assert not verify_inbox.check_size(str(tmp_path), "a.bin", 300001)[0]
+
+
+def test_helper_pattern_30mb_is_fast():
+    import time
+    t = time.time()
+    assert len(verify_inbox.helper_pattern(1, 30 << 20)) == 30 << 20
+    assert time.time() - t < 10
