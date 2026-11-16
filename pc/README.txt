@@ -1,163 +1,276 @@
-FERRY 1.0.2
-Move files between your phone (or Fire TV) and this PC over your home Wi-Fi.
-Phone -> PC: photos, videos, any file.   PC -> phone / Fire TV: anything you put in the outbox.
-Nothing to install on the phone. Works on Windows 10/11 and Linux.
+FERRY 2
+Move photos, videos and files between your phone, your Fire TV and this PC over your
+home Wi-Fi.
+  - Phone -> PC: photos, videos and any other file. Originals are kept (name, date and
+    photo location).
+  - PC -> phone and Fire TV: anything you put in the "Ferry outbox" folder on the PC.
+  - Phone -> Fire TV: play a video or a photo slideshow from the phone on the TV
+    (the PC can be off for this).
+Ferry works on your home Wi-Fi only. It has no passwords on purpose (see the Security
+note at the end). Ferry for the PC needs Windows 10 or 11.
+
+What is in this folder:
+  Ferry.bat              starts Ferry on the PC (double-click it)
+  app\Ferry.apk          the Ferry app for your phone and Fire TV
+  Ferry self-test.bat    checks this PC if something doesn't work
+  README.txt             this guide
+  DEVICE-CHECKLIST.txt   a list of things to try on your phone, TV and PC
 
 ====================================================================================
-QUICK START (WINDOWS)
+1. START FERRY ON THE PC (once)
 ====================================================================================
-1. Before extracting: right-click the downloaded zip > Properties > tick "Unblock" > OK.
+1. Before you unzip: right-click the Ferry zip > Properties > tick "Unblock" > OK.
    (Skipping this makes Windows show a security warning every time.)
 2. Right-click the zip > Extract All... and choose a folder, e.g. Documents\Ferry.
-3. Make sure Python is installed (3.8 or newer). If Ferry says it isn't, install it from
+3. Python 3.8 or newer must be installed. If Ferry says it isn't, install it from
    https://www.python.org/downloads/ and tick "Add python.exe to PATH".
-4. Double-click Ferry.bat. A window opens with a QR code.
-5. The first time, Windows Firewall asks about "Python". Tick "Private networks" and click
-   Allow access. (If you missed it: see Troubleshooting.)
-6. On your phone, open the camera and point it at the QR code. Tap the link.
-7. Ferry opens in Chrome. Tap "Photos & videos" or "Any file", pick, and they're sent.
+4. Double-click Ferry.bat. A black window opens with a QR code.
+5. The first time, Windows Firewall asks about "Python". Tick "Private networks" and
+   click "Allow access". (Missed it? See Troubleshooting.)
 
-Your files arrive in:      Downloads\Phone
-To send files TO the phone: put them in the "Ferry outbox" folder on your Desktop,
-                            then open the "From PC" tab on the phone.
-
-Keep the Ferry window open while you use it. Close it (or press Ctrl+C) to stop.
+Keep the Ferry window open while you use Ferry. Close it (or press Ctrl+C) to stop.
 (After Ctrl+C, Windows may ask "Terminate batch job (Y/N)?" - just press Y.)
 
-====================================================================================
-ONE-TAP ACCESS FROM THE PHONE
-====================================================================================
-After scanning the QR code once: in Chrome tap the three dots (top right) >
-"Add to Home screen". You now have a Ferry icon on your phone.
-
-KEEP THE SAME ADDRESS (recommended)
-The address in the QR code (like http://192.168.1.23:8765) comes from your router.
-Sometimes the router gives the PC a new address, and your home-screen icon and Fire TV
-bookmark stop working. Ferry tells you when this happens ("Your PC's address changed").
-To stop it happening, reserve the address in your router once:
-  1. Open your router's settings page (often http://192.168.1.1 or http://192.168.0.1;
-     the address and password are usually on a sticker on the router).
-  2. Find "DHCP reservation", "Address reservation", "Static lease" or "Fixed IP"
-     (often under LAN, DHCP or Advanced).
-  3. Pick this PC from the list and save. Restart the PC.
+Where files go on the PC:
+  From the phone:     Downloads\Phone
+  To phone and TV:    put files in the "Ferry outbox" folder on your Desktop
 
 ====================================================================================
-SENDING FILES FROM THE PC TO THE PHONE
+2. INSTALL THE APP ON YOUR PHONE (once)
 ====================================================================================
-1. Copy or drag files into the "Ferry outbox" folder on your Desktop.
-2. On the phone, open Ferry and tap "From PC". Tap a file to download it, or
-   "Download all". (Chrome may ask to allow multiple downloads - tap Allow.)
-3. Files go to the phone's Downloads folder. Photos and videos also appear in Gallery.
-Files stay in the outbox until you delete them, so you can send them to several devices.
-Folders are not sent - put the files in directly, or zip the folder first.
+1. Start Ferry on the PC (section 1). The phone and the PC must be on the same Wi-Fi.
+2. On the phone, open the camera and point it at the QR code in the Ferry window.
+   Tap the link. (Or type the "App page" address shown in the Ferry window into
+   Chrome, e.g. http://192.168.1.5:8765/app)
+3. Tap "Download Ferry for Android". If Chrome warns about the file, tap
+   "Download anyway".
+4. Open the downloaded Ferry.apk (tap "Open" in Chrome's message, or find it in
+   Files > Downloads).
+5. If the phone says Chrome isn't allowed to install apps: tap Settings, turn on
+   "Allow from this source", then press Back and tap Install.
+   The phone may also run a security scan or ask for your vivo account password.
+   That is normal for apps that don't come from a store: continue and install.
+6. Open Ferry. The welcome screen explains Ferry. Tap "Allow" on the battery card and
+   then "Allow" in Android's question, so vivo doesn't stop Ferry in the middle of a
+   big transfer. Then tap Continue.
+7. Ferry finds the PC by itself. At the top you see "Connected to <your PC>".
+8. Do the vivo battery steps in section 4 once.
 
 ====================================================================================
-FIRE TV STICK
+3. INSTALL THE APP ON THE FIRE TV (once)
 ====================================================================================
-Watch a video or install an app from the PC on your Fire TV.
-One-time setup:
-  1. Settings > My Fire TV > About > click your device name 7 times to turn on
-     Developer Options. Then Settings > My Fire TV > Developer Options >
-     Install unknown apps > turn on for "Downloader" (and "Silk Browser").
-  2. Install "Downloader" from the Amazon Appstore.
-  3. In Downloader (Browser tab) or the Silk browser, type the address shown in the
-     Ferry window, e.g. http://192.168.1.23:8765 - and save it as a bookmark/favourite.
-     From then on it's one click, no typing.
-Using it: put the file in the outbox on the PC, open your bookmark on the TV, and choose
-  "Play" (videos: .mp4, .m4v, .webm) or "Save" / "Install / Save" (apps).
-Short links: the Ferry window shows a number for each outbox file, e.g.
-  http://192.168.1.23:8765/1  - type it in Downloader to download/install that file.
-  http://192.168.1.23:8765/new - always the newest file in the outbox.
-  (Numbers can change when Ferry restarts - check the Ferry window.)
-Tip: other video types (.mkv etc.) may not play in Silk - install VLC on the Fire TV,
-  then save the file with Ferry and open it in VLC. The Fire TV has little storage,
-  so delete big files after watching.
+Choose way A (easiest, no cables). Use way B only if way A doesn't work.
+After this first install the Fire TV gets new versions of Ferry from the PC by itself.
+
+WAY A: WITH THE "DOWNLOADER" APP
+1. On the Fire TV, open the Appstore (or search with the magnifying glass), find
+   "Downloader" (orange icon, by AFTVnews) and install it.
+2. Allow Downloader to install apps:
+   Fire OS 7 or 8 (most Fire TVs):
+     Settings > My Fire TV > Developer options > Install unknown apps >
+     Downloader: ON
+     No "Developer options"? Settings > My Fire TV > About > select your Fire TV's
+     name (the first line) and press OK 7 times, until it says you are a developer.
+     Then press Back and Developer options is there.
+   Fire OS 6 (older sticks):
+     Settings > My Fire TV > Developer options > Apps from Unknown Sources: ON
+3. Start Ferry on the PC. The Ferry window shows a line like
+     Fire TV:   in Downloader enter 192.168.1.5:8765/app
+4. Open Downloader. In the address box type exactly that address, e.g.
+     192.168.1.5:8765/app
+   and press Go. Downloader downloads Ferry.
+5. Press Install, then Open (or Done). Downloader may offer to delete the downloaded
+   file: press Delete (Ferry is installed, the file is not needed any more).
+6. Ferry opens on the TV and finds the PC by itself. Tip: in "Your Apps & Channels",
+   move Ferry to the front so it's one press away.
+
+WAY B: FROM THE PC WITH ADB (only if way A doesn't work)
+1. On the Fire TV: Settings > My Fire TV > Developer options > ADB debugging: ON
+   (no Developer options? see way A, step 2).
+2. Find the TV's address: Settings > My Fire TV > About > Network > IP Address,
+   e.g. 192.168.1.30.
+3. On the PC, download "SDK Platform-Tools for Windows" from
+   https://developer.android.com/tools/releases/platform-tools
+   and unzip it, e.g. to C:\platform-tools.
+4. Open the C:\platform-tools folder, click the address bar, type cmd and press
+   Enter. A Command Prompt opens there. Type (with your TV's address):
+     adb connect 192.168.1.30
+5. The TV asks "Allow USB debugging?". Tick "Always allow from this computer" and
+   press OK. Then type (with the folder where you unzipped Ferry):
+     adb install "C:\Users\<you>\Documents\Ferry\app\Ferry.apk"
+   It says "Success". Ferry is now in the TV's apps.
+6. You can turn ADB debugging off again afterwards.
 
 ====================================================================================
-LINUX
+4. VIVO BATTERY SETTINGS (once, important)
 ====================================================================================
-1. Extract the zip. In a terminal, in the Ferry folder:  ./ferry.sh
-   (If ferry.sh isn't executable:  chmod +x ferry.sh)
-2. Optional: add Ferry to your app menu:  python3 ferry.py --install-desktop
-3. If you use a firewall (ufw):  sudo ufw allow 8765/tcp
-Files arrive in ~/Downloads/Phone. The outbox is ~/Desktop/Ferry outbox.
+vivo phones stop apps in the background to save battery. That can stop a big
+transfer when the screen turns off. Do these two steps once:
+1. Open Recents and lock Ferry (pull the Ferry card down or tap the lock).
+   (Recents = the list of open apps: swipe up from the bottom and hold.)
+2. Settings > Battery > Background power consumption > Ferry > Allow.
+The same steps are in Ferry > Settings > "Still stopping?". If a transfer was stopped,
+Ferry tells you the next time you open it.
 
 ====================================================================================
-TROUBLESHOOTING
+5. EVERYDAY USE
 ====================================================================================
-The phone can't open the page ("This site can't be reached"):
-  - Is the Ferry window still open?
-  - Are the phone and PC on the SAME Wi-Fi? Guest networks block this - use the main one.
+ON THE PHONE
+  Send photos & videos   Pick photos and videos (Recent or Albums; your picks are kept
+                         when you switch albums), then tap Send. The first time,
+                         Android asks for permission: choose "Allow all".
+  Share > Ferry          In Gallery, Files or any app: select, tap Share, choose Ferry.
+  Send other files       Documents, APKs, anything: pick them in Android's file chooser.
+                         (For photos use Send photos & videos: it keeps the location.)
+  From PC                Files from the PC's "Ferry outbox". Tap a file to save it in
+                         Download/Ferry on the phone, or tap "Download all". Then
+                         "Open" (or "Install" for apps).
+  Play on TV             Open Ferry on the TV first. Then choose Videos or Photo
+                         slideshow, pick, and tap Play on TV. The Remote screen has
+                         play/pause, next, -10 s / +10 s, seconds per photo and Stop.
+                         The phone's screen may go off while it plays.
+Sending carries on with the screen off. You see progress and the speed in the
+notification. Files that are already on the PC are not sent again ("Already on PC").
+The PC never overwrites a file: a different file with the same name is saved as
+"name (1).jpg". If the PC goes away, Ferry waits and carries on when it is back.
+
+ON THE FIRE TV (with the remote)
+  Videos        OK plays. Left/Right: back/forward 10 s. Rewind/Fast-forward keys:
+                30 s. Play/Pause key or OK: pause. Up: show the time bar. Back: stop.
+                If you stopped part-way, Ferry offers "Resume from ..." next time.
+  Photos        "Slideshow" shows all photos, a new one every 5 seconds. Left/Right:
+                previous/next. OK: pause. Or press OK on one photo to look at it.
+  Apps          OK on an app (.apk) installs it on the TV.
+  Other files   Shown for information; open these on your phone or PC.
+New files in the outbox appear on the TV by themselves within a few seconds.
+To play something from the phone, leave Ferry open on its home screen on the TV.
+
+====================================================================================
+6. UPDATING FERRY
+====================================================================================
+1. Close the Ferry window on the PC.
+2. Unzip the new Ferry zip into the same folder as before and replace the files.
+   (Your settings are kept.)
+3. Start Ferry.bat again.
+4. The next time you open Ferry on the phone and on the TV, it says
+   "New Ferry 2.0.x is ready -> Update". Tap it (on the TV press OK), then Install.
+   The first time, allow Ferry to install apps: Ferry opens the setting for you.
+   On some Fire TVs (Fire OS 8) Ferry restarts after you allow this. Then simply
+   press OK on Update (or on the app) once more.
+
+====================================================================================
+7. TROUBLESHOOTING
+====================================================================================
+"PC not found" (phone or TV):
+  - Is the Ferry window open on the PC?
+  - Are the phone/TV and the PC on the SAME Wi-Fi? Guest networks block this.
   - Windows must treat your Wi-Fi as Private: Settings > Network & Internet > Wi-Fi >
-    (your network) > set Network profile to Private. Ferry warns you if it's Public.
-  - Firewall: Windows Security > Firewall & network protection > Allow an app through
-    firewall > make sure "Python" is ticked for Private.
-  - Did the PC's address change? Scan the QR code again (see "Keep the same address").
-  - Some routers have "AP isolation" / "client isolation" turned on - turn it off.
+    (your network) > Network profile: Private. The Ferry window warns if it's Public.
+  - Firewall: Windows Security > Firewall & network protection > Allow an app
+    through firewall > make sure "Python" is ticked for Private. Ferry uses port 8765
+    (TCP for files, UDP for finding the PC). If you made your own firewall rule for
+    TCP 8765 only, add UDP 8765 too.
+  - Some routers have "AP isolation" or "client isolation" on: turn it off.
+  - Still not found? Type the PC's address once: on the phone Ferry > Settings >
+    PC address; on the TV press "Enter address". The address is the one in the Ferry
+    window, e.g. 192.168.1.5 (without http:// and without :8765). Ferry remembers it.
 
-"Port 8765 is used by another program" / "Windows has reserved port 8765":
-  Start Ferry on another port. Open a Command Prompt in the Ferry folder and run:
-      Ferry.bat --port 8800
-  (Then scan the new QR code.)
+"Your PC has an older Ferry":
+  The PC runs an old Ferry. Unzip the new Ferry zip on the PC (section 6) and start
+  Ferry.bat again.
 
-The QR code won't scan:
-  Make the Ferry window bigger or zoom in (Ctrl + mouse wheel), or type the address
-  shown under it into Chrome. A large QR code is also available on the PC at
-  http://localhost:8765/qr
+The phone can't install the app ("blocked" / "not allowed"):
+  Allow the app that opens the APK (Chrome, Files or Ferry) to install apps:
+  Settings > Apps > (that app) > Install unknown apps > Allow. Then try again.
 
-Uploads stop when the phone screen turns off:
-  Keep the screen on while sending. If it does turn off, Ferry continues automatically
-  when you turn the screen back on (that file restarts from the beginning).
+The Fire TV can't install ("unknown sources" / "not allowed"):
+  See section 3, way A, step 2. For updates and apps from the outbox, Ferry needs the
+  same switch: Settings > My Fire TV > Developer options > Install unknown apps >
+  Ferry: ON (Fire OS 6: Apps from Unknown Sources: ON).
 
-Odd files named ".ferry-....part" in the Phone folder:
-  These are unfinished transfers (for example, Ferry was closed while a file was
-  arriving). They are safe to ignore; Ferry deletes them the next time it starts.
+"This TV can't play this video format" / "...can't play this video's sound":
+  The Fire TV can't decode that video or its sound (shown in brackets, e.g. DTS).
+  Convert the video on the PC (e.g. with HandBrake, preset "Fast 1080p30"), or play
+  it on the PC.
 
-Location (GPS) missing from photos:
-  The "Photos & videos" picker may remove location for privacy. Use "Any file" >
-  DCIM > Camera to send untouched originals.
+"Can't show this photo":
+  The photo is damaged or in a format this TV can't show (older Fire TVs can't show
+  HEIC photos). The slideshow moves on to the next photo.
+
+Transfers stop when the phone screen is off:
+  Do the vivo battery steps (section 4).
+
+"Nothing found" when you tap Play on TV:
+  On the TV, open Ferry and leave it on its home screen, then tap "Find again".
+  The phone and the TV must be on the same Wi-Fi.
+
+Where are my files?
+  On the PC:       Downloads\Phone (from the phone)
+  On the phone:    Files > Downloads > Ferry (from the PC); photos and videos also
+                   appear in the Gallery.
+  To the phone/TV: Desktop\Ferry outbox on the PC. Files stay there until you delete
+                   them. Folders are not offered: put the files in directly, or zip
+                   the folder.
+
+Odd files named ".ferry-....part" in Downloads\Phone:
+  Unfinished transfers (e.g. Ferry was closed while a file was arriving). Safe to
+  ignore; Ferry deletes them the next time it starts.
 
 Desktop is in OneDrive:
   Ferry warns about this: files in the outbox also upload to OneDrive. Online-only
   files (cloud icon) must be made available offline first (right-click > Always keep
   on this device).
 
-Check this PC:  double-click "Ferry self-test.bat". It checks everything Ferry needs and
-  saves the results in ferry-selftest.txt.
-Check your phone / TV: open http://<the address>:8765/diag and follow DEVICE-CHECKLIST.txt.
-If Ferry crashes, details are saved in ferry-error.log in the Ferry folder.
+"Port 8765 is used by another program":
+  Start Ferry on another port: open a Command Prompt in the Ferry folder and run
+      Ferry.bat --port 8800
+  The app still finds the PC by itself. If it doesn't, type the address with the
+  new port once (e.g. 192.168.1.5:8800 in Ferry > Settings on the phone).
+
+Logs (useful when you ask for help):
+  - ferry-log.txt in the Ferry folder on the PC lists every transfer and request,
+    with times and errors (ferry-log.1.txt is the older part).
+  - On the phone: Ferry > Settings > Share diagnostics log.
+  - Check this PC: double-click "Ferry self-test.bat". It saves ferry-selftest.txt.
+  - If Ferry on the PC crashes, details are saved in ferry-error.log.
 
 ====================================================================================
-SECURITY NOTE
+8. KEEP THE SAME PC ADDRESS (recommended)
 ====================================================================================
-While Ferry is running, anyone on your Wi-Fi can send files to your PC (they land in
-Downloads\Phone) and can download whatever is in the Ferry outbox. Nothing else on
-your PC is reachable. Only run Ferry on your home network, and close it when done.
+Your router gives the PC its address (like 192.168.1.5). Ferry finds the PC even
+when that address changes. But if you ever type the address by hand (Settings,
+Downloader), a fixed address saves trouble later. Reserve it once:
+  1. Open your router's settings page (often http://192.168.1.1 or
+     http://192.168.0.1; the address and password are usually on a sticker on the
+     router).
+  2. Find "DHCP reservation", "Address reservation", "Static lease" or "Fixed IP"
+     (often under LAN, DHCP or Advanced).
+  3. Pick this PC from the list and save. Restart the PC.
 
 ====================================================================================
-UPDATING AND UNINSTALLING
+9. SECURITY NOTE
 ====================================================================================
-Update: extract the new zip over the old Ferry folder (replace files). Your settings
-  (ferry-state.json) are kept.
-Uninstall: delete the Ferry folder. Your Downloads\Phone and Ferry outbox folders are
-  not touched - delete them if you want. Linux: also delete
-  ~/.local/share/applications/ferry.desktop. Optional (Windows): remove the "Python"
-  rule in Windows Defender Firewall > Allow an app.
+While Ferry runs on the PC, anyone on your Wi-Fi can send files to your PC (they land
+in Downloads\Phone) and can download what is in the Ferry outbox. While Ferry is open
+on the TV, anyone on your Wi-Fi can play videos or photos on it. Nothing else on your
+PC, phone or TV is reachable. Only use Ferry on your home network.
 
 ====================================================================================
-ADVANCED OPTIONS (Command Prompt / terminal)
+10. ADVANCED OPTIONS (Command Prompt in the Ferry folder)
 ====================================================================================
   --port N          use another port (default 8765)
   --no-open         never open the outbox folder
   --inbox PATH      save files from the phone in PATH (exactly this folder)
-  --outbox PATH     offer the files in PATH to the phone/TV (exactly this folder)
+  --outbox PATH     offer the files in PATH to the phone and TV (exactly this folder)
   --selftest        check this PC (same as "Ferry self-test.bat")
-  --install-desktop Linux: add Ferry to the app menu
   --version, --help
 Example:  Ferry.bat --outbox "D:\To phone"
 
+Uninstall: delete the Ferry folder on the PC, and uninstall the Ferry app on the
+phone and TV. Your Downloads\Phone and Ferry outbox folders are not touched.
+
 ====================================================================================
-CREDITS AND LICENCES
+11. CREDITS AND LICENCES
 ====================================================================================
 Ferry is MIT licensed (LICENSE.txt). QR codes are made with the QR Code generator
 library by Project Nayuki (MIT, LICENSE-qrcodegen.txt), lightly modified for Python 3.8.

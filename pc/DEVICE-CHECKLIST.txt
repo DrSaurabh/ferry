@@ -1,52 +1,125 @@
-FERRY - DEVICE CHECKLIST (about 15 minutes)
-Write the result next to each item and send this file back. "Expected" is what should happen.
+FERRY 2 - DEVICE CHECKLIST (about 45 minutes)
+Things the automatic tests can't check, because they need your real phone, Fire TV,
+PC and Wi-Fi. Do them in order. Write the result next to each item ("OK", or what
+happened instead) and send this file back. "Expected" is what should happen.
+If something goes wrong, also send ferry-log.txt (Ferry folder on the PC) and the
+phone's log (Ferry > Settings > Share diagnostics log).
 
----------------------------------------------------------------------------------
-A. WINDOWS PC
----------------------------------------------------------------------------------
-A1. Double-click "Ferry self-test.bat".
-    Expected: every line says PASS ("ALL PASSED"). It saves ferry-selftest.txt - send it.
+---------------------------------------------------------------------------------------
+A. PC (Windows)
+---------------------------------------------------------------------------------------
+A1. Unzip Ferry (README section 1) and double-click Ferry.bat.
+    Expected: Windows Firewall asks about "Python"; after "Allow access" the window
+    shows a QR code and "App: Ferry 2.0.x is ready for your phone and TV".
     Result: ______
-A2. Double-click Ferry.bat. Is the whole QR code visible without scrolling?
-    Expected: yes, black squares on white.                           Result: ______
-A3. Click inside the Ferry window, then send a photo from the phone.
-    Expected: the transfer still completes (the window doesn't freeze). Result: ______
-A4. Double-click Ferry.bat a second time while the first is open.
-    Expected: "Ferry is already running in another window."          Result: ______
+A2. Double-click "Ferry self-test.bat".
+    Expected: "ALL PASSED". It saves ferry-selftest.txt - send it.   Result: ______
 
----------------------------------------------------------------------------------
-B. PHONE (vivo, Chrome)
----------------------------------------------------------------------------------
-B1. Scan the QR code. Expected: Ferry opens; header shows your PC's name. Result: ______
-B2. Open http://<PC address>:8765/diag  (same address as the QR code + /diag)
-B3. diag section 2: tap "Photos & videos picker", pick ONE photo taken with location on.
-    Then tap "Any file picker" and pick the SAME photo via Images/DCIM/Camera.
-    Note for each: GPS: PRESENT / ZEROED / NONE, and whether the date was kept.
-    Photos & videos: GPS ______  date ______
-    Any file:        GPS ______  date ______
-B4. diag section 3: tap Start, put the phone down for 2 minutes without touching it.
-    Expected (hoped): "screen still on". Result: ______
-B5. diag section 4: run both speed tests.  Download ______ MB/s   Upload ______ MB/s
-B6. diag section 5: tap "Test .zip". Open it from Chrome's download message or Files.
-    Expected: it opens and shows two text files.                     Result: ______
-    Tap "Test .apk". Note exactly what Chrome shows (warning? blocked?). Result: ______
-B7. Back on the main page: send 20+ photos and one large video (1 GB+).
-    Expected: all saved; speed shown; "All done".                    Result: ______
-B8. Send the same photos again. Expected: "Already on PC" for each.   Result: ______
-B9. Put 3 files in the Desktop "Ferry outbox". On the phone: From PC > Download all.
-    Expected: one "Allow multiple downloads?" question, then 3 downloads. Result: ______
-B10. Chrome > three dots > Add to Home screen. Expected: Ferry boat icon. Result: ______
+---------------------------------------------------------------------------------------
+B. PHONE (vivo): install and first use
+---------------------------------------------------------------------------------------
+B1. Install the app from the QR code (README section 2). Note every warning or question
+    the phone shows (Chrome, Play Protect, vivo), in order.
+    Result: ______________________________________________
+B2. Open Ferry. Welcome screen > battery card > Allow > Continue.
+    Expected: Home says "Connected to <your PC>" within a few seconds, without typing
+    anything (Ferry finds the PC by itself).                         Result: ______
+B3. Do the vivo battery steps (README section 4). Do the menu names match your phone?
+    If not, write what they are called:  ______________________________________
 
----------------------------------------------------------------------------------
-C. FIRE TV STICK
----------------------------------------------------------------------------------
-C1. Open the Ferry address in Silk (or Downloader's browser).
-    Expected: a list of outbox files only (no "Send to PC" tab), big text. Result: ______
-C2. Can you move between buttons with the remote's arrows and press OK?
-    (Or does a mouse-like cursor appear instead?)                     Result: ______
-C3. Put an .mp4 in the outbox. On the TV press "Play". Expected: it plays and you
-    can skip forward.                                                 Result: ______
-C4. In Downloader, type http://<PC address>:8765/new with an .apk as the newest outbox
-    file. Expected: Downloader downloads it and offers to install.   Result: ______
+---------------------------------------------------------------------------------------
+C. PHONE -> PC  (acceptance 1, 2, 3)
+---------------------------------------------------------------------------------------
+C1. Send photos & videos: pick 10 photos in one album and 10 in another (Albums tab),
+    some taken with location on. Send.
+    Expected: "20 saved". On the PC, in Downloads\Phone: same names; Windows shows the
+    date taken; right-click a photo > Properties > Details shows GPS.
+    Result: ______
+C2. Send the same 20 photos again.
+    Expected: "20 already on PC", nothing is copied again.           Result: ______
+C3. Send one video of 1 GB or more. After it starts, turn the screen off and leave the
+    phone for 5 minutes. Then turn it on.
+    Expected: the video is saved on the PC (same size).               Result: ______
+    Speed shown with the screen on: ______ MB/s   with the screen off: ______ MB/s
+C4. Send about 100 photos at once. Note the speed shown.
+    Expected (hope): 10 MB/s or more.                     Speed: ______ MB/s
+C5. In the vivo Gallery: select 3 photos > Share > Ferry.
+    Expected: a short message "Sending 3 files to <your PC>", you stay in the Gallery,
+    the 3 photos arrive on the PC with their location.               Result: ______
+C6. While a big video is sending, switch the PC's Wi-Fi off (or unplug its network)
+    for 1 minute, then on again.
+    Expected: the phone shows "Waiting for <your PC>..." and carries on by itself; no
+    half file on the PC.                                             Result: ______
 
-Thank you! Send this file (and ferry-selftest.txt) back.
+---------------------------------------------------------------------------------------
+D. PC -> PHONE  (acceptance 4)
+---------------------------------------------------------------------------------------
+D1. Put a PDF, a photo and an .apk in "Ferry outbox" on the PC's Desktop. On the
+    phone: From PC > Download all.
+    Expected: no warnings; the files are in Files > Downloads > Ferry; "Open" opens
+    them; "Install" on the .apk opens Android's installer.          Result: ______
+
+---------------------------------------------------------------------------------------
+E. FIRE TV: install and first use
+---------------------------------------------------------------------------------------
+E1. Which Fire TV and Fire OS? (Settings > My Fire TV > About)   ________________
+E2. Install Ferry with Downloader (README section 3, way A). Note every screen or
+    question the TV shows.                                       Result: ______
+    (Only if way A failed: way B with adb.)                      Result: ______
+E3. Open Ferry on the TV. Expected: the TV finds the PC by itself; you see the rows
+    Videos / Photos / Apps / Other files of the outbox.          Result: ______
+E4. Can you do everything with the remote (arrows, OK, Back)? Is the focused card
+    easy to see from the sofa?                                   Result: ______
+
+---------------------------------------------------------------------------------------
+F. FIRE TV: videos, photos, apps  (acceptance 5, 6, 7)
+---------------------------------------------------------------------------------------
+F1. Put the 241.9 MB test video in the outbox. On the TV, play it. Pause for 30 seconds,
+    then play; fast-forward and rewind a few times (also Left/Right).
+    Expected: it never freezes.                                  Result: ______
+F2. Stop it half-way (Back) and open it again.
+    Expected: "Resume from ..." is focused; OK continues there.  Result: ______
+F3. Play a 4K or HEVC video (e.g. one recorded on the vivo).
+    Expected: it plays, or a clear message "This TV can't play this video format (...)".
+    Result: ______
+F4. Put 10 photos in the outbox (include one HEIC photo from the vivo if you have one).
+    Photos > Slideshow. Expected: a new photo every 5 s; Left/Right go back/forward;
+    OK pauses. HEIC: shown, or "Can't show this photo format".  Result: ______
+F5. Put an .apk in the outbox. On the TV: Apps > OK on it.
+    Expected: Ferry asks to "install apps" the first time (Open Settings has the focus;
+    turn Ferry ON, press Back), then Android's installer opens. On Fire OS 8 Ferry may
+    restart after the switch: press OK on the app once more.
+    Result: ______
+F6. Leave the TV on Ferry's home screen without touching it for 20 minutes.
+    Expected: the screensaver does NOT come on (Ferry keeps the screen on for 30
+    minutes, so the phone can still play on it).                 Result: ______
+
+---------------------------------------------------------------------------------------
+G. PHONE -> FIRE TV with the PC off  (acceptance 8)
+---------------------------------------------------------------------------------------
+G1. Turn the PC off (or close Ferry on the PC). Open Ferry on the TV. On the phone:
+    Play on TV.
+    Expected: the phone finds the TV by itself ("TV: <name>").   Result: ______
+G2. Videos > pick a phone video > Play on TV.
+    Expected: it plays on the TV; the phone's Remote can pause, +10 s, Stop; the TV
+    remote works too.                                            Result: ______
+G3. Start a video again and turn the phone's screen off for 3 minutes.
+    Expected: it keeps playing on the TV.                        Result: ______
+G4. Photo slideshow > pick 10 photos > Play on TV. Try Next and 3/5/10 s on the phone.
+    Expected: the TV shows them and follows the phone.           Result: ______
+G5. Only if G1 did not find the TV: write what the phone showed. Then close other apps
+    on the TV, open Ferry on the TV again and tap "Find again" on the phone.
+    (Another TV app may be using Ferry's port 8765; Ferry then uses the TV it played
+    on last time.)                                               Result: ______
+
+---------------------------------------------------------------------------------------
+H. UPDATES AND LOG  (acceptance 9, 10)
+---------------------------------------------------------------------------------------
+H1. When you get a newer Ferry zip: unzip it over the old folder, start Ferry.bat.
+    Expected: phone and TV show "New Ferry 2.0.x is ready -> Update"; Update installs
+    it; your settings are kept.                                  Result: ______
+H2. Open ferry-log.txt in the Ferry folder.
+    Expected: one line per file sent or downloaded, with the device name.
+    Result: ______
+
+Thank you! Send this file, ferry-selftest.txt and ferry-log.txt back.
