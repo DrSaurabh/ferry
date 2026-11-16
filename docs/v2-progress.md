@@ -56,3 +56,4 @@ Ph9 · phone+TV suites green (CastLoopbackTest, TvCastReceiveTest) · ddcb630 ·
 Ph9 · branch green incl. all emulator suites · 1eadb85 · android 43921967061 · fast-forward main
 Ph9 · main fast-forwarded · 724db79 · main android 43946233666 green (all 8 jobs; Ferry-2.0.91 on dist) · DONE
 Ph10 · step 1 (wording, TV texts, install focus, Remote icons, tours) + README/checklist/handoff · 00b06a4/9f440d0 · android 43951202274 · wait for emulators, review screenshots
+Ph10 · branch green incl. all emulator suites (TV/API25 on 9e7f50b run 43955263842, phone on 1f396da run 43959310474) · 1f396da · android 43959310474 · fast-forward main
