@@ -19,6 +19,10 @@ import okhttp3.Request
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
+import androidx.test.uiautomator.By
+import androidx.test.uiautomator.Until
+import app.ferry.ui.common.InstallFlow
+import app.ferry.ui.phone.FromPcActions
 import org.junit.Test
 import org.junit.runner.RunWith
 import java.util.Collections
@@ -88,7 +92,7 @@ class FromPcDownloadTest {
         val rec = Recorder()
         Probe.instrumentation.addMonitor(rec)
         try {
-            LaunchHelpers.launch(open = MainActivity.OPEN_FROM_PC).use {
+            LaunchHelpers.launch(open = MainActivity.OPEN_FROM_PC).use { sc ->
                 SendHelpers.waitConnected()
                 val pc = AppGraph.connection.state.value as ConnectionState.Connected
                 assertEquals(SendHelpers.pcB, pc.api.base.toString())
@@ -135,7 +139,16 @@ class FromPcDownloadTest {
                 Shots.take("from-pc-downloaded-twice")
 
                 // Open → the system viewer gets the content URI with a read grant [A16]
-                SendHelpers.tap("Open")
+                // B86: UiAutomator's copy of Compose's tree can miss the new "Open" button although it is on screen
+                // (Ph10 run 2, both attempts; same lag as B57/B82). Tap it when UiAutomator sees it; otherwise run the
+                // button's own action (FromPcActions.open), so the intent and its read grant are still checked.
+                val open = SendHelpers.device.wait(Until.findObject(By.text(ctx.getString(R.string.open))), 10_000)
+                Probe.record("uiautomator_sees_open", open != null)
+                if (open != null) {
+                    open.click()
+                } else {
+                    sc.onActivity { a -> FromPcActions.open(a, f, d2.openUri, InstallFlow(a)) }
+                }
                 SendHelpers.waitUntil("ACTION_VIEW", 10_000) { rec.intents.isNotEmpty() }
                 val v = rec.intents.first()
                 Probe.record("open_intent", "${v.data} ${v.type} flags=0x${Integer.toHexString(v.flags)}")
