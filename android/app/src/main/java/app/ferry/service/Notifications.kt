@@ -11,7 +11,9 @@ import app.ferry.AppGraph
 import app.ferry.FerryApp
 import app.ferry.MainActivity
 import app.ferry.R
+import app.ferry.core.download.DownloadStatus
 import app.ferry.core.upload.EngineState
+import app.ferry.net.ConnectionState
 import app.ferry.core.upload.Phase
 import app.ferry.core.upload.Summary
 import app.ferry.ui.common.TransferMath
@@ -73,16 +75,52 @@ object Notifications {
         }
     }
 
-    fun update(ctx: Context, s: EngineState?) {
+    fun update(ctx: Context, s: EngineState?) = notifyProgress(ctx, progress(ctx, s))
+
+    fun notifyProgress(ctx: Context, n: Notification) {
         try {
-            NotificationManagerCompat.from(ctx).notify(ID_PROGRESS, progress(ctx, s))
+            NotificationManagerCompat.from(ctx).notify(ID_PROGRESS, n)
         } catch (e: SecurityException) {
         }
     }
 
-    private fun openTransfer(ctx: Context): PendingIntent = PendingIntent.getActivity(
-        ctx, 0,
-        Intent(ctx, MainActivity::class.java).putExtra(MainActivity.EXTRA_OPEN, MainActivity.OPEN_TRANSFER)
+    /**
+     * The same ongoing notification while only outbox downloads run (Ph7): "Downloading report.pdf" + "45 % · 2 more
+     * waiting", or "Waiting for <PC>…"; Cancel stops all downloads; a tap opens From PC.
+     */
+    fun downloadProgress(ctx: Context, st: Map<Int, DownloadStatus>, waiting: Boolean): Notification {
+        val b = NotificationCompat.Builder(ctx, FerryApp.CH_TRANSFERS)
+            .setSmallIcon(R.drawable.ic_stat_ferry)
+            .setOngoing(true)
+            .setOnlyAlertOnce(true)
+            .setSilent(true)
+            .setCategory(NotificationCompat.CATEGORY_PROGRESS)
+            .setContentIntent(openScreen(ctx, MainActivity.OPEN_FROM_PC, 3))
+            .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
+            .addAction(0, ctx.getString(R.string.cancel), serviceAction(ctx, TransferService.ACTION_CANCEL_DOWNLOADS, 4))
+        val running = st.entries.firstOrNull { it.value is DownloadStatus.Running }
+        val queued = st.values.count { it is DownloadStatus.Queued }
+        val pc = (AppGraph.connection.state.value as? ConnectionState.Connected)?.name ?: ctx.getString(R.string.your_pc)
+        if (waiting) {
+            b.setContentTitle(ctx.getString(R.string.waiting_for_pc, pc)).setProgress(0, 0, true)
+        } else if (running != null) {
+            val r = running.value as DownloadStatus.Running
+            val name = AppGraph.downloads.file(running.key)?.name ?: ""
+            val pct = if (r.total > 0) (r.got * 100 / r.total).toInt() else 0
+            b.setContentTitle(ctx.getString(R.string.notif_downloading, name))
+                .setContentText(ctx.getString(R.string.notif_download_detail, pct, queued))
+                .setProgress(100, pct, false)
+        } else {
+            b.setContentTitle(ctx.getString(R.string.notif_downloading, "")).setProgress(0, 0, true)
+        }
+        return b.build()
+    }
+
+    private fun openTransfer(ctx: Context): PendingIntent = openScreen(ctx, MainActivity.OPEN_TRANSFER, 0)
+
+    private fun openScreen(ctx: Context, open: String, code: Int): PendingIntent = PendingIntent.getActivity(
+        ctx, code,
+        Intent(ctx, MainActivity::class.java).putExtra(MainActivity.EXTRA_OPEN, open)
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
         PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
     )

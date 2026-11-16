@@ -19,4 +19,6 @@ sealed class FerryException(message: String, cause: Throwable? = null) : java.io
     /** [PB5] */
     class OriginalUnreadable(cause: Throwable?) : FerryException("can't read the original (location)", cause)
     class NotEnoughSpace(val needed: Long, val free: Long) : FerryException("not enough space on the phone")
+    /** Writing a download on the phone failed (Ph7, B58): not a network drop, so it is not retried. */
+    class SaveFailed(cause: Throwable) : FerryException("can't save on the phone", cause)
 }

@@ -4,7 +4,7 @@
 Run locally once (needs Pillow and ffmpeg); the results are committed, CI never runs this.
     python3 android/ci/make_fixtures.py
 Writes: gps.jpg (EXIF with GPS, checked with ferry.exif_gps_status == "present"),
-photo1..5.jpg, broken.jpg, small.mp4.
+photo1..5.jpg, broken.jpg, small.mp4, report.pdf (Ph7: the From PC download test).
 """
 import os
 import subprocess
@@ -44,12 +44,40 @@ def gps_jpeg(path):
     img.save(path, "JPEG", quality=85, exif=exif)
 
 
+def report_pdf(path, pages=40):
+    """A small valid PDF (plan §4.14 "report.pdf"), ~100 KB of text pages so a download shows progress."""
+    objs = ["<< /Type /Catalog /Pages 2 0 R >>",
+            "<< /Type /Pages /Kids [%s] /Count %d >>" % (" ".join("%d 0 R" % (4 + 2 * i) for i in range(pages)), pages),
+            "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>"]
+    for i in range(pages):
+        lines = ["BT /F1 11 Tf 50 780 Td 14 TL"]
+        lines += ["(Ferry test report, page %d, line %d: the quick brown fox jumps over the lazy dog.) '" % (i + 1, n)
+                  for n in range(50)]
+        lines.append("ET")
+        stream = "\n".join(lines)
+        objs.append("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >> >> "
+                    "/Contents %d 0 R >>" % (5 + 2 * i))
+        objs.append("<< /Length %d >>\nstream\n%s\nendstream" % (len(stream), stream))
+    out = b"%PDF-1.4\n"
+    offsets = []
+    for n, body in enumerate(objs, 1):
+        offsets.append(len(out))
+        out += ("%d 0 obj\n%s\nendobj\n" % (n, body)).encode("latin-1")
+    xref = len(out)
+    out += ("xref\n0 %d\n0000000000 65535 f \n" % (len(objs) + 1)).encode()
+    out += "".join("%010d 00000 n \n" % o for o in offsets).encode()
+    out += ("trailer\n<< /Size %d /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF\n" % (len(objs) + 1, xref)).encode()
+    with open(path, "wb") as f:
+        f.write(out)
+
+
 def main():
     os.makedirs(OUT, exist_ok=True)
     gps_jpeg(os.path.join(OUT, "gps.jpg"))
     for n in range(1, 6):
         picture(1920, 1080, COLOURS[n - 1], "Photo %d" % n).save(
             os.path.join(OUT, "photo%d.jpg" % n), "JPEG", quality=80)
+    report_pdf(os.path.join(OUT, "report.pdf"))
     with open(os.path.join(OUT, "broken.jpg"), "wb") as f:  # JPEG signature, then garbage: undecodable
         f.write(b"\xff\xd8\xff\xe0" + b"\x00\x13\x37" * 500)
     subprocess.run(["ffmpeg", "-y", "-loglevel", "error",

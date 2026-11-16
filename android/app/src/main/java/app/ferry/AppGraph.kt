@@ -13,7 +13,13 @@ import coil.ImageLoader
 import app.ferry.net.ConnectionManager
 import app.ferry.net.NetworkBinder
 import app.ferry.net.UpdateState
+import app.ferry.service.Downloads
 import app.ferry.service.Transfers
+import app.ferry.core.model.OutboxList
+import app.ferry.install.AppUpdater
+import app.ferry.media.DownloadSinks
+import kotlinx.coroutines.CancellationException
+import java.io.IOException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
@@ -43,10 +49,24 @@ object AppGraph {
     lateinit var transfers: Transfers
         private set
 
+    /** Outbox downloads (Ph7), driven by TransferService (`ACTION_DOWNLOAD`). */
+    lateinit var downloads: Downloads
+        private set
+
+    /** The app update download (Ph7) [C3]. */
+    lateinit var updater: AppUpdater
+        private set
+
+    /** The PC's outbox as last listed (From PC screen, Home badge). */
+    val outbox = MutableStateFlow<OutboxList?>(null)
+
     /** Files left unsent when the previous process died mid-transfer [A8]; 0 = no banner. */
     val interrupted = MutableStateFlow(0)
 
-    /** Startup cleanup (plan §4.2 [PB16]): downloads await it before creating their first sink (Ph7). */
+    /**
+     * Startup cleanup (plan §4.2 [PB16]): Ferry's own unfinished `Download/Ferry` rows [B7], `files/apk` (TV APKs
+     * [PB18]) and `files/update`; downloads await it before creating their first sink.
+     */
     lateinit var cleanup: Deferred<Unit>
         private set
 
@@ -85,10 +105,19 @@ object AppGraph {
             sourceFor = { UploadItemFactory(app, { 0L }).sourceFor(it) },
             log = { log("engine", it) },
         )
+        downloads = Downloads(
+            api = { connection.api() },
+            waitForPc = { connection.relocate() },
+            sinkFor = { f -> (if (isTv) DownloadSinks.forApk(app) else DownloadSinks.forPhone(app))(f) }, // TV: APKs only [PB18]
+            log = { log("download", it) },
+        )
+        updater = AppUpdater(scope, File(app.filesDir, "update"), { connection.api() }, { connection.relocate() }) { log("update", it) }
         interrupted.value = prefs.interruptedCount
         network.start()
         cleanup = scope.async(Dispatchers.IO) {
+            DownloadSinks.cleanupLeftovers(app)
             File(app.filesDir, "apk").listFiles()?.forEach { it.delete() } // TV APK downloads [PB18]
+            File(app.filesDir, "update").listFiles()?.forEach { it.delete() } // an older update APK
             Unit
         }
         log("app", "app start ${BuildConfig.VERSION_NAME} ${Build.MANUFACTURER} ${Build.MODEL} API ${Build.VERSION.SDK_INT}" +
@@ -99,6 +128,21 @@ object AppGraph {
     val thumbnails: ImageLoader by lazy { MediaRepo.thumbnailLoader(app) }
 
     fun httpClient(): OkHttpClient = network.httpClient()
+
+    /** Lists the PC's outbox into [outbox]; false if there is no PC or the request failed. */
+    suspend fun refreshOutbox(): Boolean {
+        val a = connection.api() ?: return false
+        return try {
+            outbox.value = a.outbox()
+            true
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: IOException) {
+            log("outbox", "list failed: $e")
+            connection.reportFailure()
+            false
+        }
+    }
 
     fun log(tag: String, msg: String) {
         Log.i("Ferry", "$tag: $msg")

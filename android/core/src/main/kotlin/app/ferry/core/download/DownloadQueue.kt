@@ -195,6 +195,7 @@ class DownloadQueue(
                     is FerryException.Http -> return fail(id, if (x.code == 404) DownloadFail.GONE_FROM_PC else DownloadFail.PC_ERROR)
                     is FerryException.BadReply -> return fail(id, DownloadFail.CHANGED_ON_PC)
                     is FerryException.NotEnoughSpace -> return fail(id, DownloadFail.NOT_ENOUGH_SPACE)
+                    is FerryException.SaveFailed -> return fail(id, DownloadFail.CANT_SAVE) // phone storage, not retried (B58)
                     else -> return fail(id, DownloadFail.PC_ERROR)
                 }
             } catch (x: Exception) {

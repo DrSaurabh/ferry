@@ -50,11 +50,12 @@ class MainActivity : ComponentActivity() {
         openFrom(intent)
     }
 
-    /** Extra `open = transfer` (from the notifications) pushes that screen (plan §4.2) [A24]. */
+    /** Extra `open = transfer | fromPc` (from the notifications) pushes that screen (plan §4.2) [A24]. */
     private fun openFrom(i: Intent?) {
         if (AppGraph.isTv) return
         when (i?.getStringExtra(EXTRA_OPEN)) {
             OPEN_TRANSFER -> nav?.show(Screen.Transfer)
+            OPEN_FROM_PC -> nav?.show(Screen.FromPc)
         }
     }
 
@@ -66,5 +67,6 @@ class MainActivity : ComponentActivity() {
     companion object {
         const val EXTRA_OPEN = "open"
         const val OPEN_TRANSFER = "transfer"
+        const val OPEN_FROM_PC = "fromPc"
     }
 }

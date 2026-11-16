@@ -37,3 +37,4 @@ Ph6 · picker + permission flow, phone suite green on branch · 9885324 · andro
 Ph6 · main run 63 red (picker test read stale text; attempt 2 no Wi-Fi route) → B57 test fix · 2612ed6 · pending · branch [emu:phone], then fast-forward main again
 Ph6 · B57 test fix green on branch · 0bf8459 · android 43809455731 · fast-forward main again
 Ph6 · main fast-forwarded · 6a7abbd · main android 43811579040 green (all 8 jobs; Ferry-2.0.66 on dist) · DONE
+Ph7 · step 1 (downloads, From PC, installer, update, 3 tests) · pending · pending · push [emu:phone][emu:api25], wait for CI

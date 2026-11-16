@@ -9,3 +9,4 @@ android/gradlew text eol=lf
 *.jpg binary
 *.png binary
 *.mp4 binary
+*.pdf binary

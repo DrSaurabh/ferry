@@ -17,6 +17,7 @@ fun PhoneRoot(nav: Navigator) {
             Screen.Welcome -> WelcomeScreen(onDone = { nav.replaceAll(Screen.Home) })
             Screen.Settings -> SettingsScreen(nav)
             Screen.Transfer -> TransferScreen(nav)
+            Screen.FromPc -> FromPcScreen(nav)
             is Screen.Picker -> PickerScreen(nav, s.mode)
             else -> HomeScreen(nav)
         }

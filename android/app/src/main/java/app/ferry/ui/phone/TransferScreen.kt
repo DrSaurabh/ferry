@@ -164,7 +164,7 @@ private fun RowLine(row: ItemRow, words: TransferWords, finished: Boolean) {
 
 /** POST_NOTIFICATIONS once, when the first transfer starts (design §4.2) [H23]; a refusal changes nothing else. */
 @Composable
-private fun AskNotificationsOnce() {
+fun AskNotificationsOnce() {
     val ctx = LocalContext.current
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
     LaunchedEffect(Unit) {

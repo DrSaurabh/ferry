@@ -28,6 +28,10 @@ interface DownloadSink {
  * [start] opens the sink, [write] counts bytes, [finish] closes, compares with [expected], then commits;
  * [abort] (after any failure) closes, then aborts. Used by `FerryClient.download` and by the test fakes, so
  * the order is the same code everywhere.
+ *
+ * Ph7 (B58): an `IOException` from the **sink** (open, write, close/sync, commit) is the phone's storage, not the
+ * network: it is thrown as [FerryException.NotEnoughSpace] when it says the disk is full (ENOSPC), otherwise as
+ * [FerryException.SaveFailed], so the queue fails the file at once instead of retrying it as a dropped connection.
  */
 class SinkWriter(private val sink: DownloadSink, private val expected: Long, private val onProgress: (Long) -> Unit) {
     private var out: OutputStream? = null
@@ -38,12 +42,12 @@ class SinkWriter(private val sink: DownloadSink, private val expected: Long, pri
 
     fun start() {
         check(out == null) { "already started" }
-        out = sink.open()
+        out = local { sink.open() }
     }
 
     fun write(buf: ByteArray, n: Int) {
         val o = checkNotNull(out) { "not started" }
-        o.write(buf, 0, n)
+        local { o.write(buf, 0, n) }
         got += n
         onProgress(got)
     }
@@ -52,11 +56,20 @@ class SinkWriter(private val sink: DownloadSink, private val expected: Long, pri
     fun finish(): String {
         val o = checkNotNull(out) { "not started" }
         out = null
-        o.close()
+        local { o.close() }
         if (got != expected) throw FerryException.BadReply("got $got bytes, expected $expected")
-        val name = sink.commit()
+        val name = local { sink.commit() }
         finished = true
         return name
+    }
+
+    /** Runs a sink call; its IOExceptions become phone-storage errors (B58). FerryExceptions pass unchanged. */
+    private inline fun <T> local(block: () -> T): T = try {
+        block()
+    } catch (e: FerryException) {
+        throw e
+    } catch (e: IOException) {
+        if (isNoSpace(e)) throw FerryException.NotEnoughSpace(expected - got, 0) else throw FerryException.SaveFailed(e)
     }
 
     /** After a failure: close (if still open), then abort. Never throws; does nothing after a commit. */
@@ -75,6 +88,19 @@ class SinkWriter(private val sink: DownloadSink, private val expected: Long, pri
             sink.abort()
         } catch (e: Exception) {
             // nothing more we can do
+        }
+    }
+
+    companion object {
+        /** ENOSPC anywhere in the cause chain ("No space left on device"). */
+        fun isNoSpace(e: Throwable): Boolean {
+            var t: Throwable? = e
+            while (t != null) {
+                val m = t.message.orEmpty()
+                if (m.contains("ENOSPC") || m.contains("No space left", ignoreCase = true)) return true
+                t = t.cause
+            }
+            return false
         }
     }
 }

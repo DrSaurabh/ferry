@@ -99,6 +99,27 @@
     <string name="install_allow">Allow Ferry to install apps.</string>
     <string name="install_steps_fireos">Settings → My Fire TV → Developer options → Install unknown apps → Ferry: ON. (No Developer options? Settings → My Fire TV → About → press OK on the device name 7 times.)</string>
     <string name="install_steps_fireos6">Settings → My Fire TV → Developer options → Apps from Unknown Sources: ON</string>
+    <!-- Ph7 (B60; wording pass in Ph10) -->
+    <string name="update_downloading">Downloading Ferry %1$s… %2$d%%</string>
+    <string name="install_steps_phone">Settings → Apps → Ferry → Install unknown apps → Allow.</string>
+
+    <!-- From PC (Ph7, B60; wording pass in Ph10) -->
+    <string name="from_pc_title">From PC</string>
+    <string name="from_pc_where">Files in the Ferry outbox on %1$s. Tap a file to download it to Download/Ferry.</string>
+    <string name="from_pc_empty">The outbox is empty. Put files in Desktop → Ferry outbox on your PC.</string>
+    <string name="btn_from_pc_count">From PC (%1$d)</string>
+    <string name="refresh">Refresh</string>
+    <string name="download_all">Download all</string>
+    <string name="open">Open</string>
+    <string name="install">Install</string>
+    <string name="dl_downloading">Downloading %1$d%%</string>
+    <string name="dl_saved_as">Saved in Download/Ferry as %1$s</string>
+    <string name="dl_failed_pc">Not downloaded: PC not found</string>
+    <string name="dl_failed_gone">This file is no longer in the PC\'s outbox.</string>
+    <string name="dl_failed_changed">The file changed on the PC. Try again.</string>
+    <string name="no_app_to_open">No app on this phone can open this file.</string>
+    <string name="notif_downloading">Downloading %1$s</string>
+    <string name="notif_download_detail">%1$d%% · %2$d more waiting</string>
 
     <!-- TV (design §5) -->
     <string name="tv_not_found">On the TV, open Ferry and leave it on its home screen.</string>

@@ -68,7 +68,7 @@ fun TvHomeScreen(vm: TvViewModel, conn: ConnectionState.Connected) {
 
     val slideshowLabel = stringResource(R.string.tv_slideshow_card, photos.size)
     LazyColumn(verticalArrangement = Arrangement.spacedBy(20.dp), modifier = Modifier.testTag("tv-home")) {
-        item { UpdateBanner(update, onClick = { comingSoon(ctx) }) }
+        item { UpdateBanner(update) }
         item {
             Column {
                 Text(stringResource(R.string.tv_ready), style = MaterialTheme.typography.titleLarge)

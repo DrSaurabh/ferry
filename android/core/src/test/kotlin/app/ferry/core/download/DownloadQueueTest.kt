@@ -270,4 +270,58 @@ class DownloadQueueTest {
         assertEquals(running.map { it.got }.sorted(), running.map { it.got })
         assertTrue(running.all { it.total == f.size })
     }
+
+    /** A sink whose stream fails after [failAfter] bytes with [message] (phone storage trouble, Ph7 B58). */
+    private class FailingSink(private val failAfter: Int, private val message: String) : DownloadSink {
+        var aborted = false
+        var committed = false
+        var written = 0
+
+        override fun open(): java.io.OutputStream = object : java.io.OutputStream() {
+            override fun write(b: Int) = write(byteArrayOf(b.toByte()), 0, 1)
+            override fun write(b: ByteArray, off: Int, len: Int) {
+                if (written + len > failAfter) throw java.io.IOException(message)
+                written += len
+            }
+        }
+
+        override fun commit(): String {
+            committed = true
+            return "never"
+        }
+
+        override fun abort() {
+            aborted = true
+        }
+    }
+
+    @Test
+    fun storageWriteErrorFailsAtOnceAsCantSave() = runTest { // B58: not a dropped connection, not retried
+        val env = Env(this)
+        val f = env.file(1, "a.mp4", 1_000_000)
+        val sinks = mutableListOf<FailingSink>()
+        env.queue.enqueue(f) { FailingSink(200_000, "write failed: EIO (I/O error)").also { sinks += it } }
+        assertEquals(DownloadStatus.Failed(DownloadFail.CANT_SAVE), env.awaitEnd(1))
+        assertEquals(1, env.fake.calls.get())
+        assertEquals(1, sinks.size)
+        assertTrue(sinks[0].aborted)
+        assertFalse(sinks[0].committed)
+    }
+
+    @Test
+    fun storageFullMidDownloadIsNotEnoughSpace() = runTest { // B58
+        val env = Env(this)
+        val f = env.file(1, "a.mp4", 1_000_000)
+        val sinks = mutableListOf<FailingSink>()
+        env.queue.enqueue(f) { FailingSink(300_000, "write failed: ENOSPC (No space left on device)").also { sinks += it } }
+        assertEquals(DownloadStatus.Failed(DownloadFail.NOT_ENOUGH_SPACE), env.awaitEnd(1))
+        assertEquals(1, env.fake.calls.get())
+        assertTrue(sinks.single().aborted)
+    }
+
+    @Test
+    fun noSpaceIsFoundInTheCauseChain() {
+        assertTrue(SinkWriter.isNoSpace(java.io.IOException("x", java.io.IOException("No space left on device"))))
+        assertFalse(SinkWriter.isNoSpace(java.io.IOException("Broken pipe")))
+    }
 }

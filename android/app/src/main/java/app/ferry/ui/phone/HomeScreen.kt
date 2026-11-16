@@ -25,6 +25,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -66,6 +67,7 @@ class HomeViewModel : ViewModel() {
     val update = AppGraph.update
     val transfer = AppGraph.transfers.state
     val interrupted = AppGraph.interrupted
+    val outbox = AppGraph.outbox
     fun tryAgain() = AppGraph.connection.refresh()
 
     /** The user has seen the interrupted-transfer banner [A8]. */
@@ -77,7 +79,8 @@ class HomeViewModel : ViewModel() {
 
 /**
  * Home (design §4.1, plan §4.3): "→ PC" + status, the four big buttons, banners. "Send other files" works from
- * Ph5b, "Send photos & videos" (permission flow → picker) from Ph6; the buttons of later phases are placeholders ([comingSoon]; disabled on release builds, which are not given to the user).
+ * Ph5b, "Send photos & videos" (permission flow → picker) from Ph6, "From PC" (with the outbox count) and the update
+ * banner from Ph7; the buttons of later phases are placeholders ([comingSoon]; disabled on release builds, which are not given to the user).
  */
 @Composable
 fun HomeScreen(nav: Navigator, vm: HomeViewModel = viewModel()) {
@@ -86,7 +89,12 @@ fun HomeScreen(nav: Navigator, vm: HomeViewModel = viewModel()) {
     val update by vm.update.collectAsState()
     val transfer by vm.transfer.collectAsState()
     val interrupted by vm.interrupted.collectAsState()
+    val outbox by vm.outbox.collectAsState()
     val later = BuildConfig.DEBUG
+    // The From PC badge: the outbox is listed once per connection (From PC refreshes it every 5 s itself).
+    val connectedApi = (conn as? ConnectionState.Connected)?.api
+    LaunchedEffect(connectedApi) { if (connectedApi != null) AppGraph.refreshOutbox() }
+    val outboxCount = if (connectedApi != null) outbox?.files?.size ?: 0 else 0
     Box(Modifier.fillMaxSize()) {
         // "Send other files (documents, APKs…)" [A19]: the system chooser (SAF), any type, several files.
         val flow = rememberSendFlow(onStarted = { nav.push(Screen.Transfer) })
@@ -126,7 +134,7 @@ fun HomeScreen(nav: Navigator, vm: HomeViewModel = viewModel()) {
                     }
                 }
             }
-            UpdateBanner(update, onClick = { comingSoon(ctx) })
+            UpdateBanner(update)
             if (access == MediaAccess.Partial) PartialAccessBanner()
             transfer?.let { t ->
                 // Ongoing (or last) transfer card → Transfer screen (design §4.1)
@@ -153,18 +161,23 @@ fun HomeScreen(nav: Navigator, vm: HomeViewModel = viewModel()) {
                 }
             }
             for (label in listOf(R.string.btn_send_photos, R.string.btn_send_files, R.string.btn_from_pc, R.string.btn_play_tv)) {
-                val ready = label == R.string.btn_send_files || label == R.string.btn_send_photos
+                val ready = label == R.string.btn_send_files || label == R.string.btn_send_photos || label == R.string.btn_from_pc
                 Button(
                     onClick = {
                         when (label) {
                             R.string.btn_send_files -> chooseFiles.launch(arrayOf("*/*"))
                             R.string.btn_send_photos -> gate.open()
+                            R.string.btn_from_pc -> nav.push(Screen.FromPc)
                             else -> comingSoon(ctx)
                         }
                     },
                     enabled = ready || later,
                     modifier = Modifier.fillMaxWidth().heightIn(min = 64.dp),
-                ) { Text(stringResource(label), style = MaterialTheme.typography.titleMedium) }
+                ) {
+                    val text = if (label == R.string.btn_from_pc && outboxCount > 0) stringResource(R.string.btn_from_pc_count, outboxCount)
+                    else stringResource(label)
+                    Text(text, style = MaterialTheme.typography.titleMedium)
+                }
             }
         }
         flow.Overlay()

@@ -35,17 +35,18 @@ log() { echo "[$suite] $*"; echo "$*" >> "$RESULTS"; }
 adbs() { adb shell "$@" | tr -d '\r'; }
 
 # ---------- host PCs ----------
-# start_pc NAME PORT [outbox seed files…]
+# start_pc NAME PORT [outbox seed files…]   (env APPDIR: the PC's --app-dir, Ph7 update test)
 start_pc() {
   local name=$1 port=$2; shift 2
-  local d=$TMP/$name
+  local d=$TMP/$name extra=()
   mkdir -p "$d/inbox" "$d/outbox"
   cp -r "$ROOT/pc" "$d/pc"
   rm -rf "$d/pc/tests"
   for f in "$@"; do cp "$f" "$d/outbox/"; done
   mkdir -p "$d/data"
+  if [ -n "${APPDIR:-}" ]; then extra=(--app-dir "$APPDIR"); fi
   (cd "$d/pc" && exec "$PY" -u ferry.py --no-open --port "$port" --discovery-port off \
-      --inbox "$d/inbox" --outbox "$d/outbox" --data-dir "$d/data") > "$OUT/console-$name.txt" 2>&1 &
+      --inbox "$d/inbox" --outbox "$d/outbox" --data-dir "$d/data" "${extra[@]}") > "$OUT/console-$name.txt" 2>&1 &
   PIDS+=($!)
   for _ in $(seq 1 60); do
     if grep -q "^FERRY_READY port=$port " "$OUT/console-$name.txt" 2>/dev/null &&
@@ -57,7 +58,43 @@ start_pc() {
   log "pc $name did not answer on :$port"; cat "$OUT/console-$name.txt"; return 1
 }
 
+# PC-U (plan §4.14): carries the debug APK as "Ferry 9.9.9" (version_code 2000000000), so the app offers an update.
+start_pc_update() {
+  local a=$TMP/U-app
+  mkdir -p "$a"
+  cp "$APKS/app-debug.apk" "$a/Ferry.apk" &&
+    "$PY" "$CI/make_apk_json.py" "$a/Ferry.apk" 2000000000 9.9.9 > "$a/Ferry.apk.json" || return 1
+  log "pc U app bundle: $(tr -d '\n ' < "$a/Ferry.apk.json")"
+  APPDIR=$a start_pc U 18767
+}
+
+# The emulator's Wi-Fi network must have a route before the app can reach 10.0.2.2 on it (Ph6: once, on a cold-boot
+# retry, every class failed with "PC not found" and ENETUNREACH). Waits up to 45 s for a wlan0 route; if there is
+# none, Wi-Fi is switched off and on once and waited for again. Only logs; the classes judge.
+wait_wifi_route() {
+  local r=""
+  for _ in $(seq 1 45); do
+    r=$(adbs ip route show table all 2>/dev/null | grep 'dev wlan0' | head -3)
+    [ -n "$r" ] && { log "wifi route: $(echo "$r" | tr '\n' ';')"; return 0; }
+    sleep 1
+  done
+  log "wifi route: none for wlan0 after 45 s; switching Wi-Fi off and on"
+  adbs svc wifi disable > /dev/null 2>&1; sleep 2; adbs svc wifi enable > /dev/null 2>&1
+  for _ in $(seq 1 30); do
+    r=$(adbs ip route show table all 2>/dev/null | grep 'dev wlan0' | head -3)
+    [ -n "$r" ] && { log "wifi route after toggle: $(echo "$r" | tr '\n' ';')"; return 0; }
+    sleep 1
+  done
+  log "wifi route: still none ($(adbs ip -4 addr show wlan0 2>&1 | grep inet | tr -s ' '))"
+}
+
 # ---------- host steps usable in suite files ----------
+# Ph7: an empty Download/Ferry (a retry attempt or an earlier run may have left files there).
+clear_downloads() {
+  adbs rm -rf /sdcard/Download/Ferry > /dev/null 2>&1
+  adbs content call --uri content://media --method scan_volume --arg external_primary > /dev/null 2>&1
+  log "clear_downloads: /sdcard/Download/Ferry removed, volume rescanned"
+}
 grant() {
   local err
   if err=$(adb shell pm grant "$PKG" "android.permission.$1" 2>&1 | tr -d '\r') && [ -z "$err" ]; then log "granted $1"
@@ -192,15 +229,17 @@ cat "$OUT/device.txt" >> "$RESULTS"
 
 case $suite in
   tv) start_pc T 18765 "${FERRY_BIG_VIDEO:-$HOME/big-video/big.mp4}" "$CI/fixtures/small.mp4" || exit 1 ;;
-  phone) { start_pc A 18765 && start_pc B 18766; } || exit 1 ;;
-  *)  start_pc A 18765 || exit 1 ;;
+  phone) { start_pc A 18765 &&
+           start_pc B 18766 "$CI/fixtures/report.pdf" "$CI/fixtures/small.mp4" "$CI/fixtures/photo1.jpg" &&
+           start_pc_update; } || exit 1 ;;
+  *)  start_pc A 18765 "$CI/fixtures/report.pdf" || exit 1 ;;
 esac
 
 GPS_NAME=IMG_20250101_120000.jpg
 GPS_SHA=$(sha256sum "$CI/fixtures/gps.jpg" | cut -d' ' -f1)
 # Where the app keeps screenshots/probe files [CP16]: the shell can't read Android/data on API 30 TV (Ph0b).
 case $suite in tv) STORE=internal ;; *) STORE=external ;; esac
-INST_ARGS=(-e pcA 10.0.2.2:18765 -e pcB 10.0.2.2:18766 -e suite "$suite" -e store "$STORE" -e gpsName "$GPS_NAME" -e gpsSha "$GPS_SHA" -e bigName BIG_300MB.jpg -e screenOffName SCREENOFF_280MB.jpg)
+INST_ARGS=(-e pcA 10.0.2.2:18765 -e pcB 10.0.2.2:18766 -e pcU 10.0.2.2:18767 -e suite "$suite" -e store "$STORE" -e gpsName "$GPS_NAME" -e gpsSha "$GPS_SHA" -e bigName BIG_300MB.jpg -e screenOffName SCREENOFF_280MB.jpg)
 # API 25 image: its only network is reported as cellular, so the app uses the debug NET=any override [PR2].
 if [ "$suite" = api25 ]; then INST_ARGS+=(-e app.ferry.debug.NET any); fi
 
@@ -216,6 +255,7 @@ if [ "$suite" = phone ]; then
   adb install -r "$APKS/sharehelper-debug.apk" || exit 1
 fi
 if [ "$SDK" -ge 33 ]; then grant POST_NOTIFICATIONS; fi
+if [ "$suite" = phone ]; then wait_wifi_route; fi
 adb logcat -c
 
 trim() { local s=$1; s=${s#"${s%%[![:space:]]*}"}; s=${s%"${s##*[![:space:]]}"}; printf '%s' "$s"; }

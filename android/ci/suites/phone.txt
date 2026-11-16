@@ -15,3 +15,6 @@ app.ferry.PickerAcrossAlbumsTest | push_pick_photos | check_picker
 app.ferry.ShareToFerryTest | | check_share
 app.ferry.ScreenOffUploadTest | make_big_jpeg /sdcard/DCIM/Camera/SCREENOFF_280MB.jpg 280; scan_media /sdcard/DCIM/Camera/SCREENOFF_280MB.jpg | check_screen_off
 app.ferry.CancelAndWaitingTest | make_big_jpeg /sdcard/DCIM/Camera/BIG_300MB.jpg 300; scan_media /sdcard/DCIM/Camera/BIG_300MB.jpg | check_no_partials A
+# Ph7: From PC downloads [P7] (empty Download/Ferry first) and the app update through PC-U [C3].
+app.ferry.FromPcDownloadTest | clear_downloads |
+app.ferry.UpdateBannerTest | |
