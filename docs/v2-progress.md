@@ -30,3 +30,4 @@ Ph5a · main run 43772946067 red (phone: test-rule frame clock crash, retry EACC
 Ph5a · main fast-forwarded · c561f73 · main android 43776311221 green (all 8 jobs; Ferry-2.0.55 on dist) · DONE
 Ph5b · step 1 pushed (share activity, send flow, Send other files, sharehelper, 2 phone tests) · pending · pending · wait for CI
 Ph5b · step 1 green (share, Send other files, helper, share + screen-off tests) · fb65b26 · android 43778273856 · run 2 records grant owners, then fast-forward main
+Ph5b · run 2 green (grant owners recorded) · f771f26 · android 43780214930 · fast-forward main
