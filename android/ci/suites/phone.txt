@@ -4,9 +4,13 @@
 app.ferry.PhoneLaunchTest | |
 # Ph0b probe (throw-away; RedactionProbe was replaced by the GPS tests in Ph5a):
 app.ferry.probe.HostReachProbe | |
+# Ph6: first of the media classes, on the fresh install with only "Select photos" access [A15].
+app.ferry.PartialAccessBannerTest | grant READ_MEDIA_VISUAL_USER_SELECTED |
 # Ph5a: media classes. Run 1 without ACCESS_MEDIA_LOCATION (B1 negative control), then grant it.
 app.ferry.GpsNegativeControlTest | grant READ_MEDIA_IMAGES; grant READ_MEDIA_VIDEO; push_media gps.jpg /sdcard/DCIM/Camera/IMG_20250101_120000.jpg; scan_media /sdcard/DCIM/Camera/IMG_20250101_120000.jpg | check_negative
 app.ferry.GpsOriginalTest | grant ACCESS_MEDIA_LOCATION | check_original
+# Ph6: the picker across two albums [P3].
+app.ferry.PickerAcrossAlbumsTest | push_pick_photos | check_picker
 # Ph5b: Share → Ferry from the helper app (another UID, grant only) and the screen-off upload.
 app.ferry.ShareToFerryTest | | check_share
 app.ferry.ScreenOffUploadTest | make_big_jpeg /sdcard/DCIM/Camera/SCREENOFF_280MB.jpg 280; scan_media /sdcard/DCIM/Camera/SCREENOFF_280MB.jpg | check_screen_off

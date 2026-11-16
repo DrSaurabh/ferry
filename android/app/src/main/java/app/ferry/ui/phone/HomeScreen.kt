@@ -49,6 +49,15 @@ import app.ferry.ui.common.comingSoon
 import app.ferry.ui.common.rememberSendFlow
 import app.ferry.media.SendRequest
 import app.ferry.ui.common.statusText
+import app.ferry.media.PickerMode
+import app.ferry.ui.common.MediaAccess
+import app.ferry.ui.common.PartialAccessBanner
+import app.ferry.ui.common.mediaAccess
+import app.ferry.ui.common.rememberMediaGate
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import app.ferry.ui.nav.Navigator
 import app.ferry.ui.nav.Screen
 
@@ -68,7 +77,7 @@ class HomeViewModel : ViewModel() {
 
 /**
  * Home (design §4.1, plan §4.3): "→ PC" + status, the four big buttons, banners. "Send other files" works from
- * Ph5b; the buttons of later phases are placeholders ([comingSoon]; disabled on release builds, which are not given to the user).
+ * Ph5b, "Send photos & videos" (permission flow → picker) from Ph6; the buttons of later phases are placeholders ([comingSoon]; disabled on release builds, which are not given to the user).
  */
 @Composable
 fun HomeScreen(nav: Navigator, vm: HomeViewModel = viewModel()) {
@@ -81,6 +90,10 @@ fun HomeScreen(nav: Navigator, vm: HomeViewModel = viewModel()) {
     Box(Modifier.fillMaxSize()) {
         // "Send other files (documents, APKs…)" [A19]: the system chooser (SAF), any type, several files.
         val flow = rememberSendFlow(onStarted = { nav.push(Screen.Transfer) })
+        // "Send photos & videos" (P3, P10): media permission flow first [A15], then the picker.
+        val gate = rememberMediaGate(onReady = { nav.push(Screen.Picker(PickerMode.Send)) })
+        var access by remember { mutableStateOf<MediaAccess?>(null) }
+        LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { access = mediaAccess(ctx) }
         val chooseFiles = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
             AppGraph.log("send", "documents chosen: ${uris.size}")
             if (uris.isNotEmpty()) flow.send(SendRequest.Uris(uris, "documents"))
@@ -114,6 +127,7 @@ fun HomeScreen(nav: Navigator, vm: HomeViewModel = viewModel()) {
                 }
             }
             UpdateBanner(update, onClick = { comingSoon(ctx) })
+            if (access == MediaAccess.Partial) PartialAccessBanner()
             transfer?.let { t ->
                 // Ongoing (or last) transfer card → Transfer screen (design §4.1)
                 val words = remember(ctx) { TransferWords(ctx.resources) }
@@ -139,14 +153,21 @@ fun HomeScreen(nav: Navigator, vm: HomeViewModel = viewModel()) {
                 }
             }
             for (label in listOf(R.string.btn_send_photos, R.string.btn_send_files, R.string.btn_from_pc, R.string.btn_play_tv)) {
-                val ready = label == R.string.btn_send_files
+                val ready = label == R.string.btn_send_files || label == R.string.btn_send_photos
                 Button(
-                    onClick = { if (ready) chooseFiles.launch(arrayOf("*/*")) else comingSoon(ctx) },
+                    onClick = {
+                        when (label) {
+                            R.string.btn_send_files -> chooseFiles.launch(arrayOf("*/*"))
+                            R.string.btn_send_photos -> gate.open()
+                            else -> comingSoon(ctx)
+                        }
+                    },
                     enabled = ready || later,
                     modifier = Modifier.fillMaxWidth().heightIn(min = 64.dp),
                 ) { Text(stringResource(label), style = MaterialTheme.typography.titleMedium) }
             }
         }
         flow.Overlay()
+        gate.Overlay()
     }
 }

@@ -110,6 +110,23 @@ object SendHelpers {
         checkNotNull(o) { "no '$text' on screen" }.click()
     }
 
+    /**
+     * A picker cell by its content description (the file name), scrolling the grid up a few times if it is not on
+     * screen (Ph6). UiAutomator, no Compose test rule (B50).
+     */
+    fun findDesc(desc: String, timeoutMs: Long = 15_000): androidx.test.uiautomator.UiObject2 {
+        device.wait(Until.findObject(By.desc(desc)), timeoutMs)?.let { return it }
+        repeat(6) {
+            val w = device.displayWidth
+            val h = device.displayHeight
+            device.swipe(w / 2, h * 3 / 4, w / 2, h / 3, 20)
+            device.wait(Until.findObject(By.desc(desc)), 1_500)?.let { return it }
+        }
+        Probe.record("wait_failed", "no cell '$desc'")
+        runCatching { Shots.take("fail-desc-" + desc.filter { it.isLetterOrDigit() }.take(20)) }
+        throw AssertionError("no '$desc' on screen")
+    }
+
     /** Engine runs that have finished so far (each logs "finished: Summary(…)"), to wait for the next one. */
     fun finishedRuns(): Int = AppGraph.ringLog.snapshot().count { it.contains(" engine finished:") }
 }

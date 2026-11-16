@@ -13,10 +13,11 @@ import app.ferry.ui.nav.Screen
 @Composable
 fun PhoneRoot(nav: Navigator) {
     Surface(Modifier.fillMaxSize().testTag("phone-root"), color = MaterialTheme.colorScheme.background) {
-        when (nav.current) {
+        when (val s = nav.current) {
             Screen.Welcome -> WelcomeScreen(onDone = { nav.replaceAll(Screen.Home) })
             Screen.Settings -> SettingsScreen(nav)
             Screen.Transfer -> TransferScreen(nav)
+            is Screen.Picker -> PickerScreen(nav, s.mode)
             else -> HomeScreen(nav)
         }
     }

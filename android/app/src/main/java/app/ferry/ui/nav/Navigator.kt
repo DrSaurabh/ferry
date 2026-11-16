@@ -9,6 +9,7 @@ sealed interface Screen {
     object Home : Screen
     object Settings : Screen
     object Transfer : Screen
+    data class Picker(val mode: app.ferry.media.PickerMode) : Screen
     object TvHome : Screen
 }
 

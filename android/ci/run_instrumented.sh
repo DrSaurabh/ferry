@@ -104,6 +104,20 @@ make_big_jpeg() {
   log "make_big_jpeg: $path $(adbs ls -l "$path" | awk '{print $5}') bytes"
 }
 
+# Ph6 picker test: six shell-owned photos in two albums (DCIM/AlbumA, Pictures/AlbumB), dated now so they are the
+# newest in Recent; one scan_volume after all pushes (it rescans the whole volume).
+push_pick_photos() {
+  local f
+  for f in "DCIM/AlbumA/PICK_A1.jpg photo1.jpg" "DCIM/AlbumA/PICK_A2.jpg photo2.jpg" "DCIM/AlbumA/PICK_A3.jpg photo3.jpg" \
+           "Pictures/AlbumB/PICK_B1.jpg photo4.jpg" "Pictures/AlbumB/PICK_B2.jpg photo5.jpg" "Pictures/AlbumB/PICK_B3.jpg photo1.jpg"; do
+    set -- $f
+    adbs mkdir -p "/sdcard/$(dirname "$1")" > /dev/null
+    push_media "$2" "/sdcard/$1"
+    adbs touch "/sdcard/$1" > /dev/null
+  done
+  scan_media /sdcard/Pictures/AlbumB/PICK_B3.jpg
+}
+
 # ---------- host checks after classes (Ph5a, verify_inbox.py) ----------
 verify() {
   local out
@@ -130,6 +144,8 @@ check_share() {
   verify pattern --inbox "$TMP/A/inbox" --name ferry-share-notes.txt --index 2 --size 20000 --label PC-A
   verify pattern --inbox "$TMP/A/inbox" --name ferry-share-small.bin --index 3 --size 300000 --label PC-A
 }
+# Ph6: PC-A received exactly the three picked photos (names as on the phone).
+check_picker() { sleep 1; verify names --inbox "$TMP/A/inbox" --prefix PICK_ --expect PICK_A1.jpg,PICK_A2.jpg,PICK_B1.jpg --label PC-A; }
 # Ph5b: the screen-off upload has the size of the phone's file.
 check_screen_off() {
   local n=SCREENOFF_280MB.jpg size

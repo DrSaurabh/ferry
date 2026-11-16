@@ -46,6 +46,11 @@ class Prefs(ctx: Context) : PcStore {
         get() = sp.getBoolean(K_NOTIF, false)
         set(v) = sp.edit().putBoolean(K_NOTIF, v).apply()
 
+    /** The media permission request was refused once; a second refusal leads to Settings (design §4.2). */
+    var mediaDenied: Boolean
+        get() = sp.getBoolean(K_MEDIA_DENIED, false)
+        set(v) = sp.edit().putBoolean(K_MEDIA_DENIED, v).apply()
+
     var batteryAsked: Boolean
         get() = sp.getBoolean(K_BATTERY, false)
         set(v) = sp.edit().putBoolean(K_BATTERY, v).apply()
@@ -71,5 +76,6 @@ class Prefs(ctx: Context) : PcStore {
         const val K_INTERRUPTED = "interrupted_count"
         const val K_BATTERY = "battery_asked"
         const val K_NOTIF = "notifications_asked"
+        const val K_MEDIA_DENIED = "media_denied"
     }
 }

@@ -74,6 +74,23 @@
     <string name="partial_access">Ferry can only see some photos → Allow all</string>
     <string name="media_rationale">Choose Allow all. If vivo asks again, choose Allow.</string>
     <string name="share_toast">Sending %1$d files to %2$s</string>
+    <string name="media_denied">Ferry can\'t see your photos and videos. Open Settings → Permissions → Photos and videos → Allow all.</string>
+    <string name="open_settings">Open Settings</string>
+
+    <!-- Photo picker (Ph6; wording pass in Ph10) -->
+    <string name="picker_recent">Recent</string>
+    <string name="picker_albums">Albums</string>
+    <string name="picker_today">Today</string>
+    <string name="picker_yesterday">Yesterday</string>
+    <string name="picker_select_all">Select all</string>
+    <string name="picker_unselect_all">Unselect all</string>
+    <string name="picker_selected">%1$d selected · %2$s</string>
+    <string name="picker_send">Send</string>
+    <string name="picker_play">Play on TV</string>
+    <string name="picker_empty">No photos or videos found.</string>
+    <string name="picker_album_count">%1$d items</string>
+    <string name="picker_title_video">Choose a video</string>
+    <string name="picker_title_photos">Choose photos</string>
     <string name="share_nothing">Nothing to send: Ferry sends files, photos and videos.</string>
 
     <!-- Update and install (C3, T4) -->

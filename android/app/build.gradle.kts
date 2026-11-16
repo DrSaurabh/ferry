@@ -77,6 +77,7 @@ dependencies {
     implementation("androidx.media3:media3-exoplayer:1.5.1")
     implementation("androidx.media3:media3-datasource-okhttp:1.5.1")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    implementation("io.coil-kt:coil-compose:2.7.0") // picker thumbnails (Ph6), TV thumbnails (Ph8a)
     testImplementation("junit:junit:4.13.2")
 
     androidTestImplementation(bom)

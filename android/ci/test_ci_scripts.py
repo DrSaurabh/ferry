@@ -356,3 +356,14 @@ def test_helper_pattern_30mb_is_fast():
     t = time.time()
     assert len(verify_inbox.helper_pattern(1, 30 << 20)) == 30 << 20
     assert time.time() - t < 10
+
+
+# ---------- verify_inbox.py names (Ph6 picker) ----------
+def test_check_names(tmp_path):
+    for n in ("PICK_A1.jpg", "PICK_B1.jpg", "other.jpg"):
+        (tmp_path / n).write_bytes(b"x")
+    assert verify_inbox.check_names(str(tmp_path), "PICK_", ["PICK_B1.jpg", "PICK_A1.jpg"])[0]
+    assert not verify_inbox.check_names(str(tmp_path), "PICK_", ["PICK_A1.jpg"])[0]
+    (tmp_path / "PICK_A1 (1).jpg").write_bytes(b"x")
+    assert not verify_inbox.check_names(str(tmp_path), "PICK_", ["PICK_A1.jpg", "PICK_B1.jpg"])[0]
+    assert verify_inbox.main(["names", "--inbox", str(tmp_path), "--prefix", "other", "--expect", "other.jpg"]) == 0

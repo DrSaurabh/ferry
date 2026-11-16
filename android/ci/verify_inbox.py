@@ -16,6 +16,8 @@
       android/sharehelper ShareActivity.pattern).
   verify_inbox.py size        --inbox DIR --name NAME --size N [--label PC-A]
       (Ph5b) the inbox copy exists and has exactly N bytes.
+  verify_inbox.py names       --inbox DIR --prefix P --expect A,B,C [--label PC-A]
+      (Ph6) the inbox files whose names start with P are exactly A, B, C (as a set; picker test).
 
 Prints one line per check; exit 1 on failure.
 """
@@ -121,9 +123,16 @@ def check_size(inbox, name, size):
     return n == size, "%s: %d bytes (expected %d)" % (name, n, size)
 
 
+def check_names(inbox, prefix, expect):
+    got = sorted(n for n in os.listdir(inbox) if n.startswith(prefix))
+    want = sorted(expect)
+    return got == want, "%s* files: %s (expected %s)" % (prefix, got, want)
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser()
-    ap.add_argument("mode", choices=["identical", "redacted", "no-partials", "uploads", "pattern", "size"])
+    ap.add_argument("mode", choices=["identical", "redacted", "no-partials", "uploads", "pattern", "size", "names"])
+    ap.add_argument("--prefix")
     ap.add_argument("--inbox")
     ap.add_argument("--name")
     ap.add_argument("--fixture")
@@ -142,6 +151,8 @@ def main(argv=None):
         ok, text = check_no_partials(a.inbox)
     elif a.mode == "pattern":
         ok, text = check_pattern(a.inbox, a.name, a.index, a.size)
+    elif a.mode == "names":
+        ok, text = check_names(a.inbox, a.prefix, [e for e in a.expect.split(",") if e])
     elif a.mode == "size":
         ok, text = check_size(a.inbox, a.name, a.size)
     else:

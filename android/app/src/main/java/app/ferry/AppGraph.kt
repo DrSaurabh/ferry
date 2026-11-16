@@ -7,7 +7,9 @@ import android.util.Log
 import app.ferry.core.SystemClock
 import app.ferry.core.log.RingLog
 import app.ferry.data.Prefs
+import app.ferry.media.MediaRepo
 import app.ferry.media.UploadItemFactory
+import coil.ImageLoader
 import app.ferry.net.ConnectionManager
 import app.ferry.net.NetworkBinder
 import app.ferry.net.UpdateState
@@ -92,6 +94,9 @@ object AppGraph {
         log("app", "app start ${BuildConfig.VERSION_NAME} ${Build.MANUFACTURER} ${Build.MODEL} API ${Build.VERSION.SDK_INT}" +
             if (isTv) " (TV)" else "")
     }
+
+    /** Picker thumbnails (Coil + MediaStore thumbnails, plan §4.7); created on first use. */
+    val thumbnails: ImageLoader by lazy { MediaRepo.thumbnailLoader(app) }
 
     fun httpClient(): OkHttpClient = network.httpClient()
 
