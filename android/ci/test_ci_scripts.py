@@ -367,3 +367,14 @@ def test_check_names(tmp_path):
     (tmp_path / "PICK_A1 (1).jpg").write_bytes(b"x")
     assert not verify_inbox.check_names(str(tmp_path), "PICK_", ["PICK_A1.jpg", "PICK_B1.jpg"])[0]
     assert verify_inbox.main(["names", "--inbox", str(tmp_path), "--prefix", "other", "--expect", "other.jpg"]) == 0
+
+
+def test_shots_from_log_end_line_with_byte_order_mark():
+    # Ph8b: a job log had "﻿<stamp> FERRY_PNG_END"; the last screenshot was lost.
+    import base64
+    import shots_from_log
+    png = b"\x89PNG\r\n\x1a\n" + bytes(range(100))
+    log = ["2026-11-16T11:32:49.3519959Z FERRY_PNG_BEGIN screenshots/tv/tv-player-controller.png\n",
+           "2026-11-16T11:32:50.4898708Z %s\n" % base64.b64encode(png).decode(),
+           "﻿2026-11-16T11:32:51.7433364Z FERRY_PNG_END\n"]
+    assert list(shots_from_log.extract(log)) == [("screenshots/tv/tv-player-controller.png", png)]

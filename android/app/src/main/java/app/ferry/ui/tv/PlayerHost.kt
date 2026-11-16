@@ -52,7 +52,9 @@ class PlayerHost(ctx: Context, val url: String, val title: String) {
             .build()
         val sources = DefaultMediaSourceFactory(OkHttpDataSource.Factory(client)).setLoadErrorHandlingPolicy(FerryLoadErrorPolicy)
         val load = DefaultLoadControl.Builder().setBufferDurationsMs(15_000, 50_000, 2_500, 5_000).build()
-        ExoPlayer.Builder(ctx).setMediaSourceFactory(sources).setLoadControl(load).build()
+        ExoPlayer.Builder(ctx).setMediaSourceFactory(sources).setLoadControl(load)
+            .setSeekBackIncrementMs(10_000).setSeekForwardIncrementMs(10_000) // the controller's icons match the D-pad's ±10 s
+            .build()
     }
 
     init {

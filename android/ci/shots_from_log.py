@@ -18,7 +18,8 @@ def extract(lines):
     """Yields (relative path, png bytes) for every marked screenshot in the log lines."""
     name, data = None, []
     for raw in lines:
-        line = STAMP.sub("", raw.rstrip("\r\n"))
+        # GitHub sometimes starts a log line with a byte-order mark (Ph8b: the END line of the last PNG).
+        line = STAMP.sub("", raw.rstrip("\r\n").lstrip("\ufeff"))
         if line.startswith("FERRY_PNG_BEGIN "):
             name, data = line[len("FERRY_PNG_BEGIN "):].strip(), []
         elif line.startswith("FERRY_PNG_END") and name is not None:

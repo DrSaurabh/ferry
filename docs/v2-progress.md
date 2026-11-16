@@ -49,3 +49,4 @@ Ph8a · run 3: all TV classes pass but a test race in the allowed-install bytes 
 Ph8a · TV suite green on branch · d3e9239 · android 43850552821 · fast-forward main
 Ph8a · main fast-forwarded · a690b5e · main android 43852403641 green (all 8 jobs; Ferry-2.0.75 on dist) · DONE
 Ph8b · step 1 (Media3 PlayerView player, keys via TvKeys, resume store + dialog, ResumeRuleTest) · pending · pending · push [emu:tv], wait for CI
+Ph8b · step 1 green (PlayerView renders under the platform theme) · 28a49c0 · android 43856813724 · step 2: viewer/slideshow + TV tests 2,3,4,7
