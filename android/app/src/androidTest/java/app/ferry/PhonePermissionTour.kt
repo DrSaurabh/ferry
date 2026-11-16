@@ -29,7 +29,7 @@ class PhonePermissionTour {
         assertEquals("no media permission yet", MediaAccess.None, mediaAccess(ctx))
         LaunchHelpers.cleanPrefs(welcomeDone = true)
         LaunchHelpers.launch().use {
-            SendHelpers.waitConnected()
+            // No wait for the PC: this class is about the permission dialogs (run 1: the PC once didn't answer here).
             SendHelpers.tap(ctx.getString(R.string.btn_send_photos))
             SendHelpers.settle()
             Shots.take("tour-perm-rationale")

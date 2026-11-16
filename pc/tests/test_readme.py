@@ -62,7 +62,7 @@ def test_vivo_steps_match_the_app():
         return
     with open(strings, encoding="utf-8") as f:
         m = re.search(r'<string name="vivo_steps">(.*?)</string>', f.read())
-    app = m.group(1).replace("→", ">")
+    app = m.group(1).replace("\u2192", ">").replace("\\n", " ")  # the app's string has a line break
     text = " ".join(readme().split())
     for step in re.split(r"\s*\d\.\s+", app):
         step = step.strip()

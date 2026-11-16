@@ -65,7 +65,7 @@ class CancelAndWaitingTest {
             assertTrue(AppGraph.connection.state.value !is ConnectionState.Connected)
             send(small.id)
             SendHelpers.waitTransfer("waiting for PC", 15_000) { it?.phase == Phase.WaitingForPc }
-            SendHelpers.waitText("continues automatically", 10_000)
+            SendHelpers.waitText(Probe.context.getString(R.string.waiting_for_pc, "").substringAfter("…").trim(), 10_000) // "Ferry carries on by itself."
             SendHelpers.settle()
             Shots.take("transfer-waiting")
             cancelOnScreen()

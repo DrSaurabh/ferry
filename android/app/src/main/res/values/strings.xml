@@ -63,7 +63,7 @@
     <string name="transfer_card_open">Show transfer</string>
 
     <!-- Battery (P10) [A8]; the vivo steps stay in ONE string -->
-    <string name="vivo_steps">1. Open Recents and lock Ferry (pull the Ferry card down or tap the lock). 2. Settings → Battery → Background power consumption → Ferry → Allow.</string>
+    <string name="vivo_steps">1. Open Recents and lock Ferry (pull the Ferry card down or tap the lock).\n2. Settings → Battery → Background power consumption → Ferry → Allow.</string>
     <string name="battery_ok">Android battery setting: OK</string>
     <string name="battery_fix">Android battery setting: needs a change → Fix</string>
 
@@ -197,7 +197,7 @@
     <string name="cast_cant_reach_tv">Can\'t reach the TV. On the TV, open Ferry and leave it on its home screen.</string>
     <string name="cast_tv_refused">The TV didn\'t accept this. Try again.</string>
     <string name="cast_stopped_on_tv">Stopped on the TV.</string>
-    <string name="cast_lost_tv">Lost connection to the TV.</string>
+    <string name="cast_lost_tv">Lost connection to the TV. Is Ferry still open on the TV?</string>
     <string name="remote_title">Remote</string>
     <string name="remote_nothing">Nothing is playing on the TV.</string>
     <string name="remote_pause">Pause</string>
