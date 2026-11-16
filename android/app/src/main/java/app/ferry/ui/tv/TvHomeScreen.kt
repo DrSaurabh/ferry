@@ -50,7 +50,6 @@ import app.ferry.net.ConnectionState
 import app.ferry.player.ResumeRule
 import app.ferry.ui.common.Format
 import app.ferry.ui.common.UpdateBanner
-import app.ferry.ui.common.comingSoon
 import app.ferry.ui.common.rememberInstallFlow
 import app.ferry.ui.common.tvClickable
 import app.ferry.ui.nav.Navigator
@@ -92,6 +91,11 @@ fun TvHomeScreen(vm: TvViewModel, conn: ConnectionState.Connected, nav: Navigato
         }
     }
     val rows = remember(outbox) { buildRows(outbox?.files.orEmpty(), ctx) }
+    // The Photos row's files in row order, for the viewer and the slideshow (T3).
+    val photos = remember(outbox, conn) {
+        outbox?.files.orEmpty().filter { it.kind == "image" }
+            .map { TvPhoto(it.name, conn.api.absoluteUrl(it.url), ResumeRule.key(it.name, it.size, it.mtime)) }
+    }
     val counts = rows.map { it.key to it.cards.size }
     val empty = outbox != null && rows.isEmpty()
 
@@ -141,7 +145,11 @@ fun TvHomeScreen(vm: TvViewModel, conn: ConnectionState.Connected, nav: Navigato
         when (c.kind) {
             CardKind.Video -> if (f != null) nav.push(Screen.TvPlayer(f.name, conn.api.absoluteUrl(f.url), ResumeRule.key(f.name, f.size, f.mtime)))
             CardKind.Apk -> if (f != null) vm.installing.value = f
-            CardKind.Slideshow, CardKind.Photo -> comingSoon(ctx) // viewer and slideshow: Ph8b
+            CardKind.Slideshow -> if (photos.isNotEmpty()) nav.push(Screen.TvViewer(photos, 0, slideshow = true))
+            CardKind.Photo -> {
+                val start = photos.indexOfFirst { it.key == f?.let { x -> ResumeRule.key(x.name, x.size, x.mtime) } }
+                if (start >= 0) nav.push(Screen.TvViewer(photos, start, slideshow = false))
+            }
             CardKind.Other -> {} // "Open these on your phone or PC": no action [A12]
         }
     }

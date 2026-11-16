@@ -14,6 +14,8 @@ sealed interface Screen {
     object TvHome : Screen
     /** The TV video player (Ph8b); [url] is absolute; [resumeKey] = `name|size|mtime` (null: no resume). */
     data class TvPlayer(val name: String, val url: String, val resumeKey: String? = null) : Screen
+    /** TV photo viewer (paused at [start]) or slideshow (auto-advance from [start]) (Ph8b). */
+    data class TvViewer(val photos: List<app.ferry.ui.tv.TvPhoto>, val start: Int, val slideshow: Boolean) : Screen
 }
 
 /**

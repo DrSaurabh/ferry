@@ -1,9 +1,12 @@
 # TV suite (API 30 android-tv). Class | host steps before | host check after (plan CP6, §4.14)
-# Ph8a: classes 1, 5, 6 (TvLaunchAndFocusTest replaces Ph4's TvLaunchTest [PB20])
+# Ph8a: classes 1, 5, 6 (TvLaunchAndFocusTest replaces Ph4's TvLaunchTest [PB20]); Ph8b: classes 2, 3, 4, 7
 app.ferry.TvLaunchAndFocusTest | |
+app.ferry.TvLongPauseTest | |
+app.ferry.TvResumeTest | |
+app.ferry.TvSlideshowTest | |
 app.ferry.TvInstallTest | |
 app.ferry.TvInstallAllowedTest | allow_installs |
 app.ferry.TvPcNotFoundTest | |
-# Ph0b probes (throw-away; LongPauseProbe goes in Ph8b):
+app.ferry.TvScreenshotTour | |
+# Ph0b probe (throw-away; LongPauseProbe was replaced by TvLongPauseTest in Ph8b):
 app.ferry.probe.HostReachProbe | |
-app.ferry.probe.LongPauseProbe | |

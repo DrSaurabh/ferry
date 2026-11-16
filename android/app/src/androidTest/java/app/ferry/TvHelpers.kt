@@ -46,11 +46,62 @@ class TvHelpers(private val sc: ActivityScenario<MainActivity>) {
         return n
     }
 
-    private fun describe() = "focus=${vm.current} '${vm.currentTitle}' banner=${vm.bannerFocused} screen=${screen()}"
+    fun describe() = "focus=${vm.current} '${vm.currentTitle}' banner=${vm.bannerFocused} screen=${screen()}"
 
     /** Waits for [cond] on the focus, recording the focus on every press (job log evidence). */
     fun waitFocus(what: String, timeoutMs: Long = 10_000, cond: () -> Boolean) {
         SendHelpers.waitUntil("$what (${describe()})", timeoutMs, cond)
+    }
+
+    /** The outbox contains every name in [names] (the TV lists it every 5 s). */
+    fun waitOutbox(vararg names: String) {
+        SendHelpers.waitUntil("outbox lists ${names.toList()}", 30_000) {
+            val have = vm.outbox.value?.files?.map { it.name }.orEmpty()
+            names.all { it in have }
+        }
+    }
+
+    /** From the first visit's focus (Videos card 0), moves right along [row] until the card titled [title] has focus. */
+    fun focusCard(row: String, title: String) {
+        waitFocus("a card focused", 20_000) { current != null }
+        if (current?.row != row) {
+            check(row == "photos") { "focusCard supports videos and photos" }
+            press("down") { it?.row == "photos" }
+        }
+        repeat(12) {
+            if (this.title == title) return
+            val i = current!!.index
+            press("right") { it == RowFocus(row, i + 1) }
+        }
+        check(this.title == title) { "no card '$title' in $row (focus ${describe()})" }
+    }
+
+    /** Moves left along the focused row to its first card. */
+    fun focusFirstInRow() {
+        while (current!!.index > 0) {
+            val r = current!!.row
+            val i = current!!.index
+            press("left") { it == RowFocus(r, i - 1) }
+        }
+    }
+
+    /** OK on the focused card; [expect] is the screen it must open. */
+    fun ok(what: String, expect: (Screen?) -> Boolean) {
+        SendHelpers.device.pressDPadCenter()
+        SendHelpers.waitUntil(what, 10_000) { expect(screen()) }
+    }
+
+    /** Reads player / viewer state on the main thread (ExoPlayer must only be touched there). */
+    fun <T> main(block: () -> T): T {
+        var r: T? = null
+        Probe.instrumentation.runOnMainSync { r = block() }
+        @Suppress("UNCHECKED_CAST")
+        return r as T
+    }
+
+    /** A remote key by key code (media keys, D-pad), as the Fire TV remote sends it. */
+    fun key(code: Int) {
+        SendHelpers.device.pressKeyCode(code)
     }
 
     /** One key press, then the focus must have moved to [expect] (and still be there 400 ms later: no double move). */
