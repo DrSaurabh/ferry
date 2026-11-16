@@ -74,9 +74,10 @@ class CastLoopbackTest {
             SendHelpers.waitUntil("Home", 10_000) { screen(sc) == Screen.Home }
 
             // ---- Play on TV: the remembered TV answers and is used at once.
-            SendHelpers.tap(str(R.string.btn_play_tv))
             val vm = castVm(sc)
-            SendHelpers.waitUntil("remembered TV chosen", 15_000) { vm.chosen.value != null }
+            var finds = vm.findsDone
+            SendHelpers.tap(str(R.string.btn_play_tv))
+            SendHelpers.waitUntil("remembered TV chosen", 15_000) { vm.findsDone > finds && vm.chosen.value != null }
             assertEquals(loopback, vm.chosen.value!!.hp)
             SendHelpers.waitText(str(R.string.cast_videos))
             SendHelpers.settle()
@@ -145,8 +146,9 @@ class CastLoopbackTest {
 
             // ---- Photos ×3 → slideshow (3 s from the phone's setting) advances; Next and 10 s reach the TV.
             sc.onActivity { it.nav!!.replaceAll(Screen.Home) }
+            finds = vm.findsDone
             SendHelpers.tap(str(R.string.btn_play_tv))
-            SendHelpers.waitUntil("TV chosen again", 15_000) { vm.chosen.value != null }
+            SendHelpers.waitUntil("TV chosen again", 15_000) { vm.findsDone > finds && vm.chosen.value != null }
             SendHelpers.tap(str(R.string.cast_photos))
             SendHelpers.waitUntil("photo picker", 10_000) { screen(sc) == Screen.Picker(PickerMode.CastPhotos) }
             for (name in listOf("CAST_1.jpg", "CAST_2.jpg", "CAST_3.jpg")) SendHelpers.clickDesc(name)

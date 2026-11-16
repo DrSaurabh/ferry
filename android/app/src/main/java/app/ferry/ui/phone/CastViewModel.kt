@@ -42,6 +42,10 @@ class CastViewModel : ViewModel() {
     val session = AppGraph.casting.session
     private var findJob: Job? = null
 
+    /** Finds completed so far (tests wait for the one their screen started). */
+    @Volatile var findsDone = 0
+        private set
+
     fun find() {
         findJob?.cancel()
         chosen.value = null
@@ -62,6 +66,7 @@ class CastViewModel : ViewModel() {
                 if (tvs.size == 1) chosen.value = tvs[0]
             } finally {
                 finding.value = false
+                findsDone++
             }
         }
     }
