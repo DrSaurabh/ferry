@@ -53,3 +53,4 @@ Ph8b · step 1 green (PlayerView renders under the platform theme) · 28a49c0 ·
 Ph8b · step 2 pushed (cb69a55) but CI blocked: GitHub Actions billing ('payments failed / spending limit'), Linux jobs not started · cb69a55 · android 43858951281 · after billing fix: dispatch emulators=tv on ph8b, then fast-forward main
 Ph9 · step 1 (both sides, CastStateMapperTest, CastLoopbackTest, TvCastReceiveTest) · pending · pending · push [emu:phone] [emu:tv]
 Ph9 · phone+TV suites green (CastLoopbackTest, TvCastReceiveTest) · ddcb630 · android 43915490033 · Remote keeps last state; final [emu] run
+Ph9 · branch green incl. all emulator suites · 1eadb85 · android 43921967061 · fast-forward main
