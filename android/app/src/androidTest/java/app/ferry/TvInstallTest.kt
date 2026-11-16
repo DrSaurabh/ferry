@@ -40,7 +40,6 @@ open class TvInstallTest {
         override fun onStartActivity(intent: Intent): Instrumentation.ActivityResult? {
             val a = intent.action
             if (a != Intent.ACTION_VIEW && a != Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES) return null
-            intents += Intent(intent)
             if (a == Intent.ACTION_VIEW && intent.data != null) {
                 runCatching {
                     val b = Probe.context.contentResolver.openInputStream(intent.data!!)!!.use { it.readBytes() }
@@ -48,6 +47,7 @@ open class TvInstallTest {
                     bytesSha = Probe.sha256(b)
                 }.onFailure { Probe.record("installer_uri_read_failed", it) }
             }
+            intents += Intent(intent) // after the read: the test thread asserts on the bytes as soon as it sees this
             return Instrumentation.ActivityResult(0, null)
         }
     }
