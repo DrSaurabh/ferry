@@ -30,6 +30,7 @@ class TvLaunchAndFocusTest {
     @Test
     fun remoteMovesOneCardPerPressAndFocusComesBack() {
         LaunchHelpers.cleanPrefs(welcomeDone = false) // the TV never shows Welcome
+        TvHelpers.leaveTouchMode()
         assertTrue("android-tv image must be in TV mode", DeviceMode.isTv(Probe.context, null))
         LaunchHelpers.launch().use { sc ->
             SendHelpers.waitConnected()

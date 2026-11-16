@@ -55,6 +55,7 @@ open class TvInstallTest {
     @Test
     fun apkFromTheOutboxIsDownloadedAndHandedToTheInstaller() {
         LaunchHelpers.cleanPrefs(welcomeDone = false)
+        TvHelpers.leaveTouchMode()
         val rec = Recorder()
         Probe.instrumentation.addMonitor(rec)
         try {

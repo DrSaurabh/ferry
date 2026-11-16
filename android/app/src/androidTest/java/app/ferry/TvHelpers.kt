@@ -13,6 +13,18 @@ import app.ferry.ui.tv.TvViewModel
  * `MainActivity.nav`, not through a Compose test rule (the home screen refreshes the outbox from IO every 5 s, B50).
  */
 class TvHelpers(private val sc: ActivityScenario<MainActivity>) {
+    companion object {
+        /**
+         * A TV class starts as a remote user would: not in touch mode. Touch mode is global and survives the previous
+         * class (TvInstallTest taps a dialog button through UiAutomator); in it, Compose refuses `requestFocus`, so no
+         * card would have focus until the first key press (Ph8a run 2, B73). Call before launching.
+         */
+        fun leaveTouchMode() {
+            Probe.instrumentation.setInTouchMode(false)
+            Probe.record("touch_mode", "left")
+        }
+    }
+
     val vm: TvViewModel = run {
         var v: TvViewModel? = null
         sc.onActivity { a -> v = ViewModelProvider(a)[TvViewModel::class.java] }

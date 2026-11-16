@@ -26,6 +26,7 @@ class TvPcNotFoundTest {
     @Test
     fun pcNotFoundOffersTryAgainAndAddressEntry() {
         LaunchHelpers.cleanPrefs(welcomeDone = false)
+        TvHelpers.leaveTouchMode()
         AppGraph.prefs.manual = HostPort.parse("10.0.2.2:18799") // nothing listens there
         LaunchHelpers.launch().use { sc ->
             val vm = TvHelpers(sc).vm

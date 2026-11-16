@@ -94,8 +94,8 @@ fun TvHomeScreen(vm: TvViewModel, conn: ConnectionState.Connected, nav: Navigato
     val counts = rows.map { it.key to it.cards.size }
     val empty = outbox != null && rows.isEmpty()
 
-    // LazyColumn items: 0 idle line, [empty state], then one item per row.
-    val firstRowItem = 1 + (if (empty) 1 else 0)
+    // LazyColumn items: [empty state], then one item per row.
+    val firstRowItem = if (empty) 1 else 0
     val column = rememberLazyListState()
     val rowStates = remember { mutableMapOf<String, LazyListState>() }
     val requesters = remember { mutableMapOf<RowFocus, FocusRequester>() }
@@ -105,7 +105,7 @@ fun TvHomeScreen(vm: TvViewModel, conn: ConnectionState.Connected, nav: Navigato
         if (placed && TvFocusLogic.exists(vm.focus, counts)) return@LaunchedEffect
         val t = TvFocusLogic.target(vm.focus, counts) ?: return@LaunchedEffect
         val rowIndex = rows.indexOfFirst { it.key == t.row }
-        column.scrollToItem(if (rowIndex == 0) 0 else firstRowItem + rowIndex) // first row: keep the idle line in view
+        column.scrollToItem(firstRowItem + rowIndex)
         withFrameNanos {}
         rowStates[t.row]?.scrollToItem(t.index)
         withFrameNanos {}
@@ -147,13 +147,12 @@ fun TvHomeScreen(vm: TvViewModel, conn: ConnectionState.Connected, nav: Navigato
 
     // The banner sits above the list, so it is on screen whenever it exists (it may arrive after focus was placed).
     UpdateBanner(update, Modifier.onFocusChanged { vm.bannerFocused = it.isFocused })
+    // The idle line stays on screen too [A10]: a focused lower row scrolling the list must not hide it (Ph8a run 2).
+    Column {
+        Text(stringResource(R.string.tv_ready), style = MaterialTheme.typography.titleLarge, modifier = Modifier.testTag("tv-idle"))
+        Text(AppGraph.deviceName, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
+    }
     LazyColumn(state = column, verticalArrangement = Arrangement.spacedBy(20.dp), modifier = Modifier.testTag("tv-home")) {
-        item(key = "idle") {
-            Column {
-                Text(stringResource(R.string.tv_ready), style = MaterialTheme.typography.titleLarge, modifier = Modifier.testTag("tv-idle"))
-                Text(AppGraph.deviceName, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
-            }
-        }
         if (empty) item(key = "empty") { Text(stringResource(R.string.tv_empty), style = MaterialTheme.typography.titleMedium) }
         for (r in rows) {
             item(key = "row-${r.key}") {
