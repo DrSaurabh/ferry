@@ -171,6 +171,7 @@
     <string name="tv_row_other">Other files</string>
     <string name="tv_slideshow_card">▶ Slideshow (%1$d)</string>
     <string name="tv_found_pcs">PCs found:</string>
+    <string name="tv_storage_full">Not enough space on this TV (%1$s needed).</string>
     <string name="channel_transfers">Transfers</string>
     <string name="channel_results">Results</string>
     <string name="channel_casting">Casting</string>

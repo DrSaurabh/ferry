@@ -58,14 +58,28 @@ start_pc() {
   log "pc $name did not answer on :$port"; cat "$OUT/console-$name.txt"; return 1
 }
 
-# PC-U (plan §4.14): carries the debug APK as "Ferry 9.9.9" (version_code 2000000000), so the app offers an update.
-start_pc_update() {
-  local a=$TMP/U-app
+# An --app-dir with the debug APK as "Ferry 9.9.9" (version_code 2000000000), so the app offers an update.
+make_app_dir() {
+  local a=$1
   mkdir -p "$a"
   cp "$APKS/app-debug.apk" "$a/Ferry.apk" &&
     "$PY" "$CI/make_apk_json.py" "$a/Ferry.apk" 2000000000 9.9.9 > "$a/Ferry.apk.json" || return 1
-  log "pc U app bundle: $(tr -d '\n ' < "$a/Ferry.apk.json")"
-  APPDIR=$a start_pc U 18767
+  log "app bundle $a: $(tr -d '\n ' < "$a/Ferry.apk.json")"
+}
+# PC-U (plan §4.14, phone): only the update bundle.
+start_pc_update() { make_app_dir "$TMP/U-app" && APPDIR=$TMP/U-app start_pc U 18767; }
+# PC-T (plan §4.14, TV, Ph8a): update bundle [PB20]; outbox big.mp4, small.mp4, 5 photos + broken.jpg,
+# Test.apk (copy of the debug APK), notes.txt, old.avi (kind "video": Other files [A12]).
+start_pc_tv() {
+  local s=$TMP/T-seed f
+  mkdir -p "$s"
+  make_app_dir "$TMP/T-app" || return 1
+  cp "$APKS/app-debug.apk" "$s/Test.apk" || return 1
+  printf 'Ferry TV test notes\n' > "$s/notes.txt"
+  head -c 200000 "$CI/fixtures/small.mp4" > "$s/old.avi"
+  set -- "${FERRY_BIG_VIDEO:-$HOME/big-video/big.mp4}" "$CI/fixtures/small.mp4" "$s/Test.apk" "$s/notes.txt" "$s/old.avi"
+  for f in photo1 photo2 photo3 photo4 photo5 broken; do set -- "$@" "$CI/fixtures/$f.jpg"; done
+  APPDIR=$TMP/T-app start_pc T 18765 "$@"
 }
 
 # The emulator's Wi-Fi network must have a route before the app can reach 10.0.2.2 on it (Ph6: once, on a cold-boot
@@ -230,7 +244,7 @@ SDK=$(adbs getprop ro.build.version.sdk)
 cat "$OUT/device.txt" >> "$RESULTS"
 
 case $suite in
-  tv) start_pc T 18765 "${FERRY_BIG_VIDEO:-$HOME/big-video/big.mp4}" "$CI/fixtures/small.mp4" || exit 1 ;;
+  tv) start_pc_tv || exit 1 ;;
   phone) { start_pc A 18765 &&
            start_pc B 18766 "$CI/fixtures/report.pdf" "$CI/fixtures/small.mp4" "$CI/fixtures/photo1.jpg" &&
            start_pc_update; } || exit 1 ;;

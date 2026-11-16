@@ -2,6 +2,7 @@ package app.ferry
 
 import android.content.Intent
 import android.os.Bundle
+import android.view.KeyEvent
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -10,6 +11,7 @@ import app.ferry.ui.nav.Screen
 import app.ferry.ui.phone.PhoneRoot
 import app.ferry.ui.theme.FerryTheme
 import app.ferry.ui.theme.TvTheme
+import app.ferry.ui.tv.KeepScreenOn
 import app.ferry.ui.tv.TvRoot
 
 /**
@@ -17,7 +19,9 @@ import app.ferry.ui.tv.TvRoot
  * Debug builds only: extras `app.ferry.debug.UI = tv|phone` and `app.ferry.debug.NET = any` [PR2] [B27].
  */
 class MainActivity : ComponentActivity() {
-    private var nav: Navigator? = null
+    /** The back stack (tests read the top screen). */
+    var nav: Navigator? = null
+        private set
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -36,11 +40,18 @@ class MainActivity : ComponentActivity() {
         this.nav = nav
         if (savedInstanceState == null) openFrom(intent)
         if (tv) {
+            KeepScreenOn.poke(this) // opening Ferry counts as a key press (design §5.1 [A10])
             setContent { TvTheme { TvRoot(nav) } }
         } else {
             enableEdgeToEdge()
             setContent { FerryTheme { PhoneRoot(nav) } }
         }
+    }
+
+    /** TV: every key press keeps the screen on for another 30 min on Home (design §5.1 [A10] [H24]). */
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        if (AppGraph.isTv && event.action == KeyEvent.ACTION_DOWN) KeepScreenOn.poke(this)
+        return super.dispatchKeyEvent(event)
     }
 
     /** singleTask: a notification tap while Ferry is open arrives here. */

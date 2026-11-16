@@ -38,10 +38,18 @@ class InstallFlow internal constructor(private val ctx: Context) {
     /** The user was sent to the settings (or shown the steps): check again on return. */
     private var away = false
 
+    /** How often the system installer was opened by this flow (TV: `files/apk` is emptied after it returns). */
+    var installerOpened by mutableStateOf(0)
+        private set
+
+    private fun openInstaller(apk: Uri) {
+        if (ApkInstaller.install(ctx, apk)) installerOpened++
+    }
+
     fun install(apk: Uri) {
         if (ApkInstaller.canInstall(ctx)) {
             pending = null
-            ApkInstaller.install(ctx, apk)
+            openInstaller(apk)
         } else {
             AppGraph.log("install", "not allowed to install apps yet: asking")
             pending = apk
@@ -64,7 +72,7 @@ class InstallFlow internal constructor(private val ctx: Context) {
             away = false
             pending = null
             askAllow = false
-            ApkInstaller.install(ctx, p)
+            openInstaller(p)
         }
     }
 

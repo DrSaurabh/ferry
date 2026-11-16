@@ -22,21 +22,28 @@ import app.ferry.net.ConnectionState
 import app.ferry.ui.common.StatusDot
 import app.ferry.ui.common.statusText
 import app.ferry.ui.nav.Navigator
+import app.ferry.ui.nav.Screen
 
-/** TV layout root (design §5.1, plan §4.9): overscan padding [A25], header, then Home or "PC not found". */
+/**
+ * TV layout root (design §5.1, plan §4.9): the top screen of the back stack. Home (or "PC not found") has the
+ * overscan padding [A25] and the header; the Player is full screen. Back on Home finishes the activity.
+ */
 @Composable
 fun TvRoot(nav: Navigator, vm: TvViewModel = viewModel()) {
     val conn by vm.connection.collectAsState()
     Surface(Modifier.fillMaxSize().testTag("tv-root"), color = MaterialTheme.colorScheme.background) {
-        Column(
-            Modifier.fillMaxSize().padding(horizontal = 48.dp, vertical = 27.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
-        ) {
-            TvHeader(conn)
-            when (val c = conn) {
-                is ConnectionState.Connected -> TvHomeScreen(vm, c)
-                ConnectionState.Looking -> Text(statusText(c), style = MaterialTheme.typography.titleLarge)
-                else -> TvPcNotFound(vm, c)
+        when (val s = nav.current) {
+            is Screen.TvPlayer -> TvPlayerScreen(s.name, s.url) { nav.pop() }
+            else -> Column(
+                Modifier.fillMaxSize().padding(horizontal = 48.dp, vertical = 27.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
+                TvHeader(conn)
+                when (val c = conn) {
+                    is ConnectionState.Connected -> TvHomeScreen(vm, c, nav)
+                    ConnectionState.Looking -> Text(statusText(c), style = MaterialTheme.typography.titleLarge)
+                    else -> TvPcNotFound(vm, c)
+                }
             }
         }
     }
