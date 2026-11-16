@@ -28,7 +28,8 @@ import app.ferry.install.ApkInstaller
  * Installing an APK from a screen (design §4.6, §5.4, plan §4.8) [A14]: if Ferry may install apps, the system
  * installer opens at once; otherwise "Allow Ferry to install apps." with **Open Settings** (Ferry's "Install unknown
  * apps" screen); if that screen does not exist (some Fire OS builds, Fire OS 6), the steps are shown as text. When
- * the user comes back (`ON_RESUME`) Ferry checks again and, if it is allowed now, starts the install it was asked for.
+ * the user comes back (`ON_RESUME`) Ferry checks again and, if it is allowed now, starts the install it was asked for
+ * (if not, it waits quietly; tapping Update / Install asks again).
  */
 class InstallFlow internal constructor(private val ctx: Context) {
     private var pending by mutableStateOf<Uri?>(null)
@@ -49,23 +50,29 @@ class InstallFlow internal constructor(private val ctx: Context) {
         }
     }
 
+    /**
+     * Back in Ferry after the settings: allowed now → install. Still not allowed → nothing is shown again (the
+     * request is kept; a new tap on Update / Install asks again). Ph7 B66: a resume can also come right after
+     * Open Settings, before the user has changed anything, and must not hide the later real return.
+     */
     internal fun onResume() {
         val p = pending ?: return
         if (!away) return
-        away = false
-        if (ApkInstaller.canInstall(ctx)) {
-            AppGraph.log("install", "allowed now: installing")
+        val ok = ApkInstaller.canInstall(ctx)
+        AppGraph.log("install", "back in Ferry: allowed=$ok")
+        if (ok) {
+            away = false
             pending = null
             askAllow = false
             ApkInstaller.install(ctx, p)
-        } else {
-            askAllow = true
         }
     }
 
     private fun openSettings() {
         away = true
-        if (ApkInstaller.openUnknownSourcesSettings(ctx)) {
+        val opened = ApkInstaller.openUnknownSourcesSettings(ctx)
+        AppGraph.log("install", "unknown-sources screen opened=$opened")
+        if (opened) {
             askAllow = false
         } else {
             showSteps = true // no such screen: the steps as text [A14]

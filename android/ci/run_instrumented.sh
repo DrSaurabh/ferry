@@ -202,6 +202,8 @@ run_class() {
   local cls=$1 before=$2 after=$3
   local raw=$OUT/am-${cls##*.}.txt
   adb shell am force-stop "$PKG"
+  # Ph7 B67: a cold-booted image once showed "System UI isn't responding" over every class; close system dialogs.
+  adb shell am broadcast -a android.intent.action.CLOSE_SYSTEM_DIALOGS > /dev/null 2>&1
   if [ -n "$before" ]; then eval "$before"; fi
   log "=== $cls"
   adb shell am instrument -w -r -e class "$cls" "${INST_ARGS[@]}" \
@@ -256,6 +258,9 @@ if [ "$suite" = phone ]; then
 fi
 if [ "$SDK" -ge 33 ]; then grant POST_NOTIFICATIONS; fi
 if [ "$suite" = phone ]; then wait_wifi_route; fi
+# Ph7 B67: no ANR/crash dialogs of other apps (System UI on a cold boot) on top of the screen under test.
+adbs settings put global hide_error_dialogs 1 > /dev/null 2>&1
+log "hide_error_dialogs=$(adbs settings get global hide_error_dialogs)"
 adb logcat -c
 
 trim() { local s=$1; s=${s#"${s%%[![:space:]]*}"}; s=${s%"${s##*[![:space:]]}"}; printf '%s' "$s"; }

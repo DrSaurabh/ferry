@@ -168,7 +168,7 @@ fun FromPcScreen(nav: Navigator, vm: OutboxViewModel = viewModel()) {
         }
         if (connected == null) {
             Text(statusText(conn), style = MaterialTheme.typography.bodyLarge)
-        } else {
+        } else if (canDownload) {
             Text(stringResource(R.string.from_pc_where, connected.name), style = MaterialTheme.typography.bodyMedium)
         }
         if (!canDownload) {
