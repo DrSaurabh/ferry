@@ -2,7 +2,11 @@ package app.ferry
 
 import android.provider.MediaStore
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.lifecycle.ViewModelProvider
+import androidx.test.core.app.ActivityScenario
 import app.ferry.core.upload.ItemStatus
+import app.ferry.media.PickerMode
+import app.ferry.ui.phone.PickerViewModel
 import app.ferry.core.upload.Phase
 import app.ferry.probe.Probe
 import app.ferry.probe.Shots
@@ -31,12 +35,12 @@ class PickerAcrossAlbumsTest {
             SendHelpers.findImage(n)
         }
         recordBuckets()
-        LaunchHelpers.launch().use {
+        LaunchHelpers.launch().use { sc ->
             SendHelpers.waitConnected()
             SendHelpers.tap("Send photos & videos")
             SendHelpers.findDesc("PICK_A1.jpg").click()
             SendHelpers.findDesc("PICK_A2.jpg").click()
-            SendHelpers.waitText("2 selected")
+            waitSelection(sc, "PICK_A1.jpg", "PICK_A2.jpg")
             SendHelpers.settle()
             Shots.take("picker-recent")
 
@@ -46,7 +50,7 @@ class PickerAcrossAlbumsTest {
             Shots.take("picker-albums")
             SendHelpers.tap("AlbumB")
             SendHelpers.findDesc("PICK_B1.jpg").click()
-            SendHelpers.waitText("3 selected")
+            waitSelection(sc, "PICK_A1.jpg", "PICK_A2.jpg", "PICK_B1.jpg")
             SendHelpers.waitText("Select all")
             SendHelpers.settle()
             Shots.take("picker-album-grid")
@@ -54,13 +58,13 @@ class PickerAcrossAlbumsTest {
             SendHelpers.device.pressBack() // album grid → album list
             SendHelpers.waitText("AlbumA")
             SendHelpers.tap("Recent")
-            SendHelpers.waitText("3 selected")
-            // Still selected after the album round trip: tapping A1 now UNselects it (2 left), tapping again re-adds
-            // it at the end of the ordered selection (B55; UiAutomator's isChecked is not reliable for these cells).
+            SendHelpers.findDesc("PICK_A1.jpg")
+            waitSelection(sc, "PICK_A1.jpg", "PICK_A2.jpg", "PICK_B1.jpg") // kept across the album and tab switch
+            // Tapping A1 now unselects it, tapping again re-adds it at the end of the ordered selection (B55).
             SendHelpers.findDesc("PICK_A1.jpg").click()
-            SendHelpers.waitText("2 selected")
+            waitSelection(sc, "PICK_A2.jpg", "PICK_B1.jpg")
             SendHelpers.findDesc("PICK_A1.jpg").click()
-            SendHelpers.waitText("3 selected")
+            waitSelection(sc, "PICK_A2.jpg", "PICK_B1.jpg", "PICK_A1.jpg")
             SendHelpers.settle()
             Shots.take("picker-bottom-bar")
 
@@ -73,6 +77,27 @@ class PickerAcrossAlbumsTest {
             SendHelpers.waitText("3 saved · 0 already on PC")
             SendHelpers.settle()
             Shots.take("picker-sent-summary")
+        }
+    }
+
+    /**
+     * The picker's real selection (names, in pick order), read from its ViewModel in the activity's store (B57):
+     * UiAutomator's view of the Compose text can lag (seen on main run 63: "3 selected" on screen, old text read).
+     */
+    private fun selection(sc: ActivityScenario<MainActivity>): List<String?> {
+        var names: List<String?> = emptyList()
+        sc.onActivity { a ->
+            val vm = ViewModelProvider(a)["picker-${PickerMode.Send}", PickerViewModel::class.java]
+            names = vm.selection.value.map { vm.library.value.byId[it]?.name }
+        }
+        return names
+    }
+
+    private fun waitSelection(sc: ActivityScenario<MainActivity>, vararg want: String) {
+        try {
+            SendHelpers.waitUntil("selection ${want.toList()}", 15_000) { selection(sc) == want.toList() }
+        } finally {
+            Probe.record("picker_selection", selection(sc))
         }
     }
 
