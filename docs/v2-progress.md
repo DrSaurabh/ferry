@@ -35,3 +35,4 @@ Ph5b · main fast-forwarded · 37e3040 · main android 43782223057 green (all 8 
 Ph6 · step 1 pushed (picker, MediaRepo, permission flow, 2 phone tests) · de8e0e5 · pending · wait for CI
 Ph6 · picker + permission flow, phone suite green on branch · 9885324 · android 43800772488 · all-emulator run, then fast-forward main
 Ph6 · main run 63 red (picker test read stale text; attempt 2 no Wi-Fi route) → B57 test fix · 2612ed6 · pending · branch [emu:phone], then fast-forward main again
+Ph6 · B57 test fix green on branch · 0bf8459 · android 43809455731 · fast-forward main again
