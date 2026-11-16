@@ -227,8 +227,6 @@ object TvViewerState {
         this.slideshow = slideshow
         playing = slideshow
         moves.clear()
-        shown.clear()
-        failedShown.clear()
     }
 
     fun moved(i: Int, name: String, how: String) {
@@ -237,7 +235,13 @@ object TvViewerState {
         moves += Move(i, name, how, SystemClock.uptimeMillis())
     }
 
+    /**
+     * [shown]/[failedShown] are emptied here, not in [open]: a photo already in the memory cache reports success while
+     * the screen is first composed, before the screen's own effect calls [open].
+     */
     fun close() {
+        shown.clear()
+        failedShown.clear()
         open = false
         overlayVisible = false
         messageVisible = false
