@@ -47,3 +47,4 @@ Ph8a · run 1: fast jobs green; TV: banner off-screen, API 30 kills app on insta
 Ph8a · run 2: focus test + install (not allowed) PASS; touch mode left over → B73; idle line pinned · pending · pending · push [emu:tv]
 Ph8a · run 3: all TV classes pass but a test race in the allowed-install bytes check · pending · pending · push [emu:tv]
 Ph8a · TV suite green on branch · d3e9239 · android 43850552821 · fast-forward main
+Ph8a · main fast-forwarded · a690b5e · main android 43852403641 green (all 8 jobs; Ferry-2.0.75 on dist) · DONE
