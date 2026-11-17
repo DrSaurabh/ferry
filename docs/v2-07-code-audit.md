@@ -57,3 +57,10 @@ Gallery share with no photo access yet; O10: notification question), C6 (S6: how
 - d21acd8 PC: S1, S2, S4, `hostname_local()` removed. `cd pc && python3 -m pytest -q`: 175 passed, 4 skipped
   (was 169 + 4). `test_apk_mime` used a made-up name in an outbox URL and now uses the real one.
 - 54b687e APP: S5, O1–O6, O8–O11, O15–O17, README / DEVICE-CHECKLIST (O7, O14), decisions H40–H50. `[emu]`.
+- Run 1 (54b687e `[emu]`, android 43997958709): `core-jvm` ×2, `app-build` (Kotlin, unit tests, lint), `emulator-phone`
+  (attempt 1, all 17 classes incl. `RetryAfterRestartTest`, `ShareLocationAllowTest` with host check "PC-U … identical,
+  GPS present, date ok", `CastLoopbackTest`) and `emulator-tv` green. `emulator-api25` red: `TvCastReceiveTest` PASS in
+  the TV layout on API 25, `TvLaunchAndFocusTest` stopped at its own precondition "android-tv image must be in TV
+  mode" (test-side: it now accepts the debug UI override and asserts the activity runs the TV layout).
+  In `ShareLocationAllowTest` Android granted photo location without showing its own dialog (`o1_system_dialog=none`:
+  photo access was already granted by the host), so the dialog-shown case stays on DEVICE-CHECKLIST C5.

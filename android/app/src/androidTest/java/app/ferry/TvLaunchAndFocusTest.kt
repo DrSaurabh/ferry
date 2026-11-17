@@ -31,8 +31,11 @@ class TvLaunchAndFocusTest {
     fun remoteMovesOneCardPerPressAndFocusComesBack() {
         LaunchHelpers.cleanPrefs(welcomeDone = false) // the TV never shows Welcome
         TvHelpers.leaveTouchMode()
-        assertTrue("android-tv image must be in TV mode", DeviceMode.isTv(Probe.context, null))
+        // The TV image is a TV by itself; the API 25 suite (a phone image) asks for the TV layout (audit O6).
+        val override = Probe.arg(DeviceMode.EXTRA_UI, "").ifEmpty { null }
+        assertTrue("TV mode expected (android-tv image, or -e app.ferry.debug.UI tv)", DeviceMode.isTv(Probe.context, override))
         LaunchHelpers.launch().use { sc ->
+            assertTrue("the activity runs the TV layout", AppGraph.isTv)
             SendHelpers.waitConnected()
             val c = AppGraph.connection.state.value as ConnectionState.Connected
             Probe.record("tv_launch", "connected name=${c.name} network=${AppGraph.network.chosen.value?.kind}")
