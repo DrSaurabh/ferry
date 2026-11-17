@@ -85,3 +85,16 @@ Gallery share with no photo access yet; O10: notification question), C6 (S6: how
   the suite and skips the pulls and logcat; `am instrument` has a 15-minute and `logcat -d` a 2-minute limit. The job
   then goes on to attempt 2 on a new emulator, as designed. Also merged `main` (c52b02c, decisions-log note) into the
   branch so that `main` can still be fast-forwarded to it after verification.
+- **Final run** (ac9e468, manual `emulators=all`, android **44042995717**): **green**, every emulator suite on
+  attempt 1. `core-jvm` ubuntu + windows, `app-build` (Kotlin, unit tests, lint); `emulator-phone` all 17 classes
+  PASS with the host checks (PC-B redacted, PC-U `ShareLocationAllowTest` original "identical, GPS present, date ok",
+  PC-A original + `saved,skipped`, picker names, share files, 280 MB screen-off size, no temp files);
+  `emulator-tv` all 10 classes PASS (`address_after_digit=10.0.2.9`, `auto_retry=connected by itself`,
+  `slideshow_interval_keys=3 → up 5 → up 10 → up 10 → down 5 → down 3`); `emulator-api25` `Api25LaunchTest`,
+  `TvLaunchAndFocusTest` and `TvCastReceiveTest` (TV layout on API 25), `HostReachProbe` PASS. (`package`/`dist`
+  skipped: they run on `main` only. The push run 44042958767 of the same commit was cancelled by the manual run,
+  same concurrency group.) `cd pc && python3 -m pytest -q`: 175 passed, 4 skipped; `python3 -m pytest -q
+  android/ci`: 36 passed.
+- Not done here, on purpose: `main` is **not** fast-forwarded; an independent check of the diff against
+  `stage7-snapshot-pre-audit` (c6269ac) comes first. The branch contains `main` (c52b02c), so `main` can be
+  fast-forwarded to it.
