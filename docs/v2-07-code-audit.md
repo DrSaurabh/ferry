@@ -14,8 +14,8 @@
 
 ## Triage
 
-Fix commits on `stage7-fixes`: **PC** = d21acd8, **APP** = 54b687e (follow-up commits that only repair CI are
-listed in the log below). Counts: 25 findings (S1–S8, O1–O17): **18 confirmed and fixed** (3 of them in part),
+Fix commits on `stage7-fixes`: **PC** = d21acd8, **APP** = 54b687e, plus 00a5343 (test-side only, for O6; see
+the log below). Counts: 25 findings (S1–S8, O1–O17): **18 confirmed and fixed** (3 of them in part),
 **3 rejected**, **4 deferred**.
 
 | ID | Reviewer | Severity | Verdict | Reason | Fix commit |
@@ -64,3 +64,13 @@ Gallery share with no photo access yet; O10: notification question), C6 (S6: how
   mode" (test-side: it now accepts the debug UI override and asserts the activity runs the TV layout).
   In `ShareLocationAllowTest` Android granted photo location without showing its own dialog (`o1_system_dialog=none`:
   photo access was already granted by the host), so the dialog-shown case stays on DEVICE-CHECKLIST C5.
+- Run 2 (00a5343 `[emu:api25]`, android 44029370105): green; `emulator-api25` attempt 1: `Api25LaunchTest`,
+  `TvLaunchAndFocusTest` and `TvCastReceiveTest` (both in the TV layout on API 25), `HostReachProbe` all PASS.
+- Screenshots of run 1 reviewed: TV "Can't find your PC" with the typed digit after the prefill ("10.0.2.9"), the
+  number keyboard open and the line "This TV: … · address …"; slideshow overlay "3 / 6 · photo4.jpg · 5 s per photo
+  (Up / Down to change)"; the second location dialog (Open Settings / Send without location); Transfer screen
+  "Ferry was closed since then…". Evidence lines in the TV job log: `address_after_digit=10.0.2.9`,
+  `auto_retry=connected by itself`, `slideshow_interval_keys=3 → up 5 → up 10 → up 10 → down 5 → down 3`.
+- Snapshot: the proxy refuses tag pushes, so the pre-audit snapshot is on the remote as the **branch**
+  `stage7-snapshot-pre-audit` (= c6269ac); the tag of the same name exists only in the local clone.
+- Final run on the last commit of the branch (all three emulator suites): see the closing note below.
