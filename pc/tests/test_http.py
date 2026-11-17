@@ -137,7 +137,7 @@ def test_outbox_list_download_range(srv):
 
 def test_apk_mime(srv):
     srv.add_out("Kodi.apk", b"PK-apk")
-    r, d = srv.req("GET", "/api/v1/outbox/1/whatever")
+    r, d = srv.req("GET", "/api/v1/outbox/1/Kodi.apk")   # the name must match since audit S1
     assert r.getheader("Content-Type") == "application/vnd.android.package-archive" and d == b"PK-apk"
     r, d = srv.req("GET", "/api/v1/outbox/77/x")
     assert r.status == 404 and b"no longer in the outbox" in d

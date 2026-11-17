@@ -625,10 +625,6 @@ def detect_addresses() -> Tuple[Optional[str], List[str]]:
     return ranked[0], ranked[1:]
 
 
-def hostname_local() -> str:
-    return socket.gethostname().split(".")[0].lower() + ".local"
-
-
 # =============================================================================================
 # QR code
 # =============================================================================================
@@ -696,7 +692,11 @@ def sanitize_name(raw: str, dest_dir: str = "", is_win: bool = IS_WIN) -> str:
     s = re.split(r"[\\/]", s)[-1]
     s = "".join("_" if (unicodedata.category(ch) in ("Cc", "Cf") or ch in INVALID_CHARS) else ch
                 for ch in s)
-    s = s.strip(" .") or "file"
+    # Windows drops trailing spaces and dots; a leading dot is part of the original name (".nomedia") and is
+    # kept (audit S4). A name made only of dots and spaces has nothing left.
+    s = s.strip(" ").rstrip(" .") or "file"
+    if s.lower().startswith(TEMP_PREFIX):     # never a name that the start-up temp cleanup could match
+        s = "_" + s
     stem, ext = split_ext(s)
     stem = _fit_bytes(stem, ext, MAX_NAME_BYTES).rstrip(" .") or "file"
     if is_win and dest_dir:
@@ -853,14 +853,14 @@ class Inbox:
     # -- pre-flight --------------------------------------------------------------------------
     def precheck(self, raw_name: str, size: Optional[int], mtime_ms: Optional[int]) -> dict:
         size = max(size or 0, 0)
-        free = self.free_bytes()
-        if free is not None and free < size + DISK_MARGIN:
-            return {"ok": False, "reason": "disk_full", "free_bytes": free}
         name = sanitize_name(raw_name, self.path, self.is_win)
-        if mtime_ms is not None:
+        if mtime_ms is not None:      # a resend is "already on PC" even when the disk is full [H30] (audit S2)
             for fname, _p, st in self.family(name):
                 if st.st_size == size and abs(st.st_mtime - mtime_ms / 1000.0) <= 2.0:
                     return {"ok": True, "duplicate": fname, "name": name}
+        free = self.free_bytes()
+        if free is not None and free < size + DISK_MARGIN:
+            return {"ok": False, "reason": "disk_full", "free_bytes": free}
         return {"ok": True, "name": name}
 
     def check_batch(self, files: List[Tuple[str, int, Optional[int]]]) -> dict:
@@ -1940,7 +1940,7 @@ ROUTES_EXACT = {
     "/api/v1/upload": "api_upload", "/api/v1/outbox": "api_outbox", "/api/v1/outbox.zip": "send_zip",
 }
 POST_ROUTES = {"api_upload", "api_check_batch"}
-RX_OUTBOX = re.compile(r"^/api/v1/outbox/(\d{1,9})(?:/.*)?$")
+RX_OUTBOX = re.compile(r"^/api/v1/outbox/(\d{1,9})(?:/(.*))?$", re.DOTALL)
 RX_HOST = re.compile(r"^\d{1,3}(?:\.\d{1,3}){3}(?::\d{1,5})?$")
 APP_COPYING = "The app is being copied, try again in a moment"
 
@@ -2019,7 +2019,7 @@ class FerryHandler(BaseHTTPRequestHandler):
                 return self.send_json(405, {"result": "error", "message": "method not allowed"})
             m = RX_OUTBOX.match(path)
             if m:
-                return self.send_outbox_file(int(m.group(1)))
+                return self.send_outbox_file(int(m.group(1)), m.group(2))
             return self.not_found()
         except (ConnectionError, socket.timeout, TimeoutError) as e:
             self.close_connection = True
@@ -2262,10 +2262,14 @@ class FerryHandler(BaseHTTPRequestHandler):
                              "total_size": sum(o.size for o in files),
                              "folders_ignored": len(self.app.outbox.folders)})
 
-    def send_outbox_file(self, id_: int) -> None:
+    def send_outbox_file(self, id_: int, name_part: Optional[str] = None) -> None:
         of = self.app.outbox.get(id_)
         gone = "That file is no longer in the outbox."
         if of is None or not self.app.outbox.contains(of.path):
+            return self.not_found(gone)
+        # Ids start again at 1 with every Ferry start: a list made before a restart must not fetch another
+        # file under the old name, so a name in the URL has to be this file's name (audit S1).
+        if name_part and unquote(name_part) != of.name:
             return self.not_found(gone)
         self.send_file(of.path, of.name, guess_type(of.name), of.size, of.mtime_ns, of.name, gone, ("outbox", of.id))
 

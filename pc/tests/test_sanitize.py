@@ -76,3 +76,24 @@ def test_windows_path_limit_utf16():
 def test_reserved_after_truncation():
     out = S("CON." + "x" * 10, is_win=False)
     assert out.startswith("_CON")
+
+
+def test_leading_dot_kept_trailing_stripped():
+    # Audit S4: the original name keeps its leading dot; only what Windows drops (trailing dots/spaces) goes.
+    for win in (False, True):
+        assert S(".nomedia", is_win=win) == ".nomedia"
+        assert S(".trashed-170-IMG.jpg", is_win=win) == ".trashed-170-IMG.jpg"
+        assert S("  .hidden.txt . ", is_win=win) == ".hidden.txt"
+        assert S("photo.", is_win=win) == "photo"
+        assert S("..", is_win=win) == "file"
+        assert S(". .", is_win=win) == "file"
+        assert S("../..", is_win=win) == "file"
+    assert split_ext(".nomedia") == (".nomedia", "")
+
+
+def test_leading_dot_never_looks_like_a_temp_file():
+    # ".ferry-*.part" is what the start-up cleanup deletes: an upload can't be saved under such a name.
+    for raw in (".ferry-abc.part", ".FERRY-x.part", " .ferry-probe-1"):
+        out = S(raw, is_win=True)
+        assert not out.lower().startswith(ferry.TEMP_PREFIX), out
+        assert out.startswith("_.")
