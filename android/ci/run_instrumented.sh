@@ -33,6 +33,11 @@ trap cleanup EXIT
 
 log() { echo "[$suite] $*"; echo "$*" >> "$RESULTS"; }
 adbs() { adb shell "$@" | tr -d '\r'; }
+# Stage 7: is the emulator still there? Run 44030175847: the phone emulator crashed after a class ("adb: device
+# offline"), the next classes failed at once, then `adb logcat -d` waited for the device until the job's 45-minute
+# limit cancelled it, so attempt 2 never ran. Now the suite stops at the first offline check and no adb call can wait
+# for ever, so the job goes on to attempt 2 on a new emulator.
+alive() { [ "$(timeout 15 adb get-state 2>/dev/null | tr -d '\r')" = device ]; }
 
 # ---------- host PCs ----------
 # start_pc NAME PORT [outbox seed files…]   (env APPDIR: the PC's --app-dir, Ph7 update test)
@@ -247,7 +252,7 @@ run_class() {
   adb shell am broadcast -a android.intent.action.CLOSE_SYSTEM_DIALOGS > /dev/null 2>&1
   if [ -n "$before" ]; then eval "$before"; fi
   log "=== $cls"
-  adb shell am instrument -w -r -e class "$cls" "${INST_ARGS[@]}" "${CLASS_ARGS[@]}" \
+  timeout 900 adb shell am instrument -w -r -e class "$cls" "${INST_ARGS[@]}" "${CLASS_ARGS[@]}" \
     "$PKG.test/androidx.test.runner.AndroidJUnitRunner" | tr -d '\r' > "$raw" 2>&1
   if judge "$raw"; then log "PASS $cls"
   else
@@ -313,6 +318,10 @@ while IFS='|' read -r cls before after <&3; do
   cls=$(trim "$cls")
   case $cls in ''|\#*) continue ;; esac
   run_class "$cls" "$(trim "$before")" "$(trim "$after")"
+  if ! alive; then
+    log "emulator offline after $cls: suite stopped (the next attempt starts a new emulator)"
+    FAILED=1; OFFLINE=1; break
+  fi
 done 3< "$CI/suites/$suite.txt"
 
 # ---------- collect ----------
@@ -329,14 +338,18 @@ pull_files() {
     { echo "adb exec-out run-as $PKG tar -cf - -C files $sub"; return 0; }
   return 1
 }
-if how=$(pull_files screenshots "$OUT"); then
+if [ "${OFFLINE:-0}" = 1 ]; then
+  log "screenshots, probe files and logcat not collected: the emulator is offline"
+elif how=$(pull_files screenshots "$OUT"); then
   log "screenshots: $how OK ($(find "$OUT/screenshots" -name '*.png' | wc -l) png)"
 else
   log "screenshots: every pull way FAILED"
   FAILED=1
 fi
-if how=$(pull_files probe "$OUT"); then cp "$OUT/probe/results.txt" "$OUT/probe-results.txt" 2>/dev/null; fi
-adb logcat -d > "$OUT/logcat.txt" 2>&1 || true
+if [ "${OFFLINE:-0}" != 1 ]; then
+  if how=$(pull_files probe "$OUT"); then cp "$OUT/probe/results.txt" "$OUT/probe-results.txt" 2>/dev/null; fi
+  timeout 120 adb logcat -d > "$OUT/logcat.txt" 2>&1 || true
+fi
 echo "----- app log lines (tag Ferry) in logcat ($suite) -----"
 grep -E ' (I|W|E) Ferry *:' "$OUT/logcat.txt" | tail -80
 echo "----- app crashes in logcat ($suite) -----"

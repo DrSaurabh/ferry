@@ -15,8 +15,9 @@
 ## Triage
 
 Fix commits on `stage7-fixes`: **PC** = d21acd8, **APP** = 54b687e, plus 00a5343 (test-side only, for O6; see
-the log below). Counts: 25 findings (S1–S8, O1–O17): **18 confirmed and fixed** (3 of them in part),
-**3 rejected**, **4 deferred**.
+the log below). Counts: 25 findings (S1–S8, O1–O17): **19 confirmed and fixed** (S1 S2 S4 S5, O1–O11, O14–O17;
+O11 and O17 in part, O7 and O14 in the README / checklist), **3 rejected** (S3, S8, O13), **3 deferred** (S6, S7,
+O12). (Corrected in the final review: this line said 18 / 3 / 4, which did not match the table.)
 
 | ID | Reviewer | Severity | Verdict | Reason | Fix commit |
 |---|---|---|---|---|---|
@@ -73,4 +74,14 @@ Gallery share with no photo access yet; O10: notification question), C6 (S6: how
   `auto_retry=connected by itself`, `slideshow_interval_keys=3 → up 5 → up 10 → up 10 → down 5 → down 3`.
 - Snapshot: the proxy refuses tag pushes, so the pre-audit snapshot is on the remote as the **branch**
   `stage7-snapshot-pre-audit` (= c6269ac); the tag of the same name exists only in the local clone.
-- Final run on the last commit of the branch (all three emulator suites): see the closing note below.
+- Run 3 (e240e6f, manual `emulators=all`, android 44030175847): **cancelled by the 45-minute job limit, not a
+  test failure.** `core-jvm` ×2, `app-build`, `emulator-tv` and `emulator-api25` green. `emulator-phone` attempt 1:
+  the first 15 classes PASS (incl. `RetryAfterRestartTest`, `ShareLocationAllowTest`, `CastLoopbackTest`), then the
+  emulator process crashed (crash-reporter lines right after `CastLoopbackTest`, then `adb: device offline`), the two
+  tour classes failed at once, and `adb logcat -d` waited for the offline device until the job was cancelled, so
+  attempt 2 never ran.
+- Final review (Opus, taking over from the Fable fixer): `run_instrumented.sh` now checks after every class that
+  the emulator is still there (`adb get-state`, 15 s limit); if not, it logs "emulator offline after <class>", stops
+  the suite and skips the pulls and logcat; `am instrument` has a 15-minute and `logcat -d` a 2-minute limit. The job
+  then goes on to attempt 2 on a new emulator, as designed. Also merged `main` (c52b02c, decisions-log note) into the
+  branch so that `main` can still be fast-forwarded to it after verification.
