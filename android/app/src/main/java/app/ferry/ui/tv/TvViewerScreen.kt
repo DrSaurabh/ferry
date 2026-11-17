@@ -52,7 +52,7 @@ data class TvPhoto(val name: String, val url: String, val key: String)
 /**
  * Photo viewer and slideshow (design §5.3 [T3], plan §4.10): full-screen photo decoded at screen size (Coil, EXIF
  * orientation honoured), 400 ms cross-fade, the next 2 photos preloaded. Slideshow: auto-advance every 3/5/10 s
- * (Settings, default 5), looping; OK / Play-Pause pause and resume; Left/Right previous/next (that photo then gets
+ * (default 5; **Up / Down** on the remote change it and the TV remembers it, audit O8), looping; OK / Play-Pause pause and resume; Left/Right previous/next (that photo then gets
  * a full interval before the slideshow moves on, B76); overlay "3 / 24 · name" for 2 s after each key and photo
  * change. A photo that can't be decoded shows "Can't show this photo" and the slideshow moves on after 2 s [A20].
  * The viewer (OK on one photo) is the same screen, started paused at that photo. Keys through [TvKeys] (B74).
@@ -75,6 +75,7 @@ fun TvViewerScreen(
     var restart by remember(s) { mutableIntStateOf(0) } // a key press restarts the timer of the current photo
     var overlay by remember(s) { mutableIntStateOf(0) } // bumped → the overlay shows for 2 s
     var overlayShown by remember { mutableStateOf(false) }
+    var intervalShown by remember(s) { mutableStateOf(false) } // the overlay also names the interval (after Up / Down)
     val failed = remember(s) { mutableStateMapOf<Int, Boolean>() }
     var interval by remember(s) { mutableLongStateOf(intervalMs ?: (AppGraph.prefs.slideshowSeconds.coerceIn(1, 60) * 1000L)) }
     val dm = ctx.resources.displayMetrics
@@ -131,10 +132,22 @@ fun TvViewerScreen(
         TvViewerState.overlayVisible = true
         delay(2_000)
         overlayShown = false
+        intervalShown = false
         TvViewerState.overlayVisible = false
     }
-    KeepScreenOn.Pinned()
+    KeepScreenOn.Pinned(active = playing && n > 1) // paused or a single photo: the 30-minute rule (audit O4)
     BackHandler { onBack() }
+
+    /** Up / Down in a slideshow: 3 → 5 → 10 s per photo (audit O8, H6); the TV remembers it for its own slideshows. */
+    fun stepInterval(up: Boolean) {
+        val next = SlideshowIntervals.step((interval / 1000).toInt(), up)
+        interval = next * 1000L
+        if (intervalMs == null) AppGraph.prefs.slideshowSeconds = next // a cast keeps the phone's default apart
+        intervalShown = true
+        restart++
+        overlay++
+        AppGraph.log("tv", "slideshow: $next s per photo")
+    }
     TvKeys.Handle { e ->
         val down = e.action == KeyEvent.ACTION_DOWN
         val first = down && e.repeatCount == 0
@@ -147,7 +160,10 @@ fun TvViewerScreen(
                 { if (down) { go(index + 1, "key"); restart++ }; true }
             code == KeyEvent.KEYCODE_DPAD_LEFT || code == KeyEvent.KEYCODE_MEDIA_REWIND || code == KeyEvent.KEYCODE_MEDIA_PREVIOUS ->
                 { if (down) { go(index - 1, "key"); restart++ }; true }
-            code == KeyEvent.KEYCODE_DPAD_UP || code == KeyEvent.KEYCODE_DPAD_DOWN -> { if (first) overlay++; true }
+            code == KeyEvent.KEYCODE_DPAD_UP || code == KeyEvent.KEYCODE_DPAD_DOWN -> {
+                if (first) { if (s.slideshow) stepInterval(up = code == KeyEvent.KEYCODE_DPAD_UP) else overlay++ }
+                true
+            }
             else -> false
         }
     }
@@ -188,8 +204,9 @@ fun TvViewerScreen(
         }
         if (overlayShown && n > 0) {
             val paused = if (playing) "" else "  ·  " + stringResource(R.string.cast_paused) // text, not ⏸ (emoji on some fonts)
+            val every = if (intervalShown) "  ·  " + stringResource(R.string.tv_slideshow_every, (interval / 1000).toInt()) else ""
             Text(
-                "${index + 1} / $n  ·  ${photos[index].name}$paused",
+                "${index + 1} / $n  ·  ${photos[index].name}$paused$every",
                 style = MaterialTheme.typography.titleMedium,
                 color = Color.White,
                 modifier = Modifier.align(Alignment.BottomStart).padding(horizontal = 48.dp, vertical = 27.dp)
@@ -230,8 +247,23 @@ object TvViewerImages {
         .build()
 }
 
-/** The viewer on screen, for tests (B69: app state, not a Compose test rule). */
+/** The slideshow's seconds per photo (H6): 3 / 5 / 10; Up = next longer, Down = next shorter, no wrap-around. */
+object SlideshowIntervals {
+    val CHOICES = listOf(3, 5, 10)
+
+    fun step(currentSeconds: Int, up: Boolean): Int =
+        if (up) CHOICES.firstOrNull { it > currentSeconds } ?: CHOICES.last()
+        else CHOICES.lastOrNull { it < currentSeconds } ?: CHOICES.first()
+}
+
+/**
+ * The viewer on screen (B69: app state, not a Compose test rule). **Not only for tests** (audit O11): a cast's
+ * state for the phone is read from [open], [index], [name], [playing] and [intervalMs] (`TvCastScreen`). [moves],
+ * [shown], [failedShown] and the two `…Visible` flags are test evidence; [moves] keeps the last [MAX_MOVES] only.
+ */
 object TvViewerState {
+    const val MAX_MOVES = 200
+
     class Move(val index: Int, val name: String, val how: String, val atMs: Long) {
         override fun toString() = "$how→$index($name)@$atMs"
     }
@@ -261,6 +293,7 @@ object TvViewerState {
         index = i
         this.name = name
         moves += Move(i, name, how, SystemClock.uptimeMillis())
+        while (moves.size > MAX_MOVES) moves.removeAt(0) // a slideshow left running must not grow this for ever (O11)
     }
 
     /**

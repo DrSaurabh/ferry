@@ -10,5 +10,5 @@ app.ferry.TvPcNotFoundTest | |
 # Ph9: receiving casts in TV mode (discovery reply, cast on top of Home, remote + phone controls, lost phone) [T5].
 app.ferry.TvCastReceiveTest | |
 app.ferry.TvScreenshotTour | |
-# Ph0b probe (throw-away; LongPauseProbe was replaced by TvLongPauseTest in Ph8b):
+# Network diagnostic kept from Ph0b (audit O17): can the emulator reach the host PCs? Its results explain red runs.
 app.ferry.probe.HostReachProbe | |

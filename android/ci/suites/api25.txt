@@ -1,5 +1,9 @@
 # API 25 suite (Fire OS 6 level). Class | host steps before | host check after (plan CP6, §4.14)
 # Ph4:
 app.ferry.Api25LaunchTest | |
-# Ph0b probes (throw-away):
+# Stage 7 (audit O6): what a Fire OS 6 stick really runs, the TV layout (debug UI=tv, PC-T on 18769): TV home,
+# D-pad focus, keep-screen-on; the cast receiver (discovery answer, TCP 8766) and the Media3 player on API 25.
+app.ferry.TvLaunchAndFocusTest | tv_mode |
+app.ferry.TvCastReceiveTest | tv_mode |
+# Network diagnostic kept from Ph0b (audit O17): can the emulator reach the host PCs? Its results explain red runs.
 app.ferry.probe.HostReachProbe | |

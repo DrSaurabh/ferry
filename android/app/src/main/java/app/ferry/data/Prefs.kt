@@ -56,10 +56,6 @@ class Prefs(ctx: Context) : PcStore {
         get() = sp.getBoolean(K_MEDIA_DENIED, false)
         set(v) = sp.edit().putBoolean(K_MEDIA_DENIED, v).apply()
 
-    var batteryAsked: Boolean
-        get() = sp.getBoolean(K_BATTERY, false)
-        set(v) = sp.edit().putBoolean(K_BATTERY, v).apply()
-
     /** Tests start from a clean state (plan §4.14: never `pm clear`, which would drop granted permissions). */
     fun clear() {
         sp.edit().clear().commit()
@@ -80,7 +76,6 @@ class Prefs(ctx: Context) : PcStore {
         const val K_SLIDESHOW = "slideshow_seconds"
         const val K_WELCOME = "welcome_done"
         const val K_INTERRUPTED = "interrupted_count"
-        const val K_BATTERY = "battery_asked"
         const val K_NOTIF = "notifications_asked"
         const val K_MEDIA_DENIED = "media_denied"
     }

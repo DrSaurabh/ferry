@@ -2,6 +2,11 @@ package app.ferry.ui.phone
 
 import android.content.Context
 import android.widget.Toast
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import app.ferry.AppGraph
@@ -9,6 +14,7 @@ import app.ferry.R
 import app.ferry.cast.CastPhase
 import app.ferry.cast.CastPlan
 import app.ferry.cast.CastProblem
+import app.ferry.cast.TvAddress
 import app.ferry.core.HostPort
 import app.ferry.core.cast.CastClient
 import app.ferry.core.model.CastRequest
@@ -16,6 +22,7 @@ import app.ferry.core.model.ControlRequest
 import app.ferry.media.CastFiles
 import app.ferry.media.MediaPick
 import app.ferry.media.PickerMode
+import app.ferry.net.BroadcastAddress
 import app.ferry.service.CastService
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -32,6 +39,7 @@ data class TvChoice(val hp: HostPort, val name: String)
 /**
  * Play on TV and the Remote (plan §4.3, design §4.1.5, §6): finds the TV (the **remembered last TV first**, used at
  * once if it answers [A24]; otherwise a broadcast for `device_type "tv"`, one TV → chosen, several → the user picks),
+ * or, when no TV answers the broadcast, the address typed from the TV's home screen [tryAddress] (audit O2),
  * hands the picked items to `CastService`, and sends the Remote's controls. Activity-scoped (shared by both screens).
  */
 class CastViewModel : ViewModel() {
@@ -64,6 +72,53 @@ class CastViewModel : ViewModel() {
                 AppGraph.log("cast", "TVs found: ${tvs.map { "${it.name} at ${it.hp}" }}")
                 found.value = tvs
                 if (tvs.size == 1) chosen.value = tvs[0]
+            } finally {
+                finding.value = false
+                findsDone++
+            }
+        }
+    }
+
+    // ---- "Enter the TV's address" (audit O2): the way in when the broadcast finds no TV.
+    var addressEditing by mutableStateOf(false)
+    var address by mutableStateOf(TextFieldValue(""))
+    /** A string resource to show under the field (bad address / no answer), or null. */
+    var addressProblem by mutableStateOf<Int?>(null)
+
+    fun beginAddress() {
+        val prefill = BroadcastAddress.firstThreeOctets(AppGraph.network.ownIpv4)
+        address = TextFieldValue(prefill, TextRange(prefill.length))
+        addressProblem = null
+        addressEditing = true
+    }
+
+    /**
+     * Uses the typed TV if its receiver answers; it is remembered at once as the last TV [A24], so the next
+     * Play on TV finds it without a broadcast.
+     */
+    fun tryAddress(text: String = address.text) {
+        val hp = TvAddress.parse(text)
+        if (hp == null) {
+            addressProblem = R.string.cast_address_bad
+            return
+        }
+        findJob?.cancel()
+        addressProblem = null
+        chosen.value = null
+        found.value = emptyList()
+        finding.value = true
+        findJob = viewModelScope.launch {
+            try {
+                if (answers(hp)) {
+                    AppGraph.prefs.lastTv = hp
+                    AppGraph.prefs.lastTvName = hp.host
+                    chosen.value = TvChoice(hp, hp.host)
+                    addressEditing = false
+                    AppGraph.log("cast", "typed TV address $hp answers: remembered")
+                } else {
+                    addressProblem = R.string.cast_address_no_answer
+                    AppGraph.log("cast", "typed TV address $hp does not answer")
+                }
             } finally {
                 finding.value = false
                 findsDone++

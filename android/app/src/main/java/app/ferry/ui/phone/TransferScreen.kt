@@ -57,6 +57,7 @@ import app.ferry.ui.nav.Navigator
 
 class TransferViewModel : ViewModel() {
     val state = AppGraph.transfers.state
+    val retryLost = AppGraph.transfers.retryLost
 }
 
 /**
@@ -84,7 +85,12 @@ fun TransferScreen(nav: Navigator, vm: TransferViewModel = viewModel()) {
         }
         val st = s
         if (st == null) {
-            Text(stringResource(R.string.transfer_nothing), style = MaterialTheme.typography.bodyLarge)
+            val lost by vm.retryLost.collectAsState()
+            Text(
+                stringResource(if (lost) R.string.transfer_retry_lost else R.string.transfer_nothing),
+                style = MaterialTheme.typography.bodyLarge,
+                modifier = Modifier.testTag(if (lost) "transfer-retry-lost" else "transfer-nothing"),
+            )
         } else {
             TransferBody(st, words, onCancel = { confirmCancel = true })
         }

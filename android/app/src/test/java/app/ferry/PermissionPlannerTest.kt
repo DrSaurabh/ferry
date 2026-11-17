@@ -16,6 +16,18 @@ import org.junit.Test
 /** Plan §4.6 / §4.13: permission lists per API level and the Full/Partial/None decision. */
 class PermissionPlannerTest {
     @Test
+    fun locationChoiceAllowAsksForThePhotoSetNotLocationAlone() { // audit O1
+        assertEquals(emptyList<String>(), PermissionPlanner.locationRequest(25))
+        assertEquals(emptyList<String>(), PermissionPlanner.locationRequest(28))
+        for (sdk in listOf(29, 32, 33, 34, 35)) {
+            val asked = PermissionPlanner.locationRequest(sdk)
+            assertEquals(PermissionPlanner.mediaPermissions(sdk), asked)
+            assertTrue("sdk $sdk asks for photo location", ACCESS_MEDIA_LOCATION in asked)
+            assertTrue("sdk $sdk never asks for photo location alone", asked.size > 1)
+        }
+    }
+
+    @Test
     fun listsPerSdk() {
         assertEquals(listOf(READ_EXTERNAL_STORAGE), PermissionPlanner.mediaPermissions(25))
         assertEquals(listOf(READ_EXTERNAL_STORAGE), PermissionPlanner.mediaPermissions(28))

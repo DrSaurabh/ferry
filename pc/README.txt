@@ -139,11 +139,14 @@ ON THE FIRE TV (with the remote)
                 30 s. Play/Pause key or OK: pause. Up: show the time bar. Back: stop.
                 If you stopped part-way, Ferry offers "Resume from ..." next time.
   Photos        "Slideshow" shows all photos, a new one every 5 seconds. Left/Right:
-                previous/next. OK: pause. Or press OK on one photo to look at it.
+                previous/next. OK: pause. Up/Down: 3, 5 or 10 seconds per photo
+                (the TV remembers it). Or press OK on one photo to look at it.
   Apps          OK on an app (.apk) installs it on the TV.
   Other files   Shown for information; open these on your phone or PC.
 New files in the outbox appear on the TV by themselves within a few seconds.
 To play something from the phone, leave Ferry open on its home screen on the TV.
+The TV's screen stays on while a video or slideshow is playing. Paused, finished or
+on the home screen, the screensaver may come on after 30 minutes without a key press.
 
 ====================================================================================
 6. UPDATING FERRY
@@ -153,7 +156,8 @@ To play something from the phone, leave Ferry open on its home screen on the TV.
    (Your settings are kept.)
 3. Start Ferry.bat again.
 4. The next time you open Ferry on the phone and on the TV, it says
-   "New Ferry 2.0.x is ready -> Update". Tap it (on the TV press OK), then Install.
+   "New Ferry 2.0.x is ready -> Update". Tap it, then Install. On the TV the bar is
+   at the top: press Up until it is highlighted, then OK.
    The first time, allow Ferry to install apps: Ferry opens the setting for you.
    On some Fire TVs (Fire OS 8) Ferry restarts after you allow this. Then simply
    press OK on Update (or on the app) once more.
@@ -174,6 +178,8 @@ To play something from the phone, leave Ferry open on its home screen on the TV.
   - Still not found? Type the PC's address once: on the phone Ferry > Settings >
     PC address; on the TV press "Enter address". The address is the one in the Ferry
     window, e.g. 192.168.1.5 (without http:// and without :8765). Ferry remembers it.
+  - Started Ferry on the PC after opening the app? Just wait: while it says "PC not
+    found", the app looks again by itself every few seconds.
 
 "Your PC has an older Ferry":
   The PC runs an old Ferry. Unzip the new Ferry zip on the PC (section 6) and start
@@ -200,9 +206,20 @@ The Fire TV can't install ("unknown sources" / "not allowed"):
 Transfers stop when the phone screen is off:
   Do the vivo battery steps (section 4).
 
-"Nothing found" when you tap Play on TV:
+"No TV found" when you tap Play on TV:
   On the TV, open Ferry and leave it on its home screen, then tap "Find again".
   The phone and the TV must be on the same Wi-Fi.
+  Still not found? Type the TV's address once: the TV shows it on Ferry's screen
+  ("This TV: ... address 192.168.1.30"). On the phone tap "Enter the TV's address",
+  type it and tap "Use this TV". Ferry remembers that TV.
+
+Retry in an old Ferry notification says "Ferry was closed since then":
+  Ferry keeps the list of files only while it is open. Send the files again: the
+  ones that are already on the PC are skipped.
+
+"Allow" for the photo location does nothing, or Ferry asks again:
+  Tap "Open Settings" in Ferry's message (or Android Settings > Apps > Ferry >
+  Permissions > Photos and videos) and choose "Allow all". Then send again.
 
 Where are my files?
   On the PC:       Downloads\Phone (from the phone)

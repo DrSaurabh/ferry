@@ -23,6 +23,8 @@ object LaunchHelpers {
         val i = Intent(Probe.context, MainActivity::class.java)
         if (open != null) i.putExtra(MainActivity.EXTRA_OPEN, open)
         Probe.arg(DeviceMode.EXTRA_NET, "").takeIf { it.isNotEmpty() }?.let { i.putExtra(DeviceMode.EXTRA_NET, it) }
+        // `-e app.ferry.debug.UI tv`: the TV layout on a phone image (API 25 suite, audit O6).
+        Probe.arg(DeviceMode.EXTRA_UI, "").takeIf { it.isNotEmpty() }?.let { i.putExtra(DeviceMode.EXTRA_UI, it) }
         return ActivityScenario.launch(i)
     }
 

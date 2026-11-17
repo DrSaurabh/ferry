@@ -9,6 +9,7 @@ import app.ferry.core.SystemClock
 import app.ferry.core.log.RingLog
 import app.ferry.data.Prefs
 import app.ferry.data.ResumeStore
+import app.ferry.data.StaleFiles
 import app.ferry.media.MediaRepo
 import app.ferry.media.UploadItemFactory
 import coil.ImageLoader
@@ -73,8 +74,9 @@ object AppGraph {
     val interrupted = MutableStateFlow(0)
 
     /**
-     * Startup cleanup (plan §4.2 [PB16]): Ferry's own unfinished `Download/Ferry` rows [B7], `files/apk` (TV APKs
-     * [PB18]) and `files/update`; downloads await it before creating their first sink.
+     * Startup cleanup (plan §4.2 [PB16]): Ferry's own unfinished `Download/Ferry` rows [B7], and files older than an
+     * hour in `files/apk` (TV APKs [PB18]) and `files/update` ([StaleFiles], audit S5); downloads await it before
+     * creating their first sink.
      */
     lateinit var cleanup: Deferred<Unit>
         private set
@@ -126,8 +128,10 @@ object AppGraph {
         network.start()
         cleanup = scope.async(Dispatchers.IO) {
             DownloadSinks.cleanupLeftovers(app)
-            File(app.filesDir, "apk").listFiles()?.forEach { it.delete() } // TV APK downloads [PB18]
-            File(app.filesDir, "update").listFiles()?.forEach { it.delete() } // an older update APK
+            // By age (audit S5): an APK handed to the installer just before this process start is left alone.
+            val now = System.currentTimeMillis()
+            StaleFiles.deleteOld(File(app.filesDir, "apk"), now) // TV APK downloads [PB18]
+            StaleFiles.deleteOld(File(app.filesDir, "update"), now) // an older update APK
             Unit
         }
         log("app", "app start ${BuildConfig.VERSION_NAME} ${Build.MANUFACTURER} ${Build.MODEL} API ${Build.VERSION.SDK_INT}" +

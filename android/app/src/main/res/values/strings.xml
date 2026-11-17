@@ -45,6 +45,7 @@
     <string name="transfer_sending">Sending %1$d of %2$d</string>
     <string name="transfer_checking">Checking which files are already on %1$s…</string>
     <string name="transfer_nothing">Nothing is being sent right now.</string>
+    <string name="transfer_retry_lost">Ferry was closed since then, so it no longer has that list. Send the files again: the ones already on the PC are skipped.</string>
     <string name="notif_sending">Sending %1$d of %2$d to %3$s</string>
     <string name="your_pc">your PC</string>
     <string name="cancel">Cancel</string>
@@ -70,6 +71,7 @@
     <!-- Location / permissions (Ph5a, Ph6) -->
     <string name="location_dialog">To keep the location (GPS) in these photos, Ferry needs your permission.</string>
     <string name="location_allow">Allow</string>
+    <string name="location_settings">Ferry still can\'t read the location in these photos. Tap Open Settings → Permissions → Photos and videos → Allow all, then send them again. Or send them now without location.</string>
     <string name="location_without">Send without location</string>
     <string name="lose_location_note">Photos sent this way may lose their location. For photos, use Send photos &amp; videos.</string>
     <string name="partial_access">Ferry can only see some photos. Tap here to allow all.</string>
@@ -125,6 +127,7 @@
     <!-- TV (design §5) -->
     <string name="tv_not_found">No TV found. On the TV, open Ferry and leave it on its home screen. Then tap Find again.</string>
     <string name="tv_ready">Ready for your phone. On the phone, open Ferry → Play on TV.</string>
+    <string name="tv_this_tv">This TV: %1$s · address %2$s</string>
     <string name="tv_pc_not_found">Can\'t find your PC</string>
     <string name="tv_empty">Nothing here yet. On your PC, put files in Desktop → Ferry outbox. They\'ll appear here.</string>
     <string name="tv_other_files">Open these on your phone or PC</string>
@@ -172,6 +175,7 @@
     <string name="tv_row_photos">Photos</string>
     <string name="tv_row_apps">Apps</string>
     <string name="tv_row_other">Other files</string>
+    <string name="tv_slideshow_every">%1$d s per photo (Up / Down to change)</string>
     <string name="tv_slideshow_card">▶ Slideshow (%1$d)</string>
     <string name="tv_found_pcs">PCs found:</string>
     <string name="tv_storage_full">Not enough space on this TV (%1$s needed).</string>
@@ -185,6 +189,11 @@
     <string name="cast_tv">TV: %1$s</string>
     <string name="cast_choose_tv">Choose a TV:</string>
     <string name="cast_find_again">Find again</string>
+    <string name="cast_enter_address">Enter the TV\'s address</string>
+    <string name="cast_address_hint">The TV shows its address on Ferry\'s home screen (\"This TV: … · address …\"). Type that address here.</string>
+    <string name="cast_address_bad">Type the TV\'s address, like 192.168.1.30.</string>
+    <string name="cast_address_no_answer">No Ferry TV answers at that address. Is Ferry open on the TV, and is the phone on the same Wi-Fi?</string>
+    <string name="cast_use_address">Use this TV</string>
     <string name="cast_videos">Videos</string>
     <string name="cast_photos">Photo slideshow</string>
     <string name="cast_nothing">These files can\'t be played on the TV.</string>

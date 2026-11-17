@@ -66,7 +66,8 @@ class CastLoopbackTest {
     fun videoAndSlideshowThroughTheLoopback() {
         LaunchHelpers.cleanPrefs(welcomeDone = true)
         val loopback = HostPort("127.0.0.1", CastReceiverHost.PORT)
-        AppGraph.prefs.lastTv = loopback // the remembered TV [A24] (broadcasts can't be tested on the emulator, B27)
+        // No remembered TV yet: it gets known through "Enter the TV's address" below (audit O2; broadcasts can't be
+        // tested on the emulator, B27), which also remembers it [A24].
         AppGraph.prefs.slideshowSeconds = 3
         val i = Intent(ctx, MainActivity::class.java).putExtra(DeviceMode.EXTRA_CAST_RECEIVER, true)
         ActivityScenario.launch<MainActivity>(i).use { sc ->
@@ -76,6 +77,22 @@ class CastLoopbackTest {
             // ---- Play on TV: the remembered TV answers and is used at once.
             val vm = castVm(sc)
             var finds = vm.findsDone
+
+            // ---- Audit O2: a typed TV address. Nothing answers on port 1; the receiver's address is used and remembered.
+            sc.onActivity { vm.tryAddress("127.0.0.1:1") }
+            SendHelpers.waitUntil("typed address without a TV: no answer", 15_000) { vm.findsDone > finds }
+            assertEquals(R.string.cast_address_no_answer, vm.addressProblem)
+            assertEquals(null, vm.chosen.value)
+            assertEquals(null, AppGraph.prefs.lastTv)
+            sc.onActivity { vm.tryAddress("not an address") }
+            assertEquals(R.string.cast_address_bad, vm.addressProblem)
+            finds = vm.findsDone
+            sc.onActivity { vm.tryAddress("127.0.0.1") } // no port typed = the TV's receiver port
+            SendHelpers.waitUntil("typed TV address answers", 15_000) { vm.findsDone > finds && vm.chosen.value != null }
+            assertEquals(loopback, vm.chosen.value!!.hp)
+            assertEquals("remembered at once", loopback, AppGraph.prefs.lastTv)
+            assertEquals(null, vm.addressProblem)
+            finds = vm.findsDone
             SendHelpers.tap(str(R.string.btn_play_tv))
             SendHelpers.waitUntil("remembered TV chosen", 15_000) { vm.findsDone > finds && vm.chosen.value != null }
             assertEquals(loopback, vm.chosen.value!!.hp)

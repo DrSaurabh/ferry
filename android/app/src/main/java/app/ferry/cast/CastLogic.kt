@@ -1,5 +1,6 @@
 package app.ferry.cast
 
+import app.ferry.core.HostPort
 import app.ferry.core.model.CastRequest
 import app.ferry.core.model.CastState
 import app.ferry.player.ResumeRule
@@ -83,5 +84,20 @@ class CastWatch(private val idleLimit: Int = 2) {
     fun onState(s: CastState): Boolean {
         if (s.kind == CastState.IDLE) idles++ else idles = 0
         return idles >= idleLimit
+    }
+}
+
+/**
+ * A TV address typed on the phone (audit O2, the TV's counterpart of the PC's "type the address once" [H4]):
+ * "192.168.1.30" means the TV's cast receiver on its usual port [RECEIVER_PORT]; "192.168.1.30:8770" is taken as
+ * typed. Anything that is not an IPv4 address → null. Pure Kotlin (TvAddressTest).
+ */
+object TvAddress {
+    /** `CastReceiverHost.PORT`. */
+    const val RECEIVER_PORT = 8766
+
+    fun parse(text: String): HostPort? {
+        val hp = HostPort.parse(text) ?: return null
+        return if (text.substringAfter("://").contains(':')) hp else HostPort(hp.host, RECEIVER_PORT)
     }
 }

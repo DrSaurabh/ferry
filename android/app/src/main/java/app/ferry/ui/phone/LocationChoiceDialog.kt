@@ -16,12 +16,22 @@ import app.ferry.R
  * `SendCoordinator.withoutLocation()`.
  */
 @Composable
-fun LocationChoiceDialog(onAllow: () -> Unit, onWithoutLocation: () -> Unit, onDismiss: () -> Unit) {
+fun LocationChoiceDialog(
+    onAllow: () -> Unit,
+    onWithoutLocation: () -> Unit,
+    onDismiss: () -> Unit,
+    /** Allow was already tried without success (audit O1): explain the Settings path and offer **Open Settings**. */
+    settings: Boolean = false,
+    onOpenSettings: () -> Unit = {},
+) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        modifier = Modifier.testTag("location-dialog"),
-        text = { Text(stringResource(R.string.location_dialog)) },
-        confirmButton = { TextButton(onClick = onAllow) { Text(stringResource(R.string.location_allow)) } },
+        modifier = Modifier.testTag(if (settings) "location-dialog-settings" else "location-dialog"),
+        text = { Text(stringResource(if (settings) R.string.location_settings else R.string.location_dialog)) },
+        confirmButton = {
+            if (settings) TextButton(onClick = onOpenSettings) { Text(stringResource(R.string.open_settings)) }
+            else TextButton(onClick = onAllow) { Text(stringResource(R.string.location_allow)) }
+        },
         dismissButton = { TextButton(onClick = onWithoutLocation) { Text(stringResource(R.string.location_without)) } },
     )
 }

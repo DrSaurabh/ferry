@@ -12,6 +12,11 @@ import app.ferry.core.discovery.DatagramTransport
 import app.ferry.core.discovery.DiscoveryCodec
 import app.ferry.core.discovery.DiscoveryResponder
 import app.ferry.core.model.DiscoveryReply
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.launch
 import java.lang.ref.WeakReference
 import java.util.concurrent.Executors
 
@@ -31,13 +36,26 @@ class CastReceiverHost(activity: Activity) : DefaultLifecycleObserver {
     private var server: CastReceiverServer? = null
     private var responder: DiscoveryResponder? = null
     private var lock: WifiManager.MulticastLock? = null
+    private var port = PORT
+    private var running = false // worker thread only
+    private var networkWatch: Job? = null
 
     override fun onStart(owner: LifecycleOwner) {
         CastSinkImpl.activity = ref
         worker.execute { startAll() }
+        // Audit O9: the discovery socket is bound to the Wi-Fi network it was opened on. After the TV's Wi-Fi
+        // reconnects (router restart) that binding is dead, so the responder is opened again on the new network;
+        // otherwise the phone would not find this TV until Ferry is reopened.
+        networkWatch = AppGraph.scope.launch {
+            AppGraph.network.chosen.map { it?.network }.distinctUntilChanged().drop(1).collect {
+                worker.execute { restartResponder() }
+            }
+        }
     }
 
     override fun onStop(owner: LifecycleOwner) {
+        networkWatch?.cancel()
+        networkWatch = null
         CastSinkImpl.stop("Ferry left the screen") // the phone sees "idle" and ends its session
         worker.execute { stopAll() }
     }
@@ -52,25 +70,38 @@ class CastReceiverHost(activity: Activity) : DefaultLifecycleObserver {
             log("multicast lock not taken: $e")
             null
         }
-        var port = PORT
+        port = PORT
         server = try {
             CastReceiverServer(CastSinkImpl, PORT, { log(it) }).also { port = it.start() }
         } catch (e: Exception) {
             log("can't listen for casts on TCP $PORT: $e")
             null
         }
-        responder = try {
-            DiscoveryResponder(
-                DatagramTransport(DiscoveryCodec.PORT, binder = AppGraph.network::bindDatagram),
-                identity = { DiscoveryReply(name = AppGraph.deviceName, deviceType = "tv", port = port, version = BuildConfig.VERSION_NAME) },
-                log = { log(it) },
-            ).also { it.start() }
-        } catch (e: Exception) { // UDP 8765 taken: the phone falls back to the remembered TV
-            log("discovery responder not started (UDP ${DiscoveryCodec.PORT}): $e")
-            null
-        }
+        responder = startResponder()
+        running = true
         listening = server != null
         log("receiver on: tcp ${if (server != null) port else "-"}, udp ${if (responder != null) DiscoveryCodec.PORT else "-"}")
+    }
+
+    private fun startResponder(): DiscoveryResponder? = try {
+        val answerPort = port
+        DiscoveryResponder(
+            DatagramTransport(DiscoveryCodec.PORT, binder = AppGraph.network::bindDatagram),
+            identity = { DiscoveryReply(name = AppGraph.deviceName, deviceType = "tv", port = answerPort, version = BuildConfig.VERSION_NAME) },
+            log = { log(it) },
+        ).also { it.start() }
+    } catch (e: Exception) { // UDP 8765 taken: the phone falls back to the remembered TV or a typed address
+        log("discovery responder not started (UDP ${DiscoveryCodec.PORT}): $e")
+        null
+    }
+
+    /** The network changed while the receiver runs: the discovery socket again, on the new network (O9). */
+    private fun restartResponder() {
+        if (!running) return
+        responder?.close()
+        responder = startResponder()
+        restarts++
+        log("network changed: discovery responder ${if (responder != null) "restarted" else "not restarted"}")
     }
 
     private fun stopAll() {
@@ -83,6 +114,7 @@ class CastReceiverHost(activity: Activity) : DefaultLifecycleObserver {
         } catch (e: Exception) {
         }
         lock = null
+        running = false
         listening = false
         log("receiver off")
     }
@@ -95,6 +127,10 @@ class CastReceiverHost(activity: Activity) : DefaultLifecycleObserver {
 
         /** True while the TCP receiver is up (tests). */
         @Volatile var listening = false
+            private set
+
+        /** Responder restarts after a network change (log / tests). */
+        @Volatile var restarts = 0
             private set
     }
 }

@@ -98,7 +98,8 @@ fun TvPlayerScreen(s: Screen.TvPlayer, onBack: () -> Unit) {
             if (host.player.isPlaying) savePosition()
         }
     }
-    KeepScreenOn.Pinned()
+    val isPlaying by host.playing.collectAsState()
+    KeepScreenOn.Pinned(active = isPlaying) // paused / ended: the 30-minute rule (audit O4)
     BackHandler { onBack() }
 
     fun show() {
@@ -206,8 +207,13 @@ private fun ResumeDialog(posMs: Long, onResume: () -> Unit, onStartOver: () -> U
     )
 }
 
-/** The player on screen, for tests (main thread for [player] calls). */
+/**
+ * The player on screen. **Not only for tests** (audit O11): [host] is how a cast from the phone reaches the player
+ * (`TvCastScreen` sends the phone's pause / seek through it and reads the state the phone polls). The other fields
+ * are test evidence. Main thread for [player] calls.
+ */
 object TvPlayerState {
+    /** The cast bridge (product code) and the tests' handle. */
     @Volatile var host: PlayerHost? = null
     val player get() = host?.player
 

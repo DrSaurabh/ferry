@@ -159,7 +159,7 @@ fun TvHomeScreen(vm: TvViewModel, conn: ConnectionState.Connected, nav: Navigato
     // The idle line stays on screen too [A10]: a focused lower row scrolling the list must not hide it (Ph8a run 2).
     Column {
         Text(stringResource(R.string.tv_ready), style = MaterialTheme.typography.titleLarge, modifier = Modifier.testTag("tv-idle"))
-        Text(AppGraph.deviceName, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
+        TvIdentityLine() // this TV's name and address (audit O2)
     }
     LazyColumn(state = column, verticalArrangement = Arrangement.spacedBy(20.dp), modifier = Modifier.testTag("tv-home")) {
         if (empty) item(key = "empty") { Text(stringResource(R.string.tv_empty), style = MaterialTheme.typography.titleMedium) }

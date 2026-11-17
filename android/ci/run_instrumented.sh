@@ -70,8 +70,9 @@ make_app_dir() {
 start_pc_update() { make_app_dir "$TMP/U-app" && APPDIR=$TMP/U-app start_pc U 18767; }
 # PC-T (plan §4.14, TV, Ph8a): update bundle [PB20]; outbox big.mp4, small.mp4, 5 photos + broken.jpg,
 # Test.apk (copy of the debug APK), notes.txt, old.avi (kind "video": Other files [A12]).
+# start_pc_tv [PORT]: 18765 in the TV suite; the API 25 suite runs it next to PC-A on 18769 (Stage 7, audit O6).
 start_pc_tv() {
-  local s=$TMP/T-seed f
+  local s=$TMP/T-seed f port=${1:-18765}
   mkdir -p "$s"
   make_app_dir "$TMP/T-app" || return 1
   cp "$APKS/app-debug.apk" "$s/Test.apk" || return 1
@@ -79,7 +80,7 @@ start_pc_tv() {
   head -c 200000 "$CI/fixtures/small.mp4" > "$s/old.avi"
   set -- "${FERRY_BIG_VIDEO:-$HOME/big-video/big.mp4}" "$CI/fixtures/small.mp4" "$s/Test.apk" "$s/notes.txt" "$s/old.avi"
   for f in photo1 photo2 photo3 photo4 photo5 broken; do set -- "$@" "$CI/fixtures/$f.jpg"; done
-  APPDIR=$TMP/T-app start_pc T 18765 "$@"
+  APPDIR=$TMP/T-app start_pc T "$port" "$@"
 }
 
 # The emulator's Wi-Fi network must have a route before the app can reach 10.0.2.2 on it (Ph6: once, on a cold-boot
@@ -116,6 +117,10 @@ grant() {
 }
 # Ph8a (B72): what the user does in "Install unknown apps"; on API 30 it kills the app, so it runs between classes.
 allow_installs() { adbs appops set "$PKG" REQUEST_INSTALL_PACKAGES allow > /dev/null 2>&1; log "allow_installs: $(adbs appops get "$PKG" REQUEST_INSTALL_PACKAGES)"; }
+# Stage 7 (audit O6): the next class runs in the TV layout (debug UI override) against PC-T on 18769. Used by the
+# API 25 suite, whose image is a phone image: Fire OS 6 is API 25, and it only ever runs the TV layout.
+CLASS_ARGS=()
+tv_mode() { CLASS_ARGS=(-e app.ferry.debug.UI tv -e pcA 10.0.2.2:18769); log "tv_mode: next class in the TV layout, PC-T on 18769"; }
 push_media() { adb push "$CI/fixtures/$1" "$2" > /dev/null && log "pushed $1 -> $2"; }
 
 # Media shown to Ferry must be created and indexed by the shell user, never by Ferry (plan §4.14).
@@ -204,6 +209,11 @@ check_original() {
   verify identical --inbox "$TMP/A/inbox" --name "$GPS_NAME" --fixture "$CI/fixtures/gps.jpg" --mtime-s "$(date_modified "$GPS_NAME")" --label PC-A
   verify uploads --log "$TMP/A/data/ferry-log.txt" --name "$GPS_NAME" --expect saved,skipped --label PC-A
 }
+# Stage 7 (audit O1): the photo shared with "Allow" reached PC-U as the original.
+check_share_original() {
+  sleep 1
+  verify identical --inbox "$TMP/U/inbox" --name "$SHARE_GPS_NAME" --fixture "$CI/fixtures/gps.jpg" --mtime-s "$(date_modified "$SHARE_GPS_NAME")" --label PC-U
+}
 check_no_partials() { sleep 2; verify no-partials --inbox "$TMP/$1/inbox" --label "PC-$1"; }
 # Ph5b: the three files the share helper sent (android/sharehelper ShareActivity.FILES) arrived byte-identical.
 check_share() {
@@ -237,13 +247,14 @@ run_class() {
   adb shell am broadcast -a android.intent.action.CLOSE_SYSTEM_DIALOGS > /dev/null 2>&1
   if [ -n "$before" ]; then eval "$before"; fi
   log "=== $cls"
-  adb shell am instrument -w -r -e class "$cls" "${INST_ARGS[@]}" \
+  adb shell am instrument -w -r -e class "$cls" "${INST_ARGS[@]}" "${CLASS_ARGS[@]}" \
     "$PKG.test/androidx.test.runner.AndroidJUnitRunner" | tr -d '\r' > "$raw" 2>&1
   if judge "$raw"; then log "PASS $cls"
   else
     log "FAIL $cls"; FAILED=1
     grep -E -A45 'INSTRUMENTATION_STATUS: stack=|Process crashed' "$raw" | grep -vE 'at android\.view\.(View|ViewGroup)\.' | head -70
   fi
+  CLASS_ARGS=()
   if [ -n "$after" ]; then eval "$after"; fi
 }
 
@@ -265,14 +276,15 @@ case $suite in
   phone) { start_pc A 18765 &&
            start_pc B 18766 "$CI/fixtures/report.pdf" "$CI/fixtures/small.mp4" "$CI/fixtures/photo1.jpg" &&
            start_pc_update; } || exit 1 ;;
-  *)  start_pc A 18765 "$CI/fixtures/report.pdf" || exit 1 ;;
+  *)  { start_pc A 18765 "$CI/fixtures/report.pdf" && start_pc_tv 18769; } || exit 1 ;;   # PC-T: TV layout on API 25 (O6)
 esac
 
 GPS_NAME=IMG_20250101_120000.jpg
+SHARE_GPS_NAME=IMG_20250102_130000.jpg
 GPS_SHA=$(sha256sum "$CI/fixtures/gps.jpg" | cut -d' ' -f1)
 # Where the app keeps screenshots/probe files [CP16]: the shell can't read Android/data on API 30 TV (Ph0b).
 case $suite in tv) STORE=internal ;; *) STORE=external ;; esac
-INST_ARGS=(-e pcA 10.0.2.2:18765 -e pcB 10.0.2.2:18766 -e pcU 10.0.2.2:18767 -e pcE 10.0.2.2:18768 -e suite "$suite" -e store "$STORE" -e gpsName "$GPS_NAME" -e gpsSha "$GPS_SHA" -e bigName BIG_300MB.jpg -e screenOffName SCREENOFF_280MB.jpg)
+INST_ARGS=(-e pcA 10.0.2.2:18765 -e pcB 10.0.2.2:18766 -e pcU 10.0.2.2:18767 -e pcE 10.0.2.2:18768 -e suite "$suite" -e store "$STORE" -e gpsName "$GPS_NAME" -e shareGpsName "$SHARE_GPS_NAME" -e gpsSha "$GPS_SHA" -e bigName BIG_300MB.jpg -e screenOffName SCREENOFF_280MB.jpg)
 # API 25 image: its only network is reported as cellular, so the app uses the debug NET=any override [PR2].
 if [ "$suite" = api25 ]; then INST_ARGS+=(-e app.ferry.debug.NET any); fi
 

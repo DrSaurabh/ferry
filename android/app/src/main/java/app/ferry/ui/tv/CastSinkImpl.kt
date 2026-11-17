@@ -45,13 +45,19 @@ object CastSinkImpl : CastSink {
     /** The activity (keep-screen-on on a cast [A10]); set by [CastReceiverHost]. */
     @Volatile internal var activity: WeakReference<Activity>? = null
 
-    /** Tests and the log: what arrived ("cast video ×1", "control pause", …). */
+    /** Tests and the log: what arrived ("cast video ×1", "control pause", …); the last [MAX_RECEIVED] only (O11). */
     val received = CopyOnWriteArrayList<String>()
+    private const val MAX_RECEIVED = 200
+
+    private fun note(what: String) {
+        received += what
+        while (received.size > MAX_RECEIVED) received.removeAt(0)
+    }
 
     override fun onCast(req: CastRequest, fromIp: String): Boolean {
         val s = Show(ids.incrementAndGet(), req, fromIp)
         snapshot = CastStateMapper.starting(req)
-        received += "cast ${req.kind} ×${req.items.size}"
+        note("cast ${req.kind} ×${req.items.size}")
         main.post {
             show.value = s
             AppGraph.log("cast", "showing ${req.kind} ×${req.items.size} from '${req.from}' ($fromIp)")
@@ -63,7 +69,7 @@ object CastSinkImpl : CastSink {
     }
 
     override fun onControl(c: ControlRequest): Boolean {
-        received += "control ${c.action}"
+        note("control ${c.action}")
         if (c.action == ControlRequest.STOP) {
             main.post { stop("stopped from the phone") }
             return true

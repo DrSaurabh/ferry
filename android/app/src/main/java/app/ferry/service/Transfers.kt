@@ -42,6 +42,15 @@ class Transfers(
     private val tokens = AtomicLong()
     private val handOvers = ConcurrentHashMap<Long, List<PreparedItem>>()
 
+    /**
+     * Retry was asked for (Results notification) but this process has no queue any more: Ferry was closed in the
+     * meantime [H16]. The Transfer screen then says so instead of doing nothing (audit O5). Cleared by the next send.
+     */
+    val retryLost = MutableStateFlow(false)
+
+    /** There is a queue (running or finished) that Retry can act on. */
+    val hasQueue: Boolean get() = synchronized(this) { engine != null }
+
     fun newId(): Long = ids.incrementAndGet()
 
     /** In-process hand-over of prepared items to the service [CP8] (no binder size limit). */
@@ -62,6 +71,7 @@ class Transfers(
     }
 
     private fun addLocked(items: List<PreparedItem>) {
+        retryLost.value = false
         var e = engine
         if (e == null || !e.isRunning) {
             follow?.cancel()

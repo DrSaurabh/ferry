@@ -39,14 +39,17 @@ import kotlinx.coroutines.launch
 /**
  * The UI side of every send (plan §4.4 [PB5] [H19]), shared by "Send other files" and the share activity (and the
  * picker in Ph6): "Preparing…" while `SendCoordinator.prepare()` runs, then — only if a photo's original can't be
- * read — the location choice: **Allow** asks for ACCESS_MEDIA_LOCATION and prepares again, **Send without
- * location** sends those items on the plain URI. Then `SendCoordinator.start()` and `onStarted`. Dismissing the
+ * read — the location choice: **Allow** asks for the photo permissions (photos, videos and photo location together,
+ * `PermissionPlanner.locationRequest`, audit O1) and prepares again; if the original still can't be read the dialog
+ * comes back with **Open Settings** in place of Allow; **Send without location** sends those items on the plain URI. Then `SendCoordinator.start()` and `onStarted`. Dismissing the
  * dialog sends nothing (`onCancelled`). Call [send] to begin; place [Overlay] on top of the screen.
  */
 class SendFlow internal constructor() {
     internal var preparing by mutableStateOf(false)
     internal var pending by mutableStateOf<Pair<SendRequest, Prepared>?>(null)
     internal var again: SendRequest? = null
+    /** **Allow** was tried in this send and the original still can't be read: the dialog now offers Settings (O1). */
+    internal var askedAlready by mutableStateOf(false)
     internal lateinit var sender: (SendRequest) -> Unit
     internal lateinit var overlay: @Composable () -> Unit
 
@@ -66,6 +69,7 @@ fun rememberSendFlow(onStarted: (Prepared) -> Unit, onCancelled: () -> Unit = {}
     val flow = remember { SendFlow() }
 
     fun begin(p: Prepared) {
+        flow.askedAlready = false
         SendCoordinator.start(ctx, p)
         if (p.loseLocationNote) Toast.makeText(ctx.applicationContext, R.string.lose_location_note, Toast.LENGTH_LONG).show()
         started(p)
@@ -86,25 +90,42 @@ fun rememberSendFlow(onStarted: (Prepared) -> Unit, onCancelled: () -> Unit = {}
                     flow.preparing = false
                 }
                 when {
-                    p == null || p.items.isEmpty() -> cancelled()
+                    p == null || p.items.isEmpty() -> {
+                        flow.askedAlready = false
+                        cancelled()
+                    }
                     p.needsLocationChoice.isEmpty() -> begin(p)
                     else -> flow.pending = req to p
                 }
             }
         }
     }
-    val askLocation = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-        AppGraph.log("send", "photo location permission: $granted")
-        flow.again?.let { r -> flow.again = null; flow.send(r) } // granted → originals; else the dialog again
+    val askLocation = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { result ->
+        AppGraph.log("send", "photo location permission: ${result[PermissionPlanner.ACCESS_MEDIA_LOCATION]} " +
+            "(granted ${result.filterValues { it }.keys.map { it.substringAfterLast('.') }})")
+        // Granted → originals. Still not readable → the dialog again, now with Open Settings instead of Allow:
+        // Android stops showing its own dialog after two refusals, so Allow would do nothing for ever (O1).
+        flow.again?.let { r ->
+            flow.again = null
+            flow.askedAlready = true
+            flow.send(r)
+        }
     }
     flow.overlay = {
         if (flow.preparing) PreparingCard()
         flow.pending?.let { (req, p) ->
             LocationChoiceDialog(
+                settings = flow.askedAlready,
                 onAllow = {
                     flow.pending = null
-                    val perm = PermissionPlanner.locationPermission(Build.VERSION.SDK_INT)
-                    if (perm == null) flow.send(req) else { flow.again = req; askLocation.launch(perm) }
+                    val perms = PermissionPlanner.locationRequest(Build.VERSION.SDK_INT)
+                    if (perms.isEmpty()) flow.send(req) else { flow.again = req; askLocation.launch(perms.toTypedArray()) }
+                },
+                onOpenSettings = { // nothing is sent now: the user allows it in Settings and sends again
+                    flow.pending = null
+                    flow.askedAlready = false
+                    openAppSettings(ctx)
+                    cancelled()
                 },
                 onWithoutLocation = {
                     flow.pending = null
@@ -112,6 +133,7 @@ fun rememberSendFlow(onStarted: (Prepared) -> Unit, onCancelled: () -> Unit = {}
                 },
                 onDismiss = {
                     flow.pending = null
+                    flow.askedAlready = false
                     cancelled()
                 },
             )

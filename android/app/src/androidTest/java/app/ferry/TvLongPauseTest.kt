@@ -5,6 +5,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import app.ferry.probe.Probe
 import app.ferry.probe.Shots
 import app.ferry.ui.nav.Screen
+import app.ferry.ui.tv.KeepScreenOn
 import app.ferry.ui.tv.TvPlayerState
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -38,9 +39,15 @@ class TvLongPauseTest {
 
             SendHelpers.waitUntil("5 s of playback", 60_000) { host.playbackError != null || (playing() && pos() >= 5_000) }
             noError()
+            // Audit O4: the screen is pinned on only while the video is playing.
+            SendHelpers.waitUntil("screen pinned on while playing", 5_000) { KeepScreenOn.pinnedNow == 1 }
 
             t.key(KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE)
             SendHelpers.waitUntil("paused by Play/Pause", 5_000) { t.main { !host.player.playWhenReady } }
+            SendHelpers.waitUntil("not pinned while paused (the 30-minute rule applies)", 5_000) { KeepScreenOn.pinnedNow == 0 }
+            var stillOn = false
+            sc.onActivity { a -> stillOn = KeepScreenOn.isOn(a) }
+            assertTrue("a pause keeps the screen on for the next 30 min, as a key press does", stillOn)
             Thread.sleep(500)
             val (atPause, bufferedAtPause, duration) = t.main {
                 Triple(host.player.currentPosition, host.player.bufferedPosition, host.player.duration)
@@ -57,6 +64,7 @@ class TvLongPauseTest {
             val resumedAt = System.currentTimeMillis()
             SendHelpers.device.pressDPadCenter()
             SendHelpers.waitUntil("playing within 10 s of OK", 10_000) { playing() }
+            SendHelpers.waitUntil("pinned on again while playing", 5_000) { KeepScreenOn.pinnedNow == 1 }
             Probe.record("long_pause_resumed_ms", System.currentTimeMillis() - resumedAt)
             val target = maxOf(bufferedAtPause, bufferedAfter) + 10_000
             SendHelpers.waitUntil("play past the pre-pause buffer ($target ms)", (target - atPause) + 60_000) {

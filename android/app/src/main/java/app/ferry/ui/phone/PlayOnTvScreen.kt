@@ -20,7 +20,12 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -41,6 +46,35 @@ import app.ferry.media.PickerMode
 import app.ferry.ui.common.rememberMediaGate
 import app.ferry.ui.nav.Navigator
 import app.ferry.ui.nav.Screen
+
+/**
+ * "Enter the TV's address" (audit O2): shown when no TV was found. The TV's home screen shows its address
+ * ("This TV: … · address 192.168.1.30"); number keyboard, prefilled with the phone's own first three numbers.
+ */
+@Composable
+private fun TvAddressEntry(vm: CastViewModel) {
+    if (!vm.addressEditing) {
+        TextButton(onClick = { vm.beginAddress() }, modifier = Modifier.testTag("cast-enter-address")) {
+            Text(stringResource(R.string.cast_enter_address))
+        }
+        return
+    }
+    Text(stringResource(R.string.cast_address_hint), style = MaterialTheme.typography.bodyMedium)
+    OutlinedTextField(
+        value = vm.address,
+        onValueChange = {
+            vm.address = it
+            vm.addressProblem = null
+        },
+        isError = vm.addressProblem != null,
+        singleLine = true,
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal, imeAction = ImeAction.Done),
+        keyboardActions = KeyboardActions(onDone = { vm.tryAddress() }),
+        modifier = Modifier.fillMaxWidth().testTag("cast-address-field"),
+    )
+    vm.addressProblem?.let { Text(stringResource(it), color = MaterialTheme.colorScheme.error, modifier = Modifier.testTag("cast-address-problem")) }
+    Button(onClick = { vm.tryAddress() }, modifier = Modifier.testTag("cast-use-address")) { Text(stringResource(R.string.cast_use_address)) }
+}
 
 /**
  * Play on TV (P9; design §4.1.5, plan §4.3): finds the TV (remembered one first [A24]), or lists several to choose
@@ -95,6 +129,7 @@ fun PlayOnTvScreen(nav: Navigator, vm: CastViewModel) {
                         else -> {
                             Text(stringResource(R.string.tv_not_found), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.testTag("cast-no-tv"))
                             OutlinedButton(onClick = { vm.find() }) { Text(stringResource(R.string.cast_find_again)) } // the text says "tap Find again"
+                            TvAddressEntry(vm)
                         }
                     }
                 }

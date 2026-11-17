@@ -71,7 +71,9 @@ object Notifications {
             b.setContentText(extras.last()).setStyle(NotificationCompat.BigTextStyle().bigText(extras.joinToString("\n")))
         }
         if (TransferMath.retryable(s) > 0) {
-            b.addAction(0, ctx.getString(R.string.retry), serviceAction(ctx, TransferService.ACTION_RETRY, 2))
+            // Retry opens Ferry, which retries from the visible screen, or says that the list is gone when the
+            // process was closed in the meantime (the queue is in memory [H16]; audit O5): never a silent no-op.
+            b.addAction(0, ctx.getString(R.string.retry), retryFromApp(ctx))
         }
         try {
             NotificationManagerCompat.from(ctx).notify(ID_RESULTS, b.build())
@@ -80,7 +82,12 @@ object Notifications {
         }
     }
 
-    fun update(ctx: Context, s: EngineState?) = notifyProgress(ctx, progress(ctx, s))
+    fun cancelResults(ctx: Context) {
+        try {
+            NotificationManagerCompat.from(ctx).cancel(ID_RESULTS)
+        } catch (e: SecurityException) {
+        }
+    }
 
     fun notifyProgress(ctx: Context, n: Notification) {
         try {
@@ -171,6 +178,16 @@ object Notifications {
     }
 
     private fun openTransfer(ctx: Context): PendingIntent = openScreen(ctx, MainActivity.OPEN_TRANSFER, 0)
+
+    /** The Results notification's Retry: the Transfer screen with `retry = true` (handled in `MainActivity.openFrom`). */
+    internal fun retryIntent(ctx: Context): Intent = Intent(ctx, MainActivity::class.java)
+        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+        .putExtra(MainActivity.EXTRA_OPEN, MainActivity.OPEN_TRANSFER)
+        .putExtra(MainActivity.EXTRA_RETRY, true)
+
+    private fun retryFromApp(ctx: Context): PendingIntent = PendingIntent.getActivity(
+        ctx, 4, retryIntent(ctx), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+    )
 
     private fun openScreen(ctx: Context, open: String, code: Int): PendingIntent = PendingIntent.getActivity(
         ctx, code,

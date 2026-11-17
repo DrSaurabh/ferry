@@ -13,9 +13,13 @@ import kotlinx.coroutines.launch
 import java.lang.ref.WeakReference
 
 /**
- * Screen stays on (design §5.1 [A10] [H24], plan §4.9): `FLAG_KEEP_SCREEN_ON` while the Player / Viewer / Slideshow
- * is showing ([Pinned]); on Home it is set by every key press ([poke], from `MainActivity.dispatchKeyEvent`) and by a
- * cast (Ph9), and cleared 30 min later by a restartable coroutine, so a forgotten TV still goes to sleep.
+ * Screen stays on (design §5.1 [A10] [H24], plan §4.9): `FLAG_KEEP_SCREEN_ON` while a video is **playing** or a
+ * slideshow is **running** ([Pinned] with `active = true`); everywhere else it is set by every key press ([poke], from
+ * `MainActivity.dispatchKeyEvent`) and by a cast (Ph9), and cleared 30 min later by a restartable coroutine, so a
+ * forgotten TV still goes to sleep.
+ *
+ * Audit O4 (H41): a paused or finished video, a paused slideshow and a single photo follow the 30-minute rule too
+ * (they used to keep the TV awake for as long as they were on screen, i.e. all night on a forgotten TV).
  */
 object KeepScreenOn {
     const val HOME_MS = 30L * 60 * 1000
@@ -41,16 +45,28 @@ object KeepScreenOn {
     fun isOn(activity: Activity): Boolean =
         activity.window.attributes.flags and WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON != 0
 
-    /** Keeps the screen on while this composable is shown (Player, Viewer, Slideshow); Home's 30 min start after. */
+    /** Screens that pin the screen on right now (tests: 1 while playing, 0 when paused). */
+    val pinnedNow: Int get() = pinned
+
+    /**
+     * Keeps the screen on while this composable is shown **and** [active] (video playing, slideshow running). When
+     * it stops being active or leaves the screen, the 30 minutes start (as after a key press).
+     */
     @Composable
-    fun Pinned() {
+    fun Pinned(active: Boolean) {
         val activity = LocalContext.current as? Activity ?: return
-        DisposableEffect(activity) {
-            pinned++
-            activity.window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-            onDispose {
-                pinned--
+        DisposableEffect(activity, active) {
+            if (active) {
+                pinned++
+                activity.window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+            } else {
                 poke(activity)
+            }
+            onDispose {
+                if (active) {
+                    pinned--
+                    poke(activity)
+                }
             }
         }
     }

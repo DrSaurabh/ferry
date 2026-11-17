@@ -36,6 +36,14 @@ class PhoneDialogsTour {
     }
 
     @Test
+    fun locationChoiceAfterAllowFailed() {
+        compose.setContent {
+            FerryTheme { LocationChoiceDialog(onAllow = {}, onWithoutLocation = {}, onDismiss = {}, settings = true) }
+        }
+        shoot("location-dialog-settings")
+    }
+
+    @Test
     fun mediaDenied() {
         compose.setContent {
             FerryTheme {

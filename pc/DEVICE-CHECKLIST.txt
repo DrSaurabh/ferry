@@ -46,10 +46,19 @@ C4. Send about 100 photos at once. Note the speed shown.
 C5. In the vivo Gallery: select 3 photos > Share > Ferry.
     Expected: a short message "Sending 3 files to <your PC>", you stay in the Gallery,
     the 3 photos arrive on the PC with their location.               Result: ______
+    If Ferry asks about the photo location: tap Allow, then "Allow all" in Android's
+    question. Did Android show its question? Did the photos then go by themselves?
+    (If Ferry asks again with "Open Settings", write that down.)    Result: ______
+    The first time, Android may also ask to allow notifications.     Result: ______
 C6. While a big video is sending, switch the PC's Wi-Fi off (or unplug its network)
     for 1 minute, then on again.
     Expected: the phone shows "Waiting for <your PC>..." and carries on by itself; no
     half file on the PC.                                             Result: ______
+    About how long after the PC was back did it carry on?           ______ seconds
+C7. Close Ferry on the PC. Open Ferry on the phone and wait for "PC not found". Now
+    start Ferry.bat on the PC and do NOT touch the phone.
+    Expected: within about 15 seconds the phone says "Connected to <your PC>".
+    Result: ______
 
 ---------------------------------------------------------------------------------------
 D. PC -> PHONE  (acceptance 4)
@@ -81,10 +90,12 @@ F2. Stop it half-way (Back) and open it again.
     Expected: "Resume from ..." is focused; OK continues there.  Result: ______
 F3. Play a 4K or HEVC video (e.g. one recorded on the vivo).
     Expected: it plays, or a clear message "This TV can't play this video format (...)".
+    If the video DOES play: the message must not stay on top of the picture.
     Result: ______
 F4. Put 10 photos in the outbox (include one HEIC photo from the vivo if you have one).
     Photos > Slideshow. Expected: a new photo every 5 s; Left/Right go back/forward;
     OK pauses. HEIC: shown, or "Can't show this photo format".  Result: ______
+    Up / Down: the slideshow changes to 3, 5 or 10 seconds per photo. Result: ______
 F5. Put an .apk in the outbox. On the TV: Apps > OK on it.
     Expected: Ferry asks to "install apps" the first time (Open Settings has the focus;
     turn Ferry ON, press Back), then Android's installer opens. On Fire OS 8 Ferry may
@@ -93,6 +104,11 @@ F5. Put an .apk in the outbox. On the TV: Apps > OK on it.
 F6. Leave the TV on Ferry's home screen without touching it for 20 minutes.
     Expected: the screensaver does NOT come on (Ferry keeps the screen on for 30
     minutes, so the phone can still play on it).                 Result: ______
+F7. Pause a video and leave the TV alone for 40 minutes.
+    Expected: the screensaver comes on (a paused video keeps the screen on for 30
+    minutes only). While a video is playing it must never come on. Result: ______
+F8. Only on an older Fire TV (Fire OS 6): do F1, F2 and F5 work there too? These
+    could not be tested automatically on that Android version.  Result: ______
 
 ---------------------------------------------------------------------------------------
 G. PHONE -> FIRE TV with the PC off  (acceptance 8)
@@ -109,15 +125,22 @@ G4. Photo slideshow > pick 10 photos > Play on TV. Try Next and 3/5/10 s on the 
     Expected: the TV shows them and follows the phone.           Result: ______
 G5. Only if G1 did not find the TV: write what the phone showed. Then close other apps
     on the TV, open Ferry on the TV again and tap "Find again" on the phone.
-    (Another TV app may be using Ferry's port 8765; Ferry then uses the TV it played
-    on last time.)                                               Result: ______
+    Still "No TV found"? The TV shows "This TV: ... address ..." on Ferry's screen.
+    On the phone tap "Enter the TV's address", type that address, tap "Use this TV".
+    Expected: "TV: <address>", and Ferry remembers this TV from now on.
+    Result: ______
+G6. While Ferry is open on the TV, restart your Wi-Fi router. When the Wi-Fi is back,
+    tap "Find again" on the phone (if you have time for this one).
+    Expected: the phone finds the TV again without reopening Ferry on the TV.
+    Result: ______
 
 ---------------------------------------------------------------------------------------
 H. UPDATES AND LOG  (acceptance 9, 10)
 ---------------------------------------------------------------------------------------
 H1. When you get a newer Ferry zip: unzip it over the old folder, start Ferry.bat.
     Expected: phone and TV show "New Ferry 2.0.x is ready -> Update"; Update installs
-    it; your settings are kept.                                  Result: ______
+    it; your settings are kept. (On the TV: Up to the bar, then OK.)
+    Result: ______
 H2. Open ferry-log.txt in the Ferry folder.
     Expected: one line per file sent or downloaded, with the device name.
     Result: ______

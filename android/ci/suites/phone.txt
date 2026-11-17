@@ -2,14 +2,18 @@
 #   Class | host steps before it | host check after it
 # Ph4:
 app.ferry.PhoneLaunchTest | |
+# Stage 7 (audit O5): Retry on an old Results notification after Ferry was closed says so (no silent no-op).
+app.ferry.RetryAfterRestartTest | |
 # Ph10: the real first "Send photos & videos" without any media permission (refused once; screenshot tour).
 app.ferry.PhonePermissionTour | |
-# Ph0b probe (throw-away; RedactionProbe was replaced by the GPS tests in Ph5a):
+# Network diagnostic kept from Ph0b (audit O17): can the emulator reach the host PCs? Its results explain red runs.
 app.ferry.probe.HostReachProbe | |
 # Ph6: first of the media classes, on the fresh install with only "Select photos" access [A15].
 app.ferry.PartialAccessBannerTest | grant READ_MEDIA_VISUAL_USER_SELECTED |
 # Ph5a: media classes. Run 1 without ACCESS_MEDIA_LOCATION (B1 negative control), then grant it.
 app.ferry.GpsNegativeControlTest | grant READ_MEDIA_IMAGES; grant READ_MEDIA_VIDEO; push_media gps.jpg /sdcard/DCIM/Camera/IMG_20250101_120000.jpg; scan_media /sdcard/DCIM/Camera/IMG_20250101_120000.jpg | check_negative
+# Stage 7 (audit O1): Allow in the share activity's location dialog; still without ACCESS_MEDIA_LOCATION. PC-U.
+app.ferry.ShareLocationAllowTest | push_media gps.jpg /sdcard/DCIM/Camera/$SHARE_GPS_NAME; scan_media /sdcard/DCIM/Camera/$SHARE_GPS_NAME | check_share_original
 app.ferry.GpsOriginalTest | grant ACCESS_MEDIA_LOCATION | check_original
 # Ph6: the picker across two albums [P3].
 app.ferry.PickerAcrossAlbumsTest | push_pick_photos | check_picker

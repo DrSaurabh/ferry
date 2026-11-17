@@ -42,6 +42,13 @@ object PermissionPlanner {
     fun locationPermission(sdk: Int): String? = if (sdk >= 29) ACCESS_MEDIA_LOCATION else null
 
     /**
+     * What **Allow** in the location choice asks for (audit O1): the whole photo set, as the picker does. Asked for
+     * alone, "photo location" is refused without any dialog on recent Android when Ferry has no photo access yet
+     * (the first Share → Ferry). Empty below Android 10: nothing is redacted there.
+     */
+    fun locationRequest(sdk: Int): List<String> = if (sdk >= 29) mediaPermissions(sdk) else emptyList()
+
+    /**
      * Does a photo/video need the "Allow / Send without location" choice [H19] [A2]? On 29+ when the permission is
      * missing, or when opening the original (setRequireOriginal) failed although it is granted.
      */

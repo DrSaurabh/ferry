@@ -39,6 +39,18 @@ class PlayerHost(ctx: Context, val url: String, val title: String) {
     /** The line to show over the video ("This TV can't play this video format (HEVC)"), or null. */
     val message = MutableStateFlow<String?>(null)
 
+    /** The video is advancing right now (keep-screen-on follows it, audit O4). */
+    val playing = MutableStateFlow(false)
+
+    /**
+     * Audit O15: a line that came from the track list only (not from a playback error). The player may still play a
+     * track it calls "not supported" (one that merely exceeds what the decoder advertises, e.g. 4K on a 1080p stick),
+     * so the "format" line goes away as soon as a video frame is drawn, and the "sound" line after [SOUND_NOTE_MS].
+     */
+    private var trackLine: String? = null
+    private var frameShown = false
+    private val main = android.os.Handler(android.os.Looper.getMainLooper())
+
     /** Evidence for the tests and the log (T2: no `PlaybackException` across a long pause). */
     @Volatile var playbackError: PlaybackException? = null
         private set
@@ -65,13 +77,28 @@ class PlayerHost(ctx: Context, val url: String, val title: String) {
                 AppGraph.log("player", "error ${error.errorCodeName}: ${error.message} (cause ${error.cause}) → ${message.value}")
             }
 
+            override fun onIsPlayingChanged(isPlaying: Boolean) {
+                playing.value = isPlaying
+            }
+
             override fun onTracksChanged(tracks: Tracks) {
-                unsupported(tracks, C.TRACK_TYPE_VIDEO)?.let {
-                    message.value = res.getString(R.string.cant_play_format, it)
-                } ?: unsupported(tracks, C.TRACK_TYPE_AUDIO)?.let {
-                    message.value = res.getString(R.string.cant_play_sound, it)
-                }
-                if (message.value != null) AppGraph.log("player", "tracks: ${message.value}")
+                if (playbackError != null) return // an error line stays
+                val video = unsupported(tracks, C.TRACK_TYPE_VIDEO)
+                val audio = unsupported(tracks, C.TRACK_TYPE_AUDIO)
+                val line = when {
+                    video != null && !frameShown -> res.getString(R.string.cant_play_format, video)
+                    audio != null -> res.getString(R.string.cant_play_sound, audio)
+                    else -> null
+                } ?: return
+                trackLine = line
+                message.value = line
+                AppGraph.log("player", "tracks: $line")
+                if (video == null || frameShown) main.postDelayed({ clearTrackLine(line, "shown for ${SOUND_NOTE_MS / 1000} s") }, SOUND_NOTE_MS)
+            }
+
+            override fun onRenderedFirstFrame() {
+                frameShown = true
+                trackLine?.let { clearTrackLine(it, "the video does play") }
             }
         })
         player.addAnalyticsListener(object : AnalyticsListener {
@@ -110,7 +137,17 @@ class PlayerHost(ctx: Context, val url: String, val title: String) {
     }
 
     fun release() {
+        main.removeCallbacksAndMessages(null)
         player.release()
+    }
+
+    /** Takes a track-list line off the screen if it is still the one showing (never an error line). */
+    private fun clearTrackLine(line: String, why: String) {
+        if (trackLine == line && message.value == line && playbackError == null) {
+            message.value = null
+            trackLine = null
+            AppGraph.log("player", "message cleared: $why")
+        }
     }
 
     /** A track type that is present but has no playable track: its codec name, else null. */
@@ -118,6 +155,10 @@ class PlayerHost(ctx: Context, val url: String, val title: String) {
         val groups = tracks.groups.filter { it.type == type }
         if (groups.isEmpty() || groups.any { it.isSupported }) return null
         return codec(groups.first().getTrackFormat(0))
+    }
+
+    private companion object {
+        const val SOUND_NOTE_MS = 8_000L
     }
 
     private fun codec(f: Format?): String = CodecName.of(f?.sampleMimeType, f?.codecs)

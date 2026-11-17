@@ -1,12 +1,15 @@
 package app.ferry
 
+import android.view.KeyEvent
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.uiautomator.By
 import androidx.test.uiautomator.Until
 import app.ferry.core.HostPort
+import app.ferry.net.BroadcastAddress
 import app.ferry.net.ConnectionState
 import app.ferry.probe.Probe
 import app.ferry.probe.Shots
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -60,7 +63,30 @@ class TvPcNotFoundTest {
             Shots.take("tv-enter-address")
             assertNotNull("address field prefilled with 10.0.2.", field)
             assertTrue(field.text.matches(Regex("""10\.0\.2\.\d*""")))
-            SendHelpers.device.pressBack() // closes the on-screen keyboard if it opened
+
+            // Audit O3: OK on "Enter address" put the focus in the field with the cursor after the prefill, so a
+            // digit typed on the remote's keyboard lands at the end ("10.0.2." + "9" = "10.0.2.9", not "910.0.2.").
+            SendHelpers.waitUntil("the field has the focus", 5_000) { vm.addressFieldFocused }
+            val prefill = checkNotNull(vm.addressDraft)
+            assertEquals(BroadcastAddress.firstThreeOctets(AppGraph.network.ownIpv4), prefill)
+            SendHelpers.device.pressKeyCode(KeyEvent.KEYCODE_9)
+            SendHelpers.waitUntil("typed digit arrives (draft=${vm.addressDraft})", 5_000) { vm.addressDraft != prefill }
+            Probe.record("address_after_digit", vm.addressDraft)
+            assertEquals("the digit goes after the prefilled part", prefill + "9", vm.addressDraft)
+            assertNotNull(HostPort.parse(vm.addressDraft!!))
+            SendHelpers.settle()
+            Shots.take("tv-enter-address-typed")
+
+            // Audit O2: this TV's address is on screen for the phone's "Enter the TV's address".
+            val own = checkNotNull(AppGraph.network.ownIpv4)
+            Probe.record("tv_address_on_screen", "own=$own uiautomator_sees=${SendHelpers.device.hasObject(By.textContains("address $own"))}")
+
+            // Audit O16: the PC appears (here: its address becomes right) and nobody presses Try again; Ferry
+            // looks again by itself every 10 s while "PC not found" is on screen.
+            val locatesBefore = locates()
+            AppGraph.prefs.manual = HostPort.parse(Probe.pc)
+            SendHelpers.waitUntil("found without Try again", 45_000) { AppGraph.connection.state.value is ConnectionState.Connected }
+            Probe.record("auto_retry", "connected by itself; locate lines $locatesBefore → ${locates()}")
         }
     }
 }

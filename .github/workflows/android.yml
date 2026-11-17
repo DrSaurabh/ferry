@@ -296,7 +296,7 @@ jobs:
       || (github.event_name == 'push' && (contains(github.event.head_commit.message, '[emu]')
           || contains(github.event.head_commit.message, '[emu:api25]')))
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 45
     # No AVD snapshot for API 25 (B12): a cold boot takes ~15 s, while booting from a snapshot hung
     # ("Timeout waiting for emulator to boot") twice in Ph0b.
     steps:
@@ -315,6 +315,14 @@ jobs:
           sudo udevadm trigger --name-match=kvm
       - uses: actions/setup-python@v5
         with: { python-version: "3.13" }
+      # Stage 7 (audit O6): the TV layout also runs on API 25, with the TV suite's outbox (PC-T).
+      - name: Big video cache
+        uses: actions/cache@v4
+        with:
+          path: ~/big-video
+          key: big-video-${{ hashFiles('android/ci/make_big_video.sh') }}
+      - name: Big video
+        run: bash android/ci/make_big_video.sh ~/big-video/big.mp4
       - name: API 25 suite (attempt 1)
         id: try1
         continue-on-error: true

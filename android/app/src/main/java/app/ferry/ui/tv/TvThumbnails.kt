@@ -13,8 +13,10 @@ import okhttp3.Call
 
 /**
  * Photo thumbnails on TV home (design §5.1 [A11], plan §4.9): the PC serves only originals (5–15 MB), so a card
- * loads its photo only while it is composed (on screen), at most 2 at a time, decoded at about 320 px, cached on
- * disk and in memory under `name|size|mtime` (the 5 s refresh never reloads an unchanged file).
+ * loads its photo only while it is composed (on screen), at most 2 at a time, decoded at about 320 px and kept in
+ * the memory cache under `name|size|mtime` (the 5 s refresh never reloads an unchanged file).
+ * The disk cache holds what was **downloaded** (the originals), not the 320 px pictures, so its 100 MB is only the
+ * last 7–15 photos (audit O12, deferred: real thumbnails would have to come from the PC, a new feature).
  * Requests go through the **shared** OkHttp client [PR19]: bound to the Wi-Fi/Ethernet network [A9] and carrying
  * `X-Ferry-Device` [CP15]; it is looked up on every call because it is rebuilt when the network changes.
  */

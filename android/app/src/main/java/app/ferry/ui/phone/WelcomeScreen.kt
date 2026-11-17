@@ -50,10 +50,7 @@ fun WelcomeScreen(onDone: () -> Unit) {
             Card(Modifier.fillMaxWidth().testTag("battery-card")) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text(stringResource(R.string.battery_card), style = MaterialTheme.typography.bodyLarge)
-                    OutlinedButton(onClick = {
-                        AppGraph.prefs.batteryAsked = true
-                        Battery.request(ctx)
-                    }) { Text(stringResource(R.string.battery_allow)) }
+                    OutlinedButton(onClick = { Battery.request(ctx) }) { Text(stringResource(R.string.battery_allow)) }
                 }
             }
         }

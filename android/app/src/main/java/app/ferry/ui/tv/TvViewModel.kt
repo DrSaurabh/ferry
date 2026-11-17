@@ -32,6 +32,10 @@ class TvViewModel : ViewModel() {
     /** The focused button on "PC not found" ("try", "enter", …), for tests. */
     @Volatile var pcNotFoundFocus: String? = null
 
+    /** "Enter address": what the field holds and whether it has the focus (tests, audit O3). */
+    @Volatile var addressDraft: String? = null
+    @Volatile var addressFieldFocused = false
+
     fun onCardFocus(f: RowFocus, title: String, has: Boolean) {
         if (has) {
             focus = f

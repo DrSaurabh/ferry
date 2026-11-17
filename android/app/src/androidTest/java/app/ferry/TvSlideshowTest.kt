@@ -4,6 +4,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import app.ferry.probe.Probe
 import app.ferry.probe.Shots
 import app.ferry.ui.nav.Screen
+import app.ferry.ui.tv.KeepScreenOn
 import app.ferry.ui.tv.RowFocus
 import app.ferry.ui.tv.TvViewerState
 import org.junit.Assert.assertEquals
@@ -42,6 +43,7 @@ class TvSlideshowTest {
             assertTrue(s.slideshow)
             assertEquals(6, s.photos.size)
             SendHelpers.waitUntil("viewer open", 5_000) { TvViewerState.open && TvViewerState.playing }
+            SendHelpers.waitUntil("screen pinned on while the slideshow runs (O4)", 5_000) { KeepScreenOn.pinnedNow == 1 }
 
             // Auto-advance about every 3 s: each automatic move comes ~3 s after the move to the photo it leaves.
             SendHelpers.waitUntil("two automatic advances", 30_000) { TvViewerState.moves.count { it.how == "auto" } >= 2 }
@@ -79,6 +81,10 @@ class TvSlideshowTest {
             // OK pauses (no move for 5 s > 3 s), OK resumes.
             SendHelpers.device.pressDPadCenter()
             SendHelpers.waitUntil("paused", 2_000) { !TvViewerState.playing }
+            SendHelpers.waitUntil("not pinned while paused (O4)", 2_000) { KeepScreenOn.pinnedNow == 0 }
+            var stillOn = false
+            sc.onActivity { a -> stillOn = KeepScreenOn.isOn(a) }
+            assertTrue("a pause keeps the screen on for the next 30 min only", stillOn)
             val pausedAt = TvViewerState.index
             val movesAtPause = TvViewerState.moves.size
             Thread.sleep(5_000)
@@ -87,6 +93,27 @@ class TvSlideshowTest {
             SendHelpers.device.pressDPadCenter()
             SendHelpers.waitUntil("playing again", 2_000) { TvViewerState.playing }
             SendHelpers.waitUntil("advances again after resume", 8_000) { TvViewerState.moves.size > movesAtPause }
+            SendHelpers.waitUntil("pinned again", 2_000) { KeepScreenOn.pinnedNow == 1 }
+
+            // Audit O8 (H6): Up / Down change the seconds per photo (3 → 5 → 10) and the TV remembers it.
+            assertEquals(3_000L, TvViewerState.intervalMs)
+            SendHelpers.device.pressDPadUp()
+            SendHelpers.waitUntil("Up → 5 s", 2_000) { TvViewerState.intervalMs == 5_000L }
+            assertEquals(5, AppGraph.prefs.slideshowSeconds)
+            SendHelpers.waitUntil("overlay shown", 2_000) { TvViewerState.overlayVisible }
+            Thread.sleep(400)
+            Shots.take("tv-slideshow-interval")
+            SendHelpers.device.pressDPadUp()
+            SendHelpers.waitUntil("Up → 10 s", 2_000) { TvViewerState.intervalMs == 10_000L }
+            SendHelpers.device.pressDPadUp()
+            Thread.sleep(500)
+            assertEquals("10 s is the longest", 10_000L, TvViewerState.intervalMs)
+            SendHelpers.device.pressDPadDown()
+            SendHelpers.waitUntil("Down → 5 s", 2_000) { TvViewerState.intervalMs == 5_000L }
+            SendHelpers.device.pressDPadDown()
+            SendHelpers.waitUntil("Down → 3 s", 2_000) { TvViewerState.intervalMs == 3_000L }
+            assertEquals(3, AppGraph.prefs.slideshowSeconds)
+            Probe.record("slideshow_interval_keys", "3 → up 5 → up 10 → up 10 → down 5 → down 3")
 
             // Back → focus on the Slideshow card; OK on a photo → viewer at that photo, paused.
             SendHelpers.device.pressBack()
@@ -100,6 +127,11 @@ class TvSlideshowTest {
             assertFalse("a photo card opens the viewer, not the slideshow", v.slideshow)
             assertEquals(photo, v.photos[v.start].name)
             SendHelpers.waitUntil("viewer shows $photo", 10_000) { photo in TvViewerState.shown }
+            assertEquals("a single photo does not pin the screen on (O4)", 0, KeepScreenOn.pinnedNow)
+            val before = TvViewerState.intervalMs
+            SendHelpers.device.pressDPadUp() // not a slideshow: Up only shows the overlay
+            Thread.sleep(400)
+            assertEquals(before, TvViewerState.intervalMs)
             Thread.sleep(4_000)
             assertEquals("the viewer does not advance by itself", photo, TvViewerState.name)
             SendHelpers.settle()

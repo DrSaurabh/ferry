@@ -6,6 +6,14 @@ import android.view.KeyEvent
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
+import app.ferry.media.SendCoordinator
+import app.ferry.net.ConnectionManager
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import app.ferry.service.Notifications
 import app.ferry.ui.nav.Navigator
 import app.ferry.ui.nav.Screen
 import app.ferry.ui.phone.PhoneRoot
@@ -46,6 +54,15 @@ class MainActivity : ComponentActivity() {
         AppGraph.castReceiverOn = receiver
         if (receiver) lifecycle.addObserver(CastReceiverHost(this))
         if (savedInstanceState == null) openFrom(intent)
+        // "PC not found" looks again by itself while Ferry is on screen (audit O16).
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                while (true) {
+                    delay(ConnectionManager.AUTO_RETRY_MS)
+                    AppGraph.connection.retryIfNotFound()
+                }
+            }
+        }
         if (tv) {
             KeepScreenOn.poke(this) // opening Ferry counts as a key press (design §5.1 [A10])
             setContent { TvTheme { TvRoot(nav) } }
@@ -72,11 +89,35 @@ class MainActivity : ComponentActivity() {
 
     /** Extra `open = transfer | fromPc | remote` (from the notifications) pushes that screen (plan §4.2) [A24]. */
     private fun openFrom(i: Intent?) {
-        if (AppGraph.isTv) return
-        when (i?.getStringExtra(EXTRA_OPEN)) {
-            OPEN_TRANSFER -> nav?.show(Screen.Transfer)
+        if (AppGraph.isTv || i == null) return
+        when (i.getStringExtra(EXTRA_OPEN)) {
+            OPEN_TRANSFER -> {
+                // Not when the task is reopened from Recents with the notification's old intent.
+                val fromHistory = (i.flags and Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY) != 0
+                if (i.getBooleanExtra(EXTRA_RETRY, false) && !fromHistory) retryFromNotification()
+                nav?.show(Screen.Transfer)
+            }
             OPEN_FROM_PC -> nav?.show(Screen.FromPc)
             OPEN_REMOTE -> nav?.show(Screen.Remote)
+        }
+    }
+
+    /**
+     * Retry on the Results notification (audit O5). The queue lives in memory [H16]: if Ferry was closed since the
+     * notification was posted there is nothing to retry, and the Transfer screen says so ("send the files again").
+     */
+    private fun retryFromNotification() {
+        Notifications.cancelResults(this)
+        val t = AppGraph.transfers
+        if (!t.hasQueue) {
+            AppGraph.log("transfer", "Retry from the notification, but the queue is gone (Ferry was closed since)")
+            t.retryLost.value = true
+            return
+        }
+        try {
+            SendCoordinator.retry(this)
+        } catch (e: Exception) { // a service start refused: the Transfer screen has its own Retry button
+            AppGraph.log("transfer", "Retry from the notification not started: $e")
         }
     }
 
@@ -87,6 +128,8 @@ class MainActivity : ComponentActivity() {
 
     companion object {
         const val EXTRA_OPEN = "open"
+        /** With `open = transfer`: the Results notification's Retry was tapped. */
+        const val EXTRA_RETRY = "retry"
         const val OPEN_TRANSFER = "transfer"
         const val OPEN_FROM_PC = "fromPc"
         const val OPEN_REMOTE = "remote"

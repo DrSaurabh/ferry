@@ -77,7 +77,23 @@ class ConnectionManager(
     /** Screenshot tour only (Ph10): shows [s] as if a locate had found it, until the next locate. */
     @androidx.annotation.VisibleForTesting
     fun showForTest(s: ConnectionState) {
+        heldForTest = true
         _state.value = s
+    }
+
+    /** A state put up by [showForTest] stays until the next asked-for locate ([retryIfNotFound] leaves it alone). */
+    @Volatile private var heldForTest = false
+
+    /**
+     * Audit O16 [P8]: called every [AUTO_RETRY_MS] while a Ferry screen is visible. If the PC was not found (or there
+     * was no Wi-Fi), looks again **quietly**: the screen keeps saying "not found" (no flicker to "Looking…", an
+     * address being typed is not disturbed) and changes only when the PC is there. So starting Ferry on the PC
+     * after opening the app needs no "Try again".
+     */
+    suspend fun retryIfNotFound() {
+        val s = _state.value
+        if (heldForTest || (s !is ConnectionState.NotFound && s != ConnectionState.NoWifi)) return
+        relocate(quiet = true)
     }
 
     /** The PC in use, or null. */
@@ -85,6 +101,7 @@ class ConnectionManager(
 
     /** Activity start (`onStart`) and "Try again". */
     fun refresh() {
+        heldForTest = false
         scope.launch { relocate() }
     }
 
@@ -94,14 +111,14 @@ class ConnectionManager(
     fun reportFailure() = refresh()
 
     /** Locates now (or waits for the locate in progress) and returns the PC's API, or null. */
-    suspend fun relocate(): FerryApi? {
+    suspend fun relocate(quiet: Boolean = false): FerryApi? {
         val asked = started // a locate that begins from now on answers this request
         return lock.withLock {
             // Ph4 CI (B41): only a locate that *began after* the request may answer it; one already running
             // when the request came may have used old settings (e.g. before a test or the user set the address).
             if (lastFinished >= asked) return@withLock api()
             val me = started++
-            if (_state.value !is ConnectionState.Connected) _state.value = ConnectionState.Looking
+            if (!quiet && _state.value !is ConnectionState.Connected) _state.value = ConnectionState.Looking
             val r = try {
                 locator().locate()
             } catch (e: CancellationException) {
@@ -116,7 +133,8 @@ class ConnectionManager(
                 is LocateResult.NotFound -> ConnectionState.NotFound(r.candidates)
                 LocateResult.NoNetwork -> ConnectionState.NoWifi
             }
-            log("locate: " + when (s) {
+            // A quiet retry that finds nothing again says so once, not every 10 s.
+            if (!(quiet && s == _state.value)) log("locate: " + when (s) {
                 is ConnectionState.Connected -> "connected to ${s.name} at ${s.api.base} (Ferry ${s.info.version})"
                 is ConnectionState.NotFound -> "not found (${s.candidates.size} answered the broadcast)"
                 is ConnectionState.OldPc -> "older Ferry at ${s.base}"
@@ -149,6 +167,10 @@ class ConnectionManager(
             log("discover TVs failed: $e")
             emptyList()
         }
+    }
+
+    companion object {
+        const val AUTO_RETRY_MS = 10_000L
     }
 
     private fun checkUpdate(api: FerryApi) {
