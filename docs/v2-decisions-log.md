@@ -58,3 +58,18 @@ User-given permissions: use GitHub Actions minutes freely; self-approve stages; 
 | H50 | Code audit | **Not changed, on purpose:** S3 (H30's "same size" exemption stays as agreed: narrowing it could answer "disk full" for a real resend whose date differs); S8 (encrypted keystore in the public repo is H38, no flaw found); O13 (the "stopped early" card after a manual stop still tells the truth that files were not sent); O7 fixed in the README ("Up, then OK") rather than by moving the TV's first focus onto the update bar (one OK on opening Ferry would start an update instead of the first video); S6, S7, O12 deferred (see `v2-07-code-audit.md`) | Smallest safe change; agreed decisions are not reopened without a real flaw | — |
 
 - **Stage 7 fixer switched to Opus (2026-11-17, user decision).** Fable hit its weekly limit (resets 22 Nov) after triage and most fixes on `stage7-fixes` @ e240e6f; the user said "Opus is fine". An Opus agent finishes CI and the audit log; Claude still verifies independently.
+
+## Ferry 2.1 (Stage A, hands-free from 2026-11-23) — decisions for later review with the user
+
+| ID | Stage | Decision | Why | Changes |
+|---|---|---|---|---|
+| H51 | A0 research | Adopt from research: silent controller reconnect + lock-screen controls while playing (R1), touch pad (R3), slideshow shuffle / date line / cross-fade (R9), zoom pauses slideshow (R10), connection logging (R7). Defer: synced multi-phone control, year/month sorting, favourites (Stage B); send text/link (backlog). Reject: Ken Burns (heavy on 1st-gen stick) | User asked to include worthwhile ideas from users of similar apps | v2.1 req R1–R10, T10 |
+| H52 | A1 | Battery thresholds: waiting send keeps the foreground service ≤ 10 min, then WorkManager (network change + ~15 min, battery not low); idle cast/controller session ends after 10 min with nothing playing; discovery retries back off after 1 min | F24 (user: battery is the concern for the phone) | P14 |
+| H53 | A1 | Shared items waiting for the PC are copied into Ferry's private storage (deleted after sending); picker items kept by MediaStore reference | Share grants expire when the share ends | P13 |
+| H54 | A1 | Volume = the stick's media volume (AudioManager); TV loudness may or may not follow — logged | Only control available to an app without ADB/CEC | R5 |
+| H55 | A1 | "Trial logging" (Detailed) on by default in 2.1; user can switch off | F30: testing is normal use + logs | L2 |
+| H56 | A1 | Logs collected on the PC in `<Ferry folder>\logs\<device>\`; ferry-log.txt moves into `logs\`; caps phone/TV 5 MB, PC 200 MB | One folder to zip for Claude | L3, L7 |
+| H57 | A1 | QR shown only until the first phone connected; then on demand ("press A") | F13/F15 | U6 |
+| H58 | A1 | Short TV install alias `http://<ip>:8765/tv` (redirect to `/app/Ferry.apk`); `/app` redirects TV user agents | F14: fewer characters to type on the TV | B4 |
+| H59 | A1 | Leaving the picker with picks asks "Discard N picks?" | V6 Back never throws work away silently | B1, U1 |
+| H60 | A1 | Guide = one self-contained HTML (`Ferry-Guide.html`, also `/guide`) with CI emulator screenshots | F2; works offline, printable | A3 |
