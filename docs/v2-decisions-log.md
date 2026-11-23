@@ -73,3 +73,19 @@ User-given permissions: use GitHub Actions minutes freely; self-approve stages; 
 | H58 | A1 | Short TV install alias `http://<ip>:8765/tv` (redirect to `/app/Ferry.apk`); `/app` redirects TV user agents | F14: fewer characters to type on the TV | B4 |
 | H59 | A1 | Leaving the picker with picks asks "Discard N picks?" | V6 Back never throws work away silently | B1, U1 |
 | H60 | A1 | Guide = one self-contained HTML (`Ferry-Guide.html`, also `/guide`) with CI emulator screenshots | F2; works offline, printable | A3 |
+| H61 | A2 design | No new third-party libraries; WorkManager (AndroidX) added for waiting sends | V12/V13 minimal deps | design §0 |
+| H62 | A2 | Controller navigation = key events injected into Ferry's own TV window (identical to the remote) | Simplest way to make every Ferry screen controllable; Level 1 only | §1.4 |
+| H63 | A2 | Items chosen from the PC outbox on the phone open on the TV as a PC-sourced session (the phone leaving does not stop them) | They don't depend on the phone | §1.1 |
+| H64 | A2 | Phone playback commands also work for outbox playback started on the TV | One controller for everything Ferry shows | §1.4 |
+| H65 | A2 | Touch pad: swipe ≥32 dp = arrow, hold repeats 300 ms, tap = OK, pinch/2-finger = zoom/pan | Research R3 | §2 |
+| H66 | A2 | Lock-screen controls via the cast notification; PC-sourced sessions use a follow-only service that ends at idle/10 min | R9 + battery V8 | §2 |
+| H67 | A2 | TV/phone video uses TextureView (fixes portrait-video rotation and allows video zoom) | B3 + T7 in one change | §3 |
+| H68 | A2 | Remote: Menu (☰) overlay with Zoom / Speed / Shuffle / Date / Something's wrong / About; zoom mode keys: arrows pan, ⏪⏩ zoom, OK fit, Back done; no long-press | Fire OS long-press unreliable; discoverable | §3 |
+| H69 | A2 | Every top Back calls the system back dispatcher | One Back behaviour (V6) | §5.1 |
+| H70 | A2 | Share: resolve to MediaStore (id / getMediaUri / name+size match) and open the original; when not possible, send as shared and note "Sent without location" in the row instead of a question (requirement B2 rev 1) | Never loop on a question (F11); nothing blocks | §5.2 |
+| H71 | A2 | Waiting sends resume by themselves only with battery exemption (Android 12+ rule); otherwise a "PC is back — tap to send" notification | Platform restriction | §5.4 |
+| H72 | A2 | Setup = 4 steps (photos+location, notifications, battery, install updates); later refusals shown as a banner with Fix, never a pop-up | F4 | §5.5 |
+| H73 | A2 | TV without PC: home says "Ready for your phone" with a small PC-not-found row (no full-screen error) | T9 | §6 |
+| H74 | A2 | Every tappable control carries a log id, enforced by a unit test | L1 completeness for log review | §7.1 |
+| H75 | A2 | PC prints the "can't connect" tip only after an observed failed attempt; QR only until the first phone; keys A (QR) and Z (zip logs) | F13/F15/L7 | §8 |
+| H76 | A2 | Device name: DEVICE_NAME → bluetooth_name → "Maker Model"; optional rename in phone Settings | F6 ("V2413") | §10 |
