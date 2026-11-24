@@ -67,7 +67,6 @@ MAX_NAME_BYTES = 200
 WIN_MAX_PATH = 250
 STABLE_SECONDS = 2.0             # outbox: file unchanged this long before it is offered
 WATCH_INTERVAL = 1.0
-WATCHDOG_SECONDS = 60
 IS_WIN = os.name == "nt"
 HERE = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = HERE                  # ferry-state.json, ferry-error.log, ferry-selftest.txt, logs/ (2.1);
@@ -107,6 +106,23 @@ APK_JSON_MAX = 64 << 10
 DEVICE_HEADER = "X-Ferry-Device"
 DEVICE_NAME_MAX = 60
 POLL_PATHS = {"/api/v1/outbox", "/api/v1/info"}
+# 2.1 (Ph12)
+ABOUT_LINE = "Ferry %s \u00b7 \u00a9 2026 Saurabh Sawhney \u00b7 MIT Licence \u00b7 Built with Claude (Anthropic)" % VERSION
+NOTICES_LINE = "Third-party: AndroidX and Media3 (Apache 2.0), Nayuki QR code generator (MIT)"
+GUIDE_NAME = "Ferry-Guide.html"
+TV_PATH = "/tv"
+RX_FIRE_TV_UA = re.compile(r"\bAFT[A-Z0-9]+\b")
+TAKEN_HEADER = "X-Ferry-Taken"
+GPS_HEADER = "X-Ferry-Gps"
+ORIGINAL_HEADER = "X-Ferry-Original"
+BATCH_HEADER = "X-Ferry-Batch"
+RX_BATCH = re.compile(r"^([0-9A-Za-z]{1,16});(\d{1,7});(\d{1,7})$")
+BATCH_IDLE_S = 60.0
+EXIF_PROBE_BYTES = 128 << 10
+JPEG_EXT = {".jpg", ".jpeg"}
+KEY_POLL_S = 0.1
+CONNECT_TIP = ("Phone can't connect? Check: (1) phone and PC on the same Wi-Fi, not a guest network",
+               "  (2) Windows Firewall allowed Python on Private networks  (3) README.txt > Troubleshooting")
 
 
 def data_path(name: str) -> str:
@@ -237,6 +253,10 @@ def file_kind(name: str) -> str:
         return "image"
     if ext == ".apk":
         return "apk"
+    if ext == ".pdf":
+        return "pdf"
+    if ext == ".txt":
+        return "text"
     return "other"
 
 
@@ -503,7 +523,7 @@ class Config:
 class State:
     def __init__(self, path: Optional[str] = None):
         self.path = path or data_path(STATE_NAME)
-        self.data = {"last_ip": None, "first_run_done": False}
+        self.data = {"last_ip": None, "first_run_done": False, "first_phone_seen": False}
 
     @classmethod
     def load(cls, path: Optional[str] = None) -> "State":
@@ -513,7 +533,7 @@ class State:
             with open(path, encoding="utf-8") as f:
                 d = json.load(f)
             if isinstance(d, dict):
-                s.data.update({k: d[k] for k in ("last_ip", "first_run_done") if k in d})
+                s.data.update({k: d[k] for k in ("last_ip", "first_run_done", "first_phone_seen") if k in d})
         except Exception:
             pass
         return s
@@ -1386,6 +1406,7 @@ class TransferTracker:
         self.clients: set = set()
         self.any_client = False
         self.played: set = set()
+        self.tip_shown = False
         if is_win:
             threading.Thread(target=self._awake_loop, name="ferry-awake", daemon=True).start()
 
@@ -1426,13 +1447,14 @@ class TransferTracker:
             self.played.add(key)
             return True
 
-    def start_watchdog(self, seconds: float = WATCHDOG_SECONDS) -> None:
-        def run():
-            time.sleep(seconds)
-            if not self.any_client:
-                self.note("Phone can't connect? Check: (1) phone and PC on the same Wi-Fi, not a guest network")
-                self.note("  (2) Windows Firewall allowed Python on Private networks  (3) README.txt > Troubleshooting")
-        threading.Thread(target=run, name="ferry-watchdog", daemon=True).start()
+    def failed_attempt(self) -> None:
+        """2.1 (U6, H75): the troubleshooting tip only after a device's request failed or broke off; once."""
+        with self.lock:
+            if self.tip_shown:
+                return
+            self.tip_shown = True
+        for line in CONNECT_TIP:
+            self.note(line)
 
 
 # =============================================================================================
@@ -1483,6 +1505,404 @@ def _tiff_gps(t: bytes) -> str:
                     return "present" if any(nums) else "zeroed"
             return "zeroed"
     return "none"
+
+
+# =============================================================================================
+# 2.1 EXIF probe (L5, M12): date taken + GPS of a JPEG from its first 128 KB, bounds-checked
+# =============================================================================================
+
+RX_EXIF_DATE = re.compile(r"^(\d{4}):(\d{2}):(\d{2}) (\d{2}):(\d{2}):(\d{2})$")
+_GPS_WORD = {"present": "yes", "none": "no", "zeroed": "zeroed", "unknown": "unknown"}
+
+
+def exif_summary(data: bytes) -> dict:
+    """{"taken": "YYYY-MM-DD HH:MM:SS" or None, "gps": "yes"|"no"|"zeroed"|"unknown"} for a JPEG's first bytes.
+    Never raises; anything unexpected gives taken None / gps "unknown"."""
+    out = {"taken": None, "gps": "unknown"}
+    try:
+        if data[:2] != b"\xff\xd8":
+            return out
+        i = 2
+        while i + 4 <= len(data):
+            if data[i] != 0xFF:
+                out["gps"] = "no"
+                return out
+            marker = data[i + 1]
+            if marker in (0xD9, 0xDA):
+                out["gps"] = "no"
+                return out
+            seglen = int.from_bytes(data[i + 2:i + 4], "big")
+            if seglen < 2:
+                return out
+            seg = data[i + 4:i + 2 + seglen]
+            if marker == 0xE1 and seg[:6] == b"Exif\x00\x00":
+                return _tiff_summary(seg[6:])
+            i += 2 + seglen
+        return out
+    except Exception:
+        return out
+
+
+def _tiff_summary(t: bytes) -> dict:
+    out = {"taken": None, "gps": "unknown"}
+    if t[:4] not in (b"II*\x00", b"MM\x00*"):
+        return out
+    bo = "little" if t[:2] == b"II" else "big"
+    n = len(t)
+
+    def u16(o: int) -> int:
+        if o < 0 or o + 2 > n:
+            raise ValueError("out of range")
+        return int.from_bytes(t[o:o + 2], bo)
+
+    def u32(o: int) -> int:
+        if o < 0 or o + 4 > n:
+            raise ValueError("out of range")
+        return int.from_bytes(t[o:o + 4], bo)
+
+    def entries(ifd: int) -> Dict[int, int]:
+        """tag -> entry offset of one IFD."""
+        res = {}
+        count = u16(ifd)
+        if count > 1000:
+            raise ValueError("too many entries")
+        for k in range(count):
+            e = ifd + 2 + 12 * k
+            res[u16(e)] = e
+        return res
+
+    def ascii_value(e: int) -> Optional[str]:
+        if u16(e + 2) != 2:
+            return None
+        cnt = u32(e + 4)
+        off = e + 8 if cnt <= 4 else u32(e + 8)
+        if cnt > 64 or off + cnt > n:
+            return None
+        raw = t[off:off + cnt].split(b"\x00", 1)[0].decode("ascii", "replace").strip()
+        m = RX_EXIF_DATE.match(raw)
+        if not m or m.group(1) == "0000":
+            return None
+        return "%s-%s-%s %s:%s:%s" % m.groups()
+
+    try:
+        ifd0 = entries(u32(4))
+    except ValueError:
+        return out
+    try:
+        if 0x8769 in ifd0:
+            sub = entries(u32(ifd0[0x8769] + 8))
+            if 0x9003 in sub:
+                out["taken"] = ascii_value(sub[0x9003])
+    except ValueError:
+        pass
+    try:
+        if out["taken"] is None and 0x0132 in ifd0:
+            out["taken"] = ascii_value(ifd0[0x0132])
+    except ValueError:
+        pass
+    if 0x8825 not in ifd0:
+        out["gps"] = "no"
+        return out
+    try:
+        g = entries(u32(ifd0[0x8825] + 8))
+        gps = "zeroed"
+        for tag in (2, 4):                          # latitude / longitude: 3 RATIONALs
+            if tag in g:
+                off = u32(g[tag] + 8)
+                if any(u32(off + 4 * r) for r in (0, 2, 4)):
+                    gps = "yes"
+        out["gps"] = gps
+    except ValueError:
+        out["gps"] = "unknown"
+    return out
+
+
+def probe_file(path: str, limit: int = EXIF_PROBE_BYTES) -> Optional[dict]:
+    """exif_summary of a saved JPEG; None for other types or when the file can't be read."""
+    if os.path.splitext(path)[1].lower() not in JPEG_EXT:
+        return None
+    try:
+        with open(path, "rb") as f:
+            return exif_summary(f.read(limit))
+    except OSError:
+        return None
+
+
+# =============================================================================================
+# 2.1 readable lines (L5, M10, plan §2.7) and batch summaries
+# =============================================================================================
+
+RX_TAKEN_HEADER = re.compile(r"^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}(:\d{2})?$")
+
+
+def phone_meta(headers) -> dict:
+    """What the phone says about a file (all optional; 2.0 phones send none)."""
+    def h(name):
+        v = headers.get(name) if headers is not None else None
+        return _CONTROL_CHARS.sub("", v).strip() if v else ""
+    taken = h(TAKEN_HEADER)
+    gps = h(GPS_HEADER).lower()
+    orig = h(ORIGINAL_HEADER)
+    return {"taken": taken.replace("T", " ") if RX_TAKEN_HEADER.match(taken) else None,
+            "gps": gps if gps in ("yes", "no", "removed", "unknown") else None,
+            "original": {"1": True, "0": False}.get(orig)}
+
+
+def parse_batch(value: Optional[str]) -> Optional[Tuple[str, int, int]]:
+    m = RX_BATCH.match((value or "").strip())
+    if not m:
+        return None
+    i, n = int(m.group(2)), int(m.group(3))
+    if n < 1:
+        return None
+    return m.group(1), i, n
+
+
+def fmt_seconds(s: float) -> str:
+    if s < 60:
+        return "%.2f s" % s if s < 10 else "%d s" % round(s)
+    m, sec = divmod(int(round(s)), 60)
+    return "%d min %02d s" % (m, sec)
+
+
+def readable_saved(name: str, nbytes: int, seconds: float, device: str, meta: dict,
+                   probe: Optional[dict]) -> Tuple[str, Optional[str]]:
+    """(line, warning or None) for a saved file (plan §2.7)."""
+    parts = ["saved %s" % name, "%s in %s" % (fmt_size(nbytes), fmt_seconds(seconds))]
+    if fmt_speed(nbytes, seconds):
+        parts.append(fmt_speed(nbytes, seconds))
+    taken = (probe or {}).get("taken") or meta.get("taken")
+    parts.append("taken %s" % (taken or "?"))
+    phone_gps = meta.get("gps")
+    if probe is not None:
+        gps = "GPS %s" % probe["gps"]
+        if phone_gps:
+            gps += " (phone: %s)" % phone_gps
+    else:
+        gps = "GPS %s" % (phone_gps or "?")
+    parts.append(gps)
+    if meta.get("original") is True:
+        parts.append("original")
+    elif meta.get("original") is False:
+        parts.append("not original")
+    parts.append("from %s" % device)
+    warning = None
+    if probe is not None and phone_gps == "yes" and probe["gps"] in ("no", "zeroed"):
+        warning = "WARNING %s: the phone says GPS yes, the file has %s" % (
+            name, "no GPS" if probe["gps"] == "no" else "zeroed GPS")
+    return " · ".join(parts), warning
+
+
+def readable_skipped(name: str, device: str) -> str:
+    return "already on PC %s · from %s" % (name, device)
+
+
+class BatchSummary:
+    """Counts the completions of one send (X-Ferry-Batch: <id>;<i>;<n>) and logs one summary line when all
+    n are done or after `idle_s` without news (M10). Thread-safe; timers are daemons, stopped by close()."""
+
+    def __init__(self, emit: Callable[[str, str, str], None], idle_s: float = BATCH_IDLE_S, clock=time.monotonic):
+        self.emit = emit                      # emit(text, ip, device)
+        self.idle_s = idle_s
+        self.clock = clock
+        self.lock = threading.Lock()
+        self.batches: Dict[Tuple[str, str], dict] = {}
+        self.closed = False
+
+    def _get(self, key, n: int, ip: str) -> dict:
+        b = self.batches.get(key)
+        if b is None:
+            b = {"n": n, "items": {}, "already": 0, "bytes": 0, "first": self.clock(), "last": self.clock(),
+                 "ip": ip, "timer": None}
+            self.batches[key] = b
+        b["n"] = max(b["n"], n)
+        return b
+
+    def _arm(self, key, b) -> None:
+        if b["timer"] is not None:
+            b["timer"].cancel()
+        if self.closed:
+            b["timer"] = None
+            return
+        t = threading.Timer(self.idle_s, self.flush, args=(key,))
+        t.daemon = True
+        b["timer"] = t
+        t.start()
+
+    def _done(self, b) -> int:
+        return len(b["items"]) + b["already"]
+
+    def checked(self, batch: Tuple[str, int, int], device: str, ip: str, already: int) -> None:
+        key = (device, batch[0])
+        with self.lock:
+            b = self._get(key, batch[2], ip)
+            b["already"] = already
+            b["last"] = self.clock()
+            full = self._done(b) >= b["n"]
+            if not full:
+                self._arm(key, b)
+        if full:
+            self.flush(key)
+
+    def completed(self, batch: Tuple[str, int, int], device: str, ip: str, outcome: str, nbytes: int = 0) -> None:
+        """outcome: saved | skipped | failed. The latest outcome of an item index wins (a retry replaces a failure)."""
+        key = (device, batch[0])
+        with self.lock:
+            b = self._get(key, batch[2], ip)
+            i = batch[1]
+            b["items"][i] = (outcome, nbytes)
+            b["last"] = self.clock()
+            full = self._done(b) >= b["n"]
+            if not full:
+                self._arm(key, b)
+        if full:
+            self.flush(key)
+
+    def flush(self, key) -> None:
+        with self.lock:
+            b = self.batches.pop(key, None)
+            if b is None:
+                return
+            if b["timer"] is not None:
+                b["timer"].cancel()
+        saved = sum(1 for o, _ in b["items"].values() if o == "saved")
+        skipped = sum(1 for o, _ in b["items"].values() if o == "skipped") + b["already"]
+        failed = sum(1 for o, _ in b["items"].values() if o == "failed")
+        nbytes = sum(nb for o, nb in b["items"].values() if o == "saved")
+        secs = max(0.0, b["last"] - b["first"])
+        parts = ["batch %s: %d file%s" % (key[1], b["n"], "" if b["n"] == 1 else "s"),
+                 "%d saved" % saved, "%d already on PC" % skipped]
+        if failed:
+            parts.append("%d failed" % failed)
+        missing = b["n"] - saved - skipped - failed
+        if missing > 0:
+            parts.append("%d not heard of" % missing)
+        size = "%s in %s" % (fmt_size(nbytes), fmt_seconds(secs))
+        parts.append(size)
+        if fmt_speed(nbytes, secs):
+            parts.append(fmt_speed(nbytes, secs))
+        try:
+            self.emit(" · ".join(parts), b["ip"], key[0])
+        except Exception:
+            pass
+
+    def close(self) -> None:
+        with self.lock:
+            self.closed = True
+            for b in self.batches.values():
+                if b["timer"] is not None:
+                    b["timer"].cancel()
+                    b["timer"] = None
+
+
+def is_first_phone(ip: str, headers, ua: str) -> bool:
+    """M9, M25-C6: a Ferry phone app = X-Ferry-Device present, not loopback, not a TV."""
+    if headers is None or not headers.get(DEVICE_HEADER):
+        return False
+    try:
+        a = ipaddress.ip_address((ip or "").split("%", 1)[0])
+        if getattr(a, "ipv4_mapped", None):
+            a = a.ipv4_mapped
+        if a.is_loopback or a.is_unspecified:
+            return False
+    except ValueError:
+        return False
+    if device_type(ua) == "Fire TV":
+        return False
+    return (headers.get(DEVICE_TYPE_HEADER) or "").strip().lower() != "tv"
+
+
+# =============================================================================================
+# 2.1 logs zip (L7) and console keys (U6, M12)
+# =============================================================================================
+
+def zip_logs(logs_dir: str, now: Optional[float] = None) -> str:
+    """logs/ferry-logs-YYYYMMDD-HHMMSS.zip of everything in logs/ except older zips; returns its path."""
+    name = "ferry-logs-%s.zip" % time.strftime("%Y%m%d-%H%M%S", time.localtime(time.time() if now is None else now))
+    path = os.path.join(logs_dir, name)
+    tmp = path + ".tmp"
+    os.makedirs(logs_dir, exist_ok=True)
+    try:
+        with zipfile.ZipFile(tmp, "w", zipfile.ZIP_DEFLATED) as zf:
+            for root, dirs, files in os.walk(logs_dir):
+                dirs.sort()
+                for fn in sorted(files):
+                    full = os.path.join(root, fn)
+                    if fn.lower().endswith((".zip", ".zip.tmp")):
+                        continue
+                    arc = os.path.relpath(full, logs_dir).replace(os.sep, "/")
+                    try:
+                        with open(full, "rb") as f:
+                            data = f.read()
+                    except OSError:
+                        continue
+                    stamp = max(safe_ts(os.path.getmtime(full)), 315619200.0)    # zip dates start in 1980
+                    zf.writestr(zipfile.ZipInfo(arc, time.localtime(stamp)[:6]),
+                                data, zipfile.ZIP_DEFLATED)
+        os.replace(tmp, path)
+    except BaseException:
+        unlink_quiet(tmp)
+        raise
+    return path
+
+
+class KeyListener:
+    """Windows console keys: A = show the install QR/addresses again, Z = zip the logs (worker thread).
+    Polls msvcrt.kbhit() every 100 ms on a daemon thread; only when stdin is a console (M12)."""
+
+    def __init__(self, on_a: Callable[[], None], on_z: Callable[[], None], msvcrt_mod=None,
+                 interval: float = KEY_POLL_S):
+        self.on_a, self.on_z = on_a, on_z
+        self.m = msvcrt_mod
+        self.interval = interval
+        self.stop_event = threading.Event()
+        self.t: Optional[threading.Thread] = None
+
+    @staticmethod
+    def available(is_win: bool = IS_WIN, stdin=None) -> bool:
+        stdin = sys.stdin if stdin is None else stdin
+        try:
+            return bool(is_win and stdin is not None and stdin.isatty())
+        except Exception:
+            return False
+
+    def start(self) -> bool:
+        if self.m is None:
+            try:
+                import msvcrt  # type: ignore  # Windows only, imported lazily
+                self.m = msvcrt
+            except ImportError:
+                return False
+        self.t = threading.Thread(target=self._run, name="ferry-keys", daemon=True)
+        self.t.start()
+        return True
+
+    def stop(self) -> None:
+        self.stop_event.set()
+
+    def poll_once(self) -> Optional[str]:
+        if not self.m.kbhit():
+            return None
+        ch = self.m.getwch()
+        if ch in ("\x00", "\xe0"):                   # function/arrow key: a second code follows
+            if self.m.kbhit():
+                self.m.getwch()
+            return None
+        ch = (ch or "").lower()
+        if ch == "a":
+            self.on_a()
+        elif ch == "z":
+            threading.Thread(target=self.on_z, name="ferry-zip-logs", daemon=True).start()
+        else:
+            return None
+        return ch
+
+    def _run(self) -> None:
+        while not self.stop_event.wait(self.interval):
+            try:
+                self.poll_once()
+            except Exception:
+                return
 
 
 # =============================================================================================
@@ -2062,6 +2482,12 @@ class FerryServer(ThreadingHTTPServer):
         self.server_name = "ferry"
         self.server_port = self.server_address[1]
 
+    def server_close(self) -> None:
+        super().server_close()
+        batches = getattr(self.app, "batches", None)
+        if batches is not None:
+            batches.close()                  # no batch timer outlives the server (Windows teardown)
+
     def handle_error(self, request, client_address) -> None:
         exc = sys.exc_info()[1]
         if isinstance(exc, (ConnectionError, socket.timeout, TimeoutError)):
@@ -2077,6 +2503,7 @@ ROUTES_EXACT = {
     "/api/v1/info": "api_info", "/api/v1/check": "api_check", "/api/v1/check-batch": "api_check_batch",
     "/api/v1/upload": "api_upload", "/api/v1/outbox": "api_outbox", "/api/v1/outbox.zip": "send_zip",
     "/api/v1/logs": "api_logs",
+    TV_PATH: "tv_redirect", "/guide": "send_guide",                 # 2.1 (M11, A3)
 }
 POST_ROUTES = {"api_upload", "api_check_batch", "api_logs"}
 RX_OUTBOX = re.compile(r"^/api/v1/outbox/(\d{1,9})(?:/(.*))?$", re.DOTALL)
@@ -2149,6 +2576,7 @@ class FerryHandler(BaseHTTPRequestHandler):
         try:
             if not path.startswith("/favicon"):
                 self.app.tracker.seen_client(self.client_address[0], self.device)
+                note_first_phone(self.app, self.client_address[0], self.headers, self.ua)
             name = ROUTES_EXACT.get(path)
             if name:
                 if (name in POST_ROUTES) != (method == "POST"):
@@ -2163,6 +2591,7 @@ class FerryHandler(BaseHTTPRequestHandler):
         except (ConnectionError, socket.timeout, TimeoutError) as e:
             self.close_connection = True
             self._error = self._error or ("connection lost: %s" % type(e).__name__)
+            self.app.tracker.failed_attempt()
         except Exception as e:
             self.app.console.note("error  %s: %s: %s" % (path, type(e).__name__, e))
             self._error = "%s: %s" % (type(e).__name__, e)
@@ -2209,6 +2638,20 @@ class FerryHandler(BaseHTTPRequestHandler):
             return self.send_json(404, {"result": "error", "message": message})
         return self.send_html_page(404, "Not found", message)
 
+    def send_redirect(self, location: str) -> None:
+        """302 with a relative Location and an empty body (M11: Downloader follows it to the .apk)."""
+        self.send_response(302)
+        self.send_header("Location", location)
+        self.send_header("Content-Length", "0")
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+
+    def readable(self, text: str) -> None:
+        """2.1 readable line (L5) in the request log."""
+        reqlog = getattr(self.app, "reqlog", None)
+        if reqlog is not None:
+            reqlog.event(text, self.client_address[0], self.device)
+
     def drain(self, n: int) -> None:
         left = min(max(n, 0), DRAIN_LIMIT)
         try:
@@ -2247,7 +2690,22 @@ class FerryHandler(BaseHTTPRequestHandler):
             return host
         return "%s:%d" % (self.app.primary or "<PC address>", self.app.cfg.port)
 
+    def tv_redirect(self) -> None:
+        self.send_redirect("/app/" + APK_NAME)
+
+    def send_guide(self) -> None:
+        path = getattr(self.app, "guide_path", None) or os.path.join(HERE, GUIDE_NAME)
+        try:
+            with open(path, "rb") as f:
+                body = f.read()
+        except OSError:
+            return self.send_html_page(404, "No guide here", "This Ferry folder has no %s. Get the latest Ferry zip."
+                                       % GUIDE_NAME)
+        self.send_bytes(200, body, "text/html; charset=utf-8", {"Cache-Control": "no-store"})
+
     def get_app_page(self) -> None:
+        if RX_FIRE_TV_UA.search(self.ua or ""):                    # Fire TV browser/Downloader -> the .apk (M11)
+            return self.send_redirect("/app/" + APK_NAME)
         state, meta, _ = self.app.bundle.status()
         host = self.page_host()
         if state == "ok":
@@ -2257,7 +2715,8 @@ class FerryHandler(BaseHTTPRequestHandler):
             button = '<p class="warn">%s.</p>' % _h(APP_COPYING)
         else:
             button = '<p class="warn">This Ferry folder has no app. Get the latest Ferry zip.</p>'
-        body = GET_APP_HTML.replace("{{BUTTON}}", button).replace("{{HOST}}", _h(host))
+        body = (GET_APP_HTML.replace("{{BUTTON}}", button).replace("{{HOST}}", _h(host))
+                .replace("{{APK}}", APK_NAME).replace("{{ABOUT}}", _h(ABOUT_LINE)).replace("{{NOTICES}}", _h(NOTICES_LINE)))
         self.send_bytes(200, body.encode("utf-8"), "text/html; charset=utf-8", {"Cache-Control": "no-store"})
 
     # -- app bundle ------------------------------------------------------------------------------
@@ -2336,6 +2795,7 @@ class FerryHandler(BaseHTTPRequestHandler):
         who = "from " + self.device
         if res.get("duplicate"):
             self.activity(who, "skipped", res["duplicate"], "already on PC")
+            self.readable(readable_skipped(res["duplicate"], self.device))
         elif not res.get("ok"):
             self.activity(who, "FAILED", res.get("name", name) or name, "PC disk is full")
         self.send_json(200, res)
@@ -2381,6 +2841,9 @@ class FerryHandler(BaseHTTPRequestHandler):
             items.append((n, s, mt))
         res = self.app.inbox.check_batch(items)
         dups = sum(1 for r in res["results"] if r["duplicate"])
+        batch = parse_batch(self.headers.get(BATCH_HEADER))
+        if batch is not None:
+            self.app.batches.checked(batch, self.device, self.client_address[0], dups)
         self.activity("from " + self.device, "checked", "%d file%s" % (len(items), "" if len(items) == 1 else "s"),
                       "%d already on PC" % dups)
         self.send_json(200, res)
@@ -2388,6 +2851,12 @@ class FerryHandler(BaseHTTPRequestHandler):
     def api_upload(self) -> None:
         app = self.app
         who = "from " + self.device
+        batch = parse_batch(self.headers.get(BATCH_HEADER))
+        ip = self.client_address[0]
+
+        def batch_done(outcome: str, nbytes: int = 0) -> None:
+            if batch is not None:
+                app.batches.completed(batch, self.device, ip, outcome, nbytes)
         length = self.content_length()
         if length is None:
             self.close_connection = True
@@ -2406,6 +2875,7 @@ class FerryHandler(BaseHTTPRequestHandler):
             sname = sanitize_name(name, app.inbox.path, app.inbox.is_win)
             if not any(st.st_size == length for _n, _p, st in app.inbox.family(sname)):   # likely resend [PB4]
                 self.activity(who, "FAILED", sname, "PC disk is full")
+                batch_done("failed")
                 self.drain(length)
                 return self.send_json(507, {"result": "error", "reason": "disk_full", "message": "PC disk is full"})
         app.tracker.begin()
@@ -2415,13 +2885,17 @@ class FerryHandler(BaseHTTPRequestHandler):
         except UploadAborted:
             self.activity(who, "stopped", sanitize_name(name), "cancelled or connection lost")
             self.close_connection = True
+            batch_done("failed")
+            app.tracker.failed_attempt()
             return
         except DiskFull as e:
             self.activity(who, "FAILED", sanitize_name(name), "PC disk is full")
+            batch_done("failed")
             self.drain(e.remaining)
             return self.send_json(507, {"result": "error", "reason": "disk_full", "message": "PC disk is full"})
         except WriteError as e:
             self.activity(who, "FAILED", sanitize_name(name), "can't save: %s" % e)
+            batch_done("failed")
             self.drain(e.remaining)
             return self.send_json(500, {"result": "error", "message": "The PC couldn't save the file: %s" % e})
         finally:
@@ -2434,6 +2908,19 @@ class FerryHandler(BaseHTTPRequestHandler):
             self.activity(who, "renamed", "%s -> %s" % (sanitize_name(name), res["saved_as"]), fmt_size(length))
         else:
             self.activity(who, "saved", res["saved_as"], ("%s  %s" % (fmt_size(length), fmt_speed(length, dt))).strip())
+        try:                                                       # 2.1 readable line + batch (L5, M10)
+            if r == "skipped":
+                self.readable(readable_skipped(res["saved_as"], self.device))
+                batch_done("skipped")
+            else:
+                probe = probe_file(os.path.join(app.inbox.path, res["saved_as"]))
+                line, warning = readable_saved(res["saved_as"], length, dt, self.device, phone_meta(self.headers), probe)
+                self.readable(line)
+                if warning:
+                    self.readable(warning)
+                batch_done("saved", length)
+        except Exception as e:
+            app.console.error_once("log line: %s: %s" % (type(e).__name__, e))
         self.send_json(200, res)
 
     def api_outbox(self) -> None:
@@ -2632,7 +3119,9 @@ font-size:1.3rem;padding:1.1rem 1rem;border-radius:.8rem;margin:.6rem 0 .3rem}
 h2{font-size:1.2rem;margin:1.6rem 0 .4rem}
 ol{padding-left:1.4rem;margin:.3rem 0}
 code{background:#e2e8f0;border-radius:.3rem;padding:.05rem .35rem;font-size:1.05em}
-@media(prefers-color-scheme:dark){body{background:#0f172a;color:#e2e8f0}.small{color:#94a3b8}
+footer{max-width:46rem;margin:0 auto;padding:0 1.5rem 1.5rem;color:#475569;font-size:.85rem}
+footer p{margin:.2rem 0}
+@media(prefers-color-scheme:dark){body{background:#0f172a;color:#e2e8f0}.small,footer{color:#94a3b8}
 code{background:#1e293b}.warn{background:#451a03;color:#fde68a}}
 </style>
 </head>
@@ -2647,8 +3136,10 @@ code{background:#1e293b}.warn{background:#451a03;color:#fde68a}}
 <li>Open Ferry.</li>
 </ol>
 <h2>On Fire TV</h2>
-<p>In the Downloader app, enter <code>{{HOST}}/app</code></p>
+<p>In the Downloader app, enter <code>{{HOST}}/tv</code></p>
+<p class="small">(the full address is <code>http://{{HOST}}/app/{{APK}}</code>)</p>
 </main>
+<footer><p>{{ABOUT}}</p><p>{{NOTICES}}</p></footer>
 </body>
 </html>
 """
@@ -2661,25 +3152,42 @@ code{background:#1e293b}.warn{background:#451a03;color:#fde68a}}
 RULE = "  " + "─" * 62
 
 
-def build_banner(cfg: Config, url: Optional[str], qr_lines: List[str], outbox_count: int,
-                 app_line: str) -> List[str]:
-    """url = the Get-the-app page, http://<ip>:<port>/ (the QR code encodes exactly this)."""
-    lines = ["  FERRY  is running" + " " * 24 + "v" + VERSION]
-    if url and qr_lines:
+def install_lines(url: str, qr_lines: List[str]) -> List[str]:
+    """The QR block and the install addresses (start-up until the first phone, and key A)."""
+    lines = []
+    if qr_lines:
         lines.append("  First time? Scan to install the Ferry app:")
         lines.extend(qr_lines)
-    elif url:
+    else:
         lines.append("  (QR code unavailable - qrcodegen.py is missing)")
-    if url:
-        hostport = url.split("//", 1)[-1].rstrip("/")
-        lines.append("  App page:  http://%s/app" % hostport)
-        lines.append("  Fire TV:   in Downloader enter %s/app" % hostport)
+    lines.extend(address_lines(url))
+    return lines
+
+
+def address_lines(url: str) -> List[str]:
+    hostport = url.split("//", 1)[-1].rstrip("/")
+    return ["  App page:  http://%s/app" % hostport,
+            "  Fire TV:   in Downloader enter http://%s%s" % (hostport, TV_PATH)]
+
+
+def build_banner(cfg: Config, url: Optional[str], qr_lines: List[str], outbox_count: int,
+                 app_line: str, show_qr: bool = True, keys: bool = False) -> List[str]:
+    """url = the Get-the-app page, http://<ip>:<port>/ (the QR code encodes exactly this).
+    show_qr: False once the first phone has connected (M9); keys: the A/Z console keys work (Windows)."""
+    lines = ["  FERRY  is running" + " " * 24 + "v" + VERSION, "  " + ABOUT_LINE]
+    if url and show_qr:
+        lines.extend(install_lines(url, qr_lines))
+    elif url:
+        if keys:
+            lines.append("  To add a phone or TV press A")
+        lines.extend(address_lines(url))
     else:
         lines.append("  No network connection found - connect to Wi-Fi, then restart Ferry.")
     lines.append("  Inbox:  %s     Outbox: %s (%d file%s)" % (
         cfg.inbox_label, cfg.outbox_label, outbox_count, "" if outbox_count == 1 else "s"))
     lines.append("  " + app_line)
-    lines.append("  Keep this window open. Ctrl+C to stop.   Help: README.txt")
+    lines.append("  Keep this window open. Ctrl+C to stop.   Help: README.txt" +
+                 ("   Z = zip logs for Claude" if keys else ""))
     lines.append(RULE)
     return lines
 
@@ -2735,6 +3243,29 @@ def bind_server(port: int, app: Optional[AppContext], exclusive: bool = IS_WIN,
             raise FatalError("Can't start the server on port %d: %s" % (port, e))
 
 
+def show_install(console: Console, url: Optional[str]) -> None:
+    """Key A: the QR code and the install addresses again (U6)."""
+    if not url:
+        console.print("  No network connection found - connect to Wi-Fi, then restart Ferry.")
+        return
+    for line in install_lines(url, qr_console_lines(url, console.ansi)):
+        console.print(line)
+
+
+def zip_logs_to_console(console: Console, logs_dir: str, reqlog: Optional[RequestLog] = None) -> Optional[str]:
+    """Key Z (L7): zip the logs folder, print where the zip is."""
+    console.note("Zipping the logs...")
+    try:
+        if reqlog is not None:
+            reqlog.flush_polls()
+        path = zip_logs(logs_dir)
+    except Exception as e:
+        console.note("! Couldn't zip the logs: %s" % e)
+        return None
+    console.note("Logs for Claude: " + path)
+    return path
+
+
 def probe_ferry(port: int) -> bool:
     try:
         import http.client
@@ -2754,10 +3285,17 @@ def page_url(primary: Optional[str], port: int) -> Optional[str]:
 
 def make_app(cfg: Config, console: Console, primary: Optional[str], is_win: bool = IS_WIN,
              app_dir: Optional[str] = None, free_override: Optional[int] = None,
-             reqlog: Optional[RequestLog] = None, logs_dir: Optional[str] = None) -> AppContext:
+             reqlog: Optional[RequestLog] = None, logs_dir: Optional[str] = None,
+             state: Optional[State] = None, guide_path: Optional[str] = None) -> AppContext:
     pc_name = socket.gethostname().split(".")[0] or "PC"
     app = AppContext(cfg=cfg, console=console, primary=primary, primary_url=page_url(primary, cfg.port),
-                     pc_name=pc_name, reqlog=reqlog)
+                     pc_name=pc_name, reqlog=reqlog, state=state, guide_path=guide_path or os.path.join(HERE, GUIDE_NAME),
+                     )
+
+    def batch_line(text, ip, device):
+        if app.reqlog is not None:
+            app.reqlog.event(text, ip, device)
+    app.batches = BatchSummary(batch_line)
 
     def inbox_log(area, verb, name="", detail=""):
         console.log(area, verb, name, detail)
@@ -2769,7 +3307,24 @@ def make_app(cfg: Config, console: Console, primary: Optional[str], is_win: bool
     app.tracker = TransferTracker(console.note, is_win)
     app.bundle = AppBundle(app_dir or APP_DIR)
     app.devlogs = DeviceLogStore(logs_dir or os.path.join(DATA_DIR, LOGS_DIR_NAME), is_win)
+    app.logs_dir = logs_dir or os.path.join(DATA_DIR, LOGS_DIR_NAME)
     return app
+
+
+_first_phone_lock = threading.Lock()
+
+
+def note_first_phone(app: AppContext, ip: str, headers, ua: str) -> bool:
+    """M9: the first Ferry phone app seen from the network hides the QR from the next start on; persisted."""
+    state = getattr(app, "state", None)
+    if state is None or state.data.get("first_phone_seen") or not is_first_phone(ip, headers, ua):
+        return False
+    with _first_phone_lock:
+        if state.data.get("first_phone_seen"):
+            return False
+        state.data["first_phone_seen"] = True
+        state.save()
+    return True
 
 
 def install_hooks(console: Console) -> None:
@@ -2864,7 +3419,7 @@ def main(argv=None, stop_event: Optional[threading.Event] = None) -> int:
         logs_dir = os.path.join(DATA_DIR, LOGS_DIR_NAME)
         reqlog = RequestLog(migrate_old_logs(DATA_DIR, console.note), console.note)   # 2.1: into logs/ [CP110]
         app = make_app(cfg, console, primary, app_dir=args.app_dir, free_override=args.test_free_bytes,
-                       reqlog=reqlog, logs_dir=logs_dir)
+                       reqlog=reqlog, logs_dir=logs_dir, state=state)
         server = bind_server(cfg.port, app)
     except FatalError as e:
         console.print("")
@@ -2880,9 +3435,12 @@ def main(argv=None, stop_event: Optional[threading.Event] = None) -> int:
     reqlog.event("Ferry %s started (port %d, Python %s)" % (VERSION, cfg.port, sys.version.split()[0]))
     app.inbox.cleanup_temps()                    # only after we own the port [T1]
     app.outbox.start_scan()
-    qr = qr_console_lines(app.primary_url, console.ansi) if app.primary_url else []
+    show_qr = not state.data.get("first_phone_seen")
+    keys = KeyListener.available()
+    qr = qr_console_lines(app.primary_url, console.ansi) if app.primary_url and show_qr else []
     app_line = app_banner_line(*app.bundle.peek())   # no hashing here: the warm-up thread does it
-    for line in build_banner(cfg, app.primary_url, qr, len(app.outbox.snapshot()), app_line):
+    for line in build_banner(cfg, app.primary_url, qr, len(app.outbox.snapshot()), app_line,
+                             show_qr=show_qr, keys=keys):
         console.print(line)
     for line in build_extras(cfg, app.primary_url, others, state.data.get("last_ip"), primary, cfg.port):
         console.print(line)
@@ -2909,7 +3467,12 @@ def main(argv=None, stop_event: Optional[threading.Event] = None) -> int:
     state.data["last_ip"] = primary or state.data.get("last_ip")
     state.data["first_run_done"] = True
     state.save()
-    app.tracker.start_watchdog()
+    listener = None
+    if keys:
+        listener = KeyListener(lambda: show_install(console, app.primary_url),
+                               lambda: zip_logs_to_console(console, logs_dir, reqlog))
+        if not listener.start():
+            listener = None
     if stop_event is not None:
         threading.Thread(target=lambda: (stop_event.wait(), server.shutdown()), daemon=True).start()
     try:
@@ -2919,6 +3482,8 @@ def main(argv=None, stop_event: Optional[threading.Event] = None) -> int:
     finally:
         if discovery is not None:
             discovery.stop()
+        if listener is not None:
+            listener.stop()
         app.outbox.stop()
         server.server_close()
         app.inbox.cleanup_temps()                # best effort; startup cleanup is the guarantee

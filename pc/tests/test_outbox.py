@@ -157,7 +157,9 @@ def test_kinds():
     assert ferry.file_kind("a.mkv") == "video"
     assert ferry.file_kind("a.apk") == "apk"
     assert ferry.file_kind("a.HEIC") == "image"
-    assert ferry.file_kind("a.pdf") == "other"
+    assert ferry.file_kind("a.pdf") == "pdf"          # 2.1 (T8): documents get their own kinds
+    assert ferry.file_kind("notes.TXT") == "text"
+    assert ferry.file_kind("a.docx") == "other"
 
 
 def test_arrival_time_windows_uses_ctime():

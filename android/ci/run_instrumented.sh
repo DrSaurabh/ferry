@@ -217,6 +217,8 @@ check_original() {
   sleep 1 # the PC writes its request log on a background thread
   verify identical --inbox "$TMP/A/inbox" --name "$GPS_NAME" --fixture "$CI/fixtures/gps.jpg" --mtime-s "$(date_modified "$GPS_NAME")" --label PC-A
   verify uploads --log "$TMP/A/data/logs/ferry-log.txt" --name "$GPS_NAME" --expect saved,skipped --label PC-A
+  # 2.1 (Ph12, L5): the PC's readable line read the photo's GPS itself
+  verify readable-line --log "$TMP/A/data/logs/ferry-log.txt" --name "$GPS_NAME" --expect "GPS yes" --label PC-A
 }
 # Stage 7 (audit O1): the photo shared with "Allow" reached PC-U as the original.
 check_share_original() {

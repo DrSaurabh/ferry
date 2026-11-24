@@ -134,6 +134,24 @@ def check_names(inbox, prefix, expect):
     return got == want, "%s* files: %s (expected %s)" % (prefix, got, want)
 
 
+def readable_lines(log_path, name):
+    """2.1 (L5, plan §2.7): the PC's readable EVENT lines for a received file (`saved NAME · …`)."""
+    out = []
+    with open(log_path, encoding="utf-8", errors="replace") as f:
+        for line in f:
+            fields = line.rstrip("\n").split("\t")
+            if len(fields) >= 10 and fields[3] == "EVENT" and fields[9].startswith("saved %s \u00b7 " % name):
+                out.append(fields[9])
+    return out
+
+
+def check_readable_line(log_path, name, expect):
+    lines = readable_lines(log_path, name)
+    ok = any(all(e in l for e in expect) for l in lines)
+    return ok, "%s readable line%s: %s (expected to contain %s)" % (
+        name, "" if len(lines) == 1 else "s", " | ".join(lines) or "none", expect)
+
+
 def event_name(line):
     """Event of a 2.1 phone/TV log line: `<date> <time> #<seq> s=<sid> <event> k=v…` (plan §2.2)."""
     parts = line.split(" ", 5)
@@ -161,7 +179,7 @@ def check_device_log(logs_dir, expect, device=None):
 def main(argv=None):
     ap = argparse.ArgumentParser()
     ap.add_argument("mode", choices=["identical", "redacted", "no-partials", "uploads", "pattern", "size", "names",
-                                     "device-log"])
+                                     "device-log", "readable-line"])
     ap.add_argument("--logs")
     ap.add_argument("--device")
     ap.add_argument("--prefix")
@@ -187,6 +205,8 @@ def main(argv=None):
         ok, text = check_names(a.inbox, a.prefix, [e for e in a.expect.split(",") if e])
     elif a.mode == "device-log":
         ok, text = check_device_log(a.logs, [e for e in a.expect.split(",") if e], a.device)
+    elif a.mode == "readable-line":
+        ok, text = check_readable_line(a.log, a.name, [e for e in a.expect.split(",") if e])
     elif a.mode == "size":
         ok, text = check_size(a.inbox, a.name, a.size)
     else:

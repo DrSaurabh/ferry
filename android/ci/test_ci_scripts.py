@@ -429,3 +429,21 @@ def test_verify_device_log(tmp_path):
     assert not verify_inbox.check_device_log(str(tmp_path), ["send.done", "tap"])[0]
     assert not verify_inbox.check_device_log(str(tmp_path / "missing"), ["tap"])[0]
     assert verify_inbox.main(["device-log", "--logs", str(tmp_path), "--expect", "app.start,send.done"]) == 0
+
+
+def test_verify_readable_line(tmp_path):
+    """2.1 (Ph12): `verify_inbox.py readable-line` finds the PC's readable line for a file."""
+    import verify_inbox
+    log = tmp_path / "ferry-log.txt"
+    log.write_text(
+        "2026-11-24 10:00:00.000\t127.0.0.1\tvivo\tPOST\t/api/v1/upload?name=gps.jpg\t-\t200\t5\t3\tsaved gps.jpg\t-\n"
+        "2026-11-24 10:00:00.001\t127.0.0.1\tvivo\tEVENT\t-\t-\t-\t-\t-\tsaved gps.jpg · 5 B in 0.00 s · "
+        "taken 2025-01-01 12:00:00 · GPS yes · from vivo\t-\n", encoding="utf-8")
+    ok, text = verify_inbox.check_readable_line(str(log), "gps.jpg", ["GPS yes"])
+    assert ok, text
+    ok, text = verify_inbox.check_readable_line(str(log), "gps.jpg", ["GPS no"])
+    assert not ok and "GPS yes" in text
+    ok, _ = verify_inbox.check_readable_line(str(log), "other.jpg", ["GPS yes"])
+    assert not ok
+    assert verify_inbox.upload_outcomes(str(log), "gps.jpg") == ["saved"]   # EVENT lines don't confuse it
+    assert verify_inbox.main(["readable-line", "--log", str(log), "--name", "gps.jpg", "--expect", "GPS yes"]) == 0

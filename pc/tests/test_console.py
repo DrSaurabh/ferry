@@ -65,11 +65,11 @@ def test_qr_missing_library(monkeypatch):
 def test_banner_budget():
     url = "http://192.168.100.200:8765/"
     lines = build_banner(cfg(), url, qr_console_lines(url, True), 3, APP_LINE)
-    assert len(lines) <= 23      # v1: 22; v2 adds the Fire TV and app lines, drops "Bookmark-friendly name" (B13)
+    assert len(lines) <= 24      # v1: 22; v2 adds the Fire TV and app lines (B13); 2.1 adds the About line (A2)
     text = "\n".join(lines)
     assert "First time? Scan to install the Ferry app:" in text
     assert "  App page:  http://192.168.100.200:8765/app" in lines
-    assert "  Fire TV:   in Downloader enter 192.168.100.200:8765/app" in lines
+    assert "  Fire TV:   in Downloader enter http://192.168.100.200:8765/tv" in lines     # 2.1: /tv (B4, M11)
     assert "  " + APP_LINE in lines and max(len(l) for l in lines if "█" not in l) <= 88
     # realistic worst case: first run (so no "address changed"), OneDrive desktop, non-192.168 primary
     extras = build_extras(cfg(first_run=True, onedrive_outbox=True), url, ["10.0.0.5"], None, "10.0.0.9", 8765)
@@ -80,7 +80,7 @@ def test_banner_budget():
 
 
 def test_banner_glyphs_safe():
-    allowed = set(" █▀▄─→↑↓=+-…") | set(chr(c) for c in range(32, 127))
+    allowed = set(" █▀▄─→↑↓=+-…·©") | set(chr(c) for c in range(32, 127))     # 2.1: · © of the About line (A2)
     url = "http://192.168.1.2:8765/"
     text = "\n".join(build_banner(cfg(), url, qr_console_lines(url, False), 1, APP_LINE) +
                      build_banner(cfg(), url, [], 1, ferry.app_banner_line("missing", None)) +
@@ -132,7 +132,7 @@ def test_rank_addresses():
 def test_state_roundtrip(tmp_path):
     p = str(tmp_path / "s.json")
     s = ferry.State.load(p)
-    assert s.data == {"last_ip": None, "first_run_done": False}
+    assert s.data == {"last_ip": None, "first_run_done": False, "first_phone_seen": False}   # 2.1 adds M9
     s.data["last_ip"] = "1.2.3.4"
     s.save()
     assert ferry.State.load(p).data["last_ip"] == "1.2.3.4"
@@ -158,3 +158,21 @@ def test_app_banner_lines():
     assert ferry.app_banner_line("missing", None).startswith("! No app in this folder (app")
     assert ferry.app_banner_line("invalid", None).endswith("get the full Ferry zip")
     assert "being copied" in ferry.app_banner_line("copying", None)
+
+
+def test_no_connect_tip_at_start_tip_after_aborted_upload(srv):
+    """2.1 (U6, H75): no "Phone can't connect?" at start; the tip comes once after a request broke off."""
+    import socket as _s
+    import time as _t
+    assert not hasattr(srv.app.tracker, "start_watchdog")
+    srv.req("GET", "/api/v1/info")
+    assert "Phone can't connect?" not in srv.log()
+    for _ in range(2):
+        c = _s.create_connection(("127.0.0.1", srv.port), timeout=5)
+        c.sendall(b"POST /api/v1/upload?name=x.jpg&size=1000 HTTP/1.0\r\nContent-Length: 1000\r\n\r\n" + b"x" * 10)
+        c.close()
+    deadline = _t.time() + 5
+    while "Phone can't connect?" not in srv.out.getvalue() and _t.time() < deadline:
+        _t.sleep(0.05)
+    text = srv.log()
+    assert text.count("Phone can't connect? Check") == 1 and "README.txt > Troubleshooting" in text

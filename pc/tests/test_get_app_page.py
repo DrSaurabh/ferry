@@ -28,16 +28,17 @@ def test_page_content(srv):
     assert "<title>Get the Ferry app</title>" in text
     assert 'href="/app"' in text and "Download Ferry for Android" in text
     assert "Ferry 2.0.57 &middot; 24.1 MB" in text
-    assert "In the Downloader app, enter <code>192.168.1.23:8765/app</code>" in text
+    assert "In the Downloader app, enter <code>192.168.1.23:8765/tv</code>" in text        # 2.1: /tv (B4, M11)
+    assert "<code>http://192.168.1.23:8765/app/Ferry.apk</code>" in text
     assert "allow your browser to install apps" in text and "<script" not in text
 
 
 def test_host_header_escaped(srv):
     r, d = srv.req("GET", "/", headers={"Host": "<b>x"})
     assert b"<b>x" not in d
-    assert ("<code>127.0.0.1:%d/app</code>" % srv.port).encode() in d          # fallback: primary:port
+    assert ("<code>127.0.0.1:%d/tv</code>" % srv.port).encode() in d           # fallback: primary:port
     resp = raw_get(srv.port, b"GET / HTTP/1.0\r\n\r\n")                         # no Host header at all
-    assert ("127.0.0.1:%d/app" % srv.port).encode() in resp
+    assert ("127.0.0.1:%d/tv" % srv.port).encode() in resp
 
 
 def test_head(srv):

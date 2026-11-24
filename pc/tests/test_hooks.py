@@ -44,8 +44,8 @@ def test_port0_page_shows_real_port(proc):
             break
         data += b
     s.close()
-    assert (":%d/app</code>" % p.port).encode() in data and b":0/app" not in data
-    assert not any(":0/app" in l for l in p.lines)          # banner too
+    assert (":%d/tv</code>" % p.port).encode() in data and b":0/" not in data    # 2.1: /tv (B4)
+    assert not any(":0/" in l for l in p.lines)             # banner too
 
 
 def test_discovery_port_zero_reported(proc):
