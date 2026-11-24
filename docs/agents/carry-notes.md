@@ -57,3 +57,22 @@
   (wraps `verify_inbox.py device-log`, B104). Logs come out of CI with `python3 android/ci/shots_from_log.py --logs job.log OUT`.
 - `EventLog` tail keeps `diag` as `diag <tag> <msg>` (B107), so 2.0 androidTests that search `ringLog.snapshot()`
   keep matching once the shim is in.
+
+## From Ph11b (for Ph12 and later)
+- Log through `AppGraph.event("<name>", "k" to v)` / `AppGraph.detailed(...)`; the name must be in
+  `docs/v2.1-log-events.md` part 1 (`EventCatalogueTest`), and when a phase starts emitting a `PENDING` event it
+  removes it from `EventCatalogueTest.PENDING` (Ph14 `share.resolve`; Ph15 `send.queued/resume`, `work.run`; Ph16
+  `ctl.rx`, `caps`, `volume`; Ph17a `zoom`; Ph17b `doc`; Ph18 `ctl.tx/ack`, `poll.*`).
+- Every new clickable: `onClick = onClickLogged("<screen>.<what>") { … }` (or `TapLog.tap`, `tvClickable(id = …)`,
+  `// tap-id:`); `TapIdLintTest` fails otherwise. Dialogs: `LogDialog(name)` + `logDialog(name, choice)`; shown
+  errors: `LogError(text)`. Intent ids from the catalogue are exact: `send`, `cast`, `tv` (Ph18 Home TV button → O5).
+- `Navigator` logs `screen`/`back` itself (`Screen.logName`; add a name for every new `Screen`, e.g. `controller`
+  for O5). `back result=discarded_picks` (Ph13, G5) goes through `Navigator.onBack` — extend `pop()` with a result.
+- "Something's wrong": `WrongDialog(screen) { … }` (ui/common); Home has it in its ⋮ (Ph13 moves it into PhoneTopBar).
+- Shipping: `AppGraph.shipper.afterSend()/afterPcCall()/onBackground()`; device folder on the PC is
+  `<name> (<installId>)`; host check `check_device_log <PC> ev1,ev2`. Logs from a CI job: `shots_from_log.py --logs`.
+- CI: the emulator's "Set a screen lock" notification can collapse Ferry's notifications in the shade — expand
+  Ferry's row (see `ScreenOffUploadTest.expandFerryNotification`) before reading notification text (Ph14/Ph18 tests).
+- Unexplained once (Ph11b run 45428801114, second attempt): `CancelAndWaitingTest` saw `Transfers.state` stay at
+  Sending after the engine had finished. If it recurs, dump thread stacks in `SendHelpers.waitUntil`'s failure path.
+
