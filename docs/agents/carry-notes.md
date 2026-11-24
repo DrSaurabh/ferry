@@ -79,3 +79,16 @@
 - TV suite: in Ph11b runs the first attempt twice lost D-pad keys in `TvCastReceiveTest`/`TvScreenshotTour` (no `key`
   line in the app log); the retry passed. If a later phase sees it, check which window has focus
   (`dumpsys window | grep mCurrentFocus`) before those classes.
+
+## From Ph12 (for Ph13 and later)
+- PC readable lines (`saved NAME · … · GPS yes · from DEVICE`, `already on PC NAME · from …`, `batch ID: …`) are EVENT
+  lines in `data/logs/ferry-log.txt`; host check `verify readable-line --log … --name … --expect "a,b"`
+  (`verify_inbox.py readable-line`, used by `check_original`). Ph14 adds the phone headers `X-Ferry-Taken/-Gps/-Original`
+  and `X-Ferry-Batch: <id>;<i>;<n>` (check-batch `<id>;0;<n>`); the PC side is ready (`phone_meta`, `BatchSummary`).
+- PC file kinds now include `pdf` and `text` (`notes.txt` on PC-T is `text`): TV home shows them under "Other" until
+  Ph17b adds the Documents row (and adapts `TvLaunchAndFocusTest`, E1).
+- TV key flake: in Ph12's `main` run 45459451664 it hit **both** suite attempts (same two classes:
+  `TvCastReceiveTest` OK-pauses, `TvScreenshotTour` Right). A job re-run is the current workaround; a later phase that
+  touches TV input (Ph16 key injection) should find the cause (which window has focus when keys are injected).
+- Windows pc job: `test_http.py::test_disk_full_reply` can fail with WinError 10053 (reply sent with the body unread);
+  seen once in Ph12's main run, re-run green.
