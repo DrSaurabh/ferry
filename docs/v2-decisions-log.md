@@ -100,6 +100,9 @@ User-given permissions: use GitHub Actions minutes freely; self-approve stages; 
 | H85 | A3 | Last setup screen shows the phone's name for the PC with "Change" (one optional typing) | F6: the 2.0 name chain already gave "V2413" | M23 |
 | H86 | A3 | Share: name+size match also needs the same date taken; "location may have been removed" note only with evidence | Never send the wrong photo (V1); honest message (V5) | M4 |
 | H87 | A3 | "Your phone stopped the send" card shows vivo steps only on vivo phones, generic otherwise | Friends' phones (V13) | M23 |
-| H88 | A3 | After 3 days waiting: one "Keep waiting / Cancel" notification; unanswered → background checks stop, the send stays and resumes when Ferry is opened | V8 battery, V6 nothing thrown away | M5 |
+| H88 | A3 | After 3 days waiting the background checks stop; the send stays (Home banner) and checks resume when Ferry is opened (rev: no extra notification, C12) | V8 battery, V6 nothing thrown away | M5 |
 | H89 | A3 | PC always logs in full detail (no setting) | Simplest (V12); L2 PC part | M18 |
 | H90 | A3 | Review-script rules renamed G1–G11 (clashed with controller IDs R1–R11) | Clarity | M18 |
+| H91 | A3 | Cast notification uses MediaStyle (5 controls, no session); "Something's wrong" on the send notification and the controller menu | Android shows only 3 plain actions | M25 |
+| H92 | A3 | Version shown everywhere = the real build version (e.g. 2.1.57) | About must match what's installed | M25 |
+| H93 | A3 | TV button always on Home; tap anywhere on the touch pad = OK, arrows on its edge | First-time discovery; usable without looking (R2) | M25 |
