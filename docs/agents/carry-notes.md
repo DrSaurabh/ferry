@@ -76,3 +76,6 @@
 - Unexplained once (Ph11b run 45428801114, second attempt): `CancelAndWaitingTest` saw `Transfers.state` stay at
   Sending after the engine had finished. If it recurs, dump thread stacks in `SendHelpers.waitUntil`'s failure path.
 
+- TV suite: in Ph11b runs the first attempt twice lost D-pad keys in `TvCastReceiveTest`/`TvScreenshotTour` (no `key`
+  line in the app log); the retry passed. If a later phase sees it, check which window has focus
+  (`dumpsys window | grep mCurrentFocus`) before those classes.
