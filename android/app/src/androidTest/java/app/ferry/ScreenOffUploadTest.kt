@@ -2,6 +2,8 @@ package app.ferry
 
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.uiautomator.By
+import androidx.test.uiautomator.UiObject2
+import androidx.test.uiautomator.Until
 import app.ferry.core.upload.ItemStatus
 import app.ferry.core.upload.Phase
 import app.ferry.media.MediaPick
@@ -39,6 +41,22 @@ class ScreenOffUploadTest {
         return lines.subList(start, end).joinToString("\n")
     }
 
+    /** Clicks the expand arrow of the notification row whose title starts with "Sending" (no-op if not found). */
+    private fun expandFerryNotification() {
+        val title = SendHelpers.device.findObject(By.textStartsWith("Sending")) ?: return
+        var p: UiObject2? = title.parent
+        repeat(6) {
+            val b = p?.findObject(By.res("android", "expand_button"))
+            if (b != null) {
+                b.click()
+                Probe.record("notification_expanded", true)
+                return
+            }
+            p = p?.parent
+        }
+        Probe.record("notification_expanded", false)
+    }
+
     @Test
     fun uploadRunsInTheForegroundServiceWithTheScreenOff() {
         LaunchHelpers.cleanPrefs(welcomeDone = true) // manual = PC-A
@@ -54,6 +72,9 @@ class ScreenOffUploadTest {
 
             // Progress notification with the speed, shade opened before the sleep [PB20].
             d.openNotification()
+            // Ph11b CI: another notification (the emulator's "Set a screen lock") can sit on top, auto-expanded, and
+            // leave Ferry's collapsed (title + bar only): expand Ferry's own row, then look for the speed as before.
+            if (!d.wait(Until.hasObject(By.textContains("MB/s")), 5_000)) expandFerryNotification()
             SendHelpers.waitUntil("notification with MB/s", 20_000) { d.hasObject(By.textContains("MB/s")) }
             Probe.record("notification_text", d.findObject(By.textContains("MB/s"))?.text)
             SendHelpers.settle()

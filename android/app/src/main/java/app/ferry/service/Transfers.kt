@@ -89,11 +89,20 @@ class Transfers(
             follow = scope.launch {
                 fresh.state.collect {
                     _state.value = it
-                    ev?.onState(it)
+                    // Logging never stops the queue's state (Ph11b): an error here is only noted.
+                    try {
+                        ev?.onState(it)
+                    } catch (e: Exception) {
+                        log("send events: $e")
+                    }
                 }
             }
         }
-        events?.added(items.size, items.sumOf { it.size }, pcName())
+        try {
+            events?.added(items.size, items.sumOf { it.size }, pcName())
+        } catch (e: Exception) {
+            log("send events: $e")
+        }
         e.add(items.map { UploadItem(it.id, sourceFor(it), it.name, it.size, it.mtimeMs, it.original, skipPrecheck = it.unreadable) })
     }
 

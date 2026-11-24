@@ -16,6 +16,8 @@ import app.ferry.ui.nav.Screen
 import app.ferry.ui.phone.CastViewModel
 import app.ferry.ui.phone.TvChoice
 import org.junit.Assert.assertTrue
+import androidx.test.uiautomator.By
+import androidx.test.uiautomator.Until
 import org.junit.Test
 import org.junit.runner.RunWith
 
@@ -82,6 +84,28 @@ class PhoneScreenshotTour {
             go(sc, Screen.Settings)
             SendHelpers.tap(ctx.getString(R.string.settings_still_stopping))
             shot("settings-still-stopping")
+
+            // ---- Ph11b (L2, H76): Settings' logging section — "Trial logging" (on by default) and the name field.
+            val trial = ctx.getString(R.string.settings_trial_logging)
+            for (i in 1..5) {
+                if (SendHelpers.device.hasObject(By.text(trial))) break
+                val w = SendHelpers.device.displayWidth
+                val h = SendHelpers.device.displayHeight
+                SendHelpers.device.swipe(w / 2, h * 3 / 4, w / 2, h / 4, 20)
+                Thread.sleep(400)
+            }
+            SendHelpers.waitText(trial)
+            assertTrue("Trial logging is on by default (H55)", AppGraph.prefs.logDetailed)
+            shot("settings-logging")
+
+            // ---- Ph11b (L4): Home ⋮ → "Something's wrong" → the dialog; Skip writes the marker.
+            go(sc, Screen.Home)
+            SendHelpers.device.wait(Until.findObject(By.desc("More")), 10_000)!!.click()
+            SendHelpers.tap(ctx.getString(R.string.wrong_menu))
+            SendHelpers.waitText(ctx.getString(R.string.wrong_title))
+            shot("wrong-dialog")
+            SendHelpers.tap(ctx.getString(R.string.wrong_skip))
+            SendHelpers.waitUntil("wrong marker logged", 5_000) { AppGraph.events.snapshot().any { it.contains(" wrong screen=home") } }
 
             // ---- Play on TV: no TV answers (real), then several TVs (list set in the ViewModel).
             var vm: CastViewModel? = null

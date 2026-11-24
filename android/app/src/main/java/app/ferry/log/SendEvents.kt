@@ -20,18 +20,18 @@ class SendEvents(
     private val onEnded: () -> Unit,
     val batch: String = String.format(Locale.US, "%04x", SecureRandom().nextInt(0x10000)),
 ) {
-    private val logged = HashSet<Long>()
-    private var lastPhase: Phase? = null
-    private var startMs = 0L
-    private var index = 0
+    // Only the queue's state collector calls onState (one coroutine); added() comes from the service. No monitor
+    // is held while writing to the log (Ph11b CI: keep the state collector free of any lock but EventLog's).
+    private val logged = java.util.Collections.synchronizedSet(HashSet<Long>())
+    @Volatile private var lastPhase: Phase? = null
+    @Volatile private var startMs = 0L
+    private val index = java.util.concurrent.atomic.AtomicInteger()
 
-    @Synchronized
     fun added(files: Int, bytes: Long, pc: String?) {
         if (startMs == 0L || lastPhase == Phase.Finished) startMs = nowMs()
         log.event("send.start", "batch" to batch, "files" to files, "bytes" to bytes, "pc" to (pc ?: "?"))
     }
 
-    @Synchronized
     fun onState(s: EngineState) {
         for (r in s.items) {
             val result = when (val st = r.status) {
@@ -46,8 +46,7 @@ class SendEvents(
                 }
             } ?: continue
             if (!logged.add(r.id)) continue
-            index++
-            log.event("send.item", "batch" to batch, "i" to index, "name" to r.name, "size" to r.size, "result" to result)
+            log.event("send.item", "batch" to batch, "i" to index.incrementAndGet(), "name" to r.name, "size" to r.size, "result" to result)
         }
         val was = lastPhase
         lastPhase = s.phase
