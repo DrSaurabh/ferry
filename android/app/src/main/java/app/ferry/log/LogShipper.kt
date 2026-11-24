@@ -71,7 +71,8 @@ class LogShipper(
         var chunks = 0
         while (chunks < 20) { // ≤ 10 MB per round; the log holds ≤ 5 MB
             val chunk = reader.linesAfter(events.shipped)
-            if (chunk.isEmpty || chunk.lastSeq == null) break
+            val chunkLast = chunk.lastSeq
+            if (chunk.isEmpty || chunkLast == null) break
             val reply = try {
                 a.postLogs(chunk.fromSeq, chunk.body)
             } catch (e: CancellationException) {
@@ -88,7 +89,7 @@ class LogShipper(
             reply.timeMs?.let(onPcTime)
             chunks++
             // The PC kept less than we sent (should not happen): stop rather than loop on the same lines.
-            if (reply.lastSeq < chunk.lastSeq) break
+            if (reply.lastSeq < chunkLast) break
         }
     }
 }
