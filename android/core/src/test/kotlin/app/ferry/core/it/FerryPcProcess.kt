@@ -28,7 +28,8 @@ class FerryPcProcess private constructor(
     val inbox = File(root, "in")
     val outbox = File(root, "out")
     val data = File(root, "data")
-    val log = File(data, "ferry-log.txt")
+    /** 2.1: the request log lives in `<data>/logs/` (CP110). */
+    val log = File(data, "logs/ferry-log.txt")
 
     /** Everything ferry.py printed so far (attached to failures). */
     fun output(): String = output.toString()

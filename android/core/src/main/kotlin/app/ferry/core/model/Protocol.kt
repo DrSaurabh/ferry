@@ -17,6 +17,17 @@ data class PcInfo(
     val capabilities: List<String> = emptyList(),
     @SerialName("free_bytes") val freeBytes: Long? = null,
     @SerialName("app_version_code") val appVersionCode: Long? = null,
+    /** 2.1 (M18): the PC's clock, for `clock peer=pc offset_ms=`; null from a 2.0 PC. */
+    @SerialName("time_ms") val timeMs: Long? = null,
+)
+
+/** 2.1 `POST /api/v1/logs` reply (plan §2.3). */
+@Serializable
+data class LogsReply(
+    val ok: Boolean = false,
+    val stored: Int = 0,
+    @SerialName("last_seq") val lastSeq: Long = 0,
+    @SerialName("time_ms") val timeMs: Long? = null,
 )
 
 /** One entry of `POST /api/v1/check-batch`; `mtime` (ms) is omitted when unknown [B17]. */

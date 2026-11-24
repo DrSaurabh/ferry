@@ -9,6 +9,7 @@ import app.ferry.core.model.CheckBatchReply
 import app.ferry.core.model.CheckBatchRequest
 import app.ferry.core.model.CheckFile
 import app.ferry.core.model.ErrorReply
+import app.ferry.core.model.LogsReply
 import app.ferry.core.model.OutboxList
 import app.ferry.core.model.PcInfo
 import app.ferry.core.model.UploadReply
@@ -60,6 +61,12 @@ interface FerryApi {
 
     /** For ExoPlayer / Coil. */
     fun absoluteUrl(urlPath: String): String
+
+    /**
+     * 2.1 `POST /api/v1/logs` (plan §2.3): [body] = whole lines (≤ 512 KB) starting at [fromSeq]. A 2.0 PC (404)
+     * throws [FerryException.LogsUnsupported]. Default for test fakes: unsupported.
+     */
+    suspend fun postLogs(fromSeq: Long?, body: String): LogsReply = throw FerryException.LogsUnsupported()
 }
 
 /**
@@ -118,6 +125,15 @@ class FerryClient(
             throw FerryException.BadReply("upload result ${reply.result}")
         }
         return reply
+    }
+
+    override suspend fun postLogs(fromSeq: Long?, body: String): LogsReply {
+        val req = Request.Builder().url(url("api/v1/logs")).post(body.toRequestBody(TEXT))
+        if (fromSeq != null) req.header(FerryHttp.LOG_FROM_HEADER, fromSeq.toString())
+        return call(http, req, 30_000) {
+            if (it.code == 404) throw FerryException.LogsUnsupported()
+            decode(it, LogsReply.serializer())
+        }
     }
 
     override suspend fun outbox(): OutboxList =
@@ -222,6 +238,7 @@ class FerryClient(
 
     companion object {
         private val JSON = "application/json; charset=utf-8".toMediaType()
+        private val TEXT = "text/plain; charset=utf-8".toMediaType()
 
         /** Plan §3.4 mapping. */
         internal fun mapFailure(e: IOException, trace: CallTrace): FerryException {

@@ -19,6 +19,8 @@ sealed class FerryException(message: String, cause: Throwable? = null) : java.io
     /** [PB5] */
     class OriginalUnreadable(cause: Throwable?) : FerryException("can't read the original (location)", cause)
     class NotEnoughSpace(val needed: Long, val free: Long) : FerryException("not enough space on the phone")
+    /** 2.1: a 2.0 PC answers 404 to `POST /api/v1/logs` → stop shipping for this process (M8). */
+    class LogsUnsupported : FerryException("the PC does not take logs (older Ferry)")
     /** Writing a download on the phone failed (Ph7, B58): not a network drop, so it is not retried. */
     class SaveFailed(cause: Throwable) : FerryException("can't save on the phone", cause)
 }
