@@ -92,3 +92,16 @@
   touches TV input (Ph16 key injection) should find the cause (which window has focus when keys are injected).
 - Windows pc job: `test_http.py::test_disk_full_reply` can fail with WinError 10053 (reply sent with the body unread);
   seen once in Ph12's main run, re-run green.
+
+## From Ph13 (for Ph14 and later)
+- Every phone screen uses `ui/common/PhoneTopBar(title, showBack[, actions])` (Back → back dispatcher, ⋮ "Something's
+  wrong"); new screens (Preview Ph14, Controller/Browse Ph18, About Ph19) use it too and get a line in
+  `BackEverywhereTest` (helpers in `androidTest/PhoneNav.kt`: `waitScreen`, `tapTopBack`, `waitOverflow`).
+- New phone suite lines go **above** `SetupFlowTest` (it must stay last: host step `fresh_install` reinstalls the APK).
+  `idle_whitelist on|off` exists in `run_instrumented.sh` (Ph15 staged job).
+- No permission pop-ups after setup (U2): the picker shows `MissingPermissionBanner(Media)`, Transfer shows
+  `MissingPermissionBanner(Notifications)`; Ph15's battery banner on the waiting card should use the same composable
+  (add a `MissingPermission.Battery` with Fix → `Battery.request`).
+- Stop card: `StopCardView(where)` (Home, Transfer) from `AppGraph.interrupted` + `AppGraph.lastExit`.
+- Discovery back-off: `ConnectionManager.retryIfNotFound()` is ticked every 1 s and `RetrySchedule` decides; Ph18's
+  `TvPoller`/controller can reuse `RetrySchedule` for "TV not found" retries.
