@@ -3,7 +3,6 @@ package app.ferry
 import androidx.lifecycle.ViewModelProvider
 import androidx.test.core.app.ActivityScenario
 import androidx.test.uiautomator.By
-import androidx.test.uiautomator.Until
 import app.ferry.media.PickerMode
 import app.ferry.probe.Probe
 import app.ferry.ui.nav.Screen
@@ -52,8 +51,13 @@ object PhoneNav {
         SendHelpers.waitUntil("⋮ on $name", 10_000) { SendHelpers.device.hasObject(By.desc(more)) }
 
     fun tapTopBack() {
-        val o = SendHelpers.device.wait(Until.findObject(By.text(topBack)), 10_000)
-        checkNotNull(o) { "no top Back on screen" }.click()
+        SendHelpers.settle() // the screen just pushed may still be replacing the previous one
+        SendHelpers.clickFresh("top Back", By.text(topBack))
+    }
+
+    fun tapMore() {
+        SendHelpers.settle()
+        SendHelpers.clickFresh("⋮", By.desc(more))
     }
 
     fun discardText(n: Int): String = ctx.resources.getQuantityString(R.plurals.discard_picks, n, n)

@@ -144,6 +144,24 @@ object SendHelpers {
         throw AssertionError("'$desc' kept going stale")
     }
 
+    /**
+     * Finds and clicks [sel]; a node that went stale between find and click (the screen under it was just replaced,
+     * e.g. two screens both have ⋮ while one replaces the other, Ph13) is looked up again, up to 3 times.
+     */
+    fun clickFresh(what: String, sel: androidx.test.uiautomator.BySelector, timeoutMs: Long = 10_000) {
+        repeat(3) { i ->
+            val o = checkNotNull(device.wait(Until.findObject(sel), timeoutMs)) { "no $what on screen" }
+            try {
+                o.click()
+                return
+            } catch (e: androidx.test.uiautomator.StaleObjectException) {
+                Probe.record("stale_retry", "$what #${i + 1}")
+                Thread.sleep(500)
+            }
+        }
+        throw AssertionError("$what kept going stale")
+    }
+
     /** Engine runs that have finished so far (each logs "finished: Summary(…)"), to wait for the next one. */
     fun finishedRuns(): Int = AppGraph.ringLog.snapshot().count { it.contains(" engine finished:") }
 }

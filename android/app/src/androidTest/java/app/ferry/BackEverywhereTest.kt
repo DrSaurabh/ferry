@@ -3,10 +3,8 @@ package app.ferry
 import androidx.lifecycle.Lifecycle
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.uiautomator.By
-import androidx.test.uiautomator.Until
 import app.ferry.media.PickerMode
 import app.ferry.probe.Probe
-import app.ferry.probe.Shots
 import app.ferry.ui.nav.Screen
 import app.ferry.ui.nav.logName
 import org.junit.Assert.assertEquals
@@ -42,6 +40,7 @@ class BackEverywhereTest {
                 for (how in listOf("top", "system")) {
                     sc.onActivity { it.nav!!.push(s) }
                     PhoneNav.waitScreen(sc, s)
+                    SendHelpers.settle()
                     PhoneNav.waitOverflow(s.logName)
                     if (how == "top") PhoneNav.tapTopBack() else d.pressBack()
                     PhoneNav.waitScreen(sc, Screen.Home, "$how Back from ${s.logName} → Home")
@@ -81,7 +80,7 @@ class BackEverywhereTest {
             PhoneNav.waitSelection(sc, "PICK_A1.jpg", "PICK_B1.jpg")
 
             // ---- ⋮ → Something's wrong in the picker: one marker with the picker's screen name (L4, PO5).
-            d.wait(Until.findObject(By.desc(PhoneNav.more)), 10_000)!!.click()
+            PhoneNav.tapMore()
             SendHelpers.tap(ctx.getString(R.string.wrong_menu))
             SendHelpers.waitText(ctx.getString(R.string.wrong_title))
             SendHelpers.tap(ctx.getString(R.string.wrong_skip))
