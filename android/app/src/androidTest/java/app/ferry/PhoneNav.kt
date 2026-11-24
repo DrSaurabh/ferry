@@ -3,6 +3,7 @@ package app.ferry
 import androidx.lifecycle.ViewModelProvider
 import androidx.test.core.app.ActivityScenario
 import androidx.test.uiautomator.By
+import androidx.test.uiautomator.UiSelector
 import app.ferry.media.PickerMode
 import app.ferry.probe.Probe
 import app.ferry.ui.nav.Screen
@@ -52,12 +53,12 @@ object PhoneNav {
 
     fun tapTopBack() {
         SendHelpers.settle() // the screen just pushed may still be replacing the previous one
-        SendHelpers.clickFresh("top Back", By.text(topBack))
+        SendHelpers.clickFresh("top Back", By.text(topBack), UiSelector().text(topBack))
     }
 
     fun tapMore() {
         SendHelpers.settle()
-        SendHelpers.clickFresh("⋮", By.desc(more))
+        SendHelpers.clickFresh("⋮", By.desc(more), UiSelector().description(more))
     }
 
     fun discardText(n: Int): String = ctx.resources.getQuantityString(R.plurals.discard_picks, n, n)

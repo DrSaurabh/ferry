@@ -145,21 +145,25 @@ object SendHelpers {
     }
 
     /**
-     * Finds and clicks [sel]; a node that went stale between find and click (the screen under it was just replaced,
-     * e.g. two screens both have ⋮ while one replaces the other, Ph13) is looked up again, up to 3 times.
+     * Finds and clicks [sel]; a node that went stale between find and click (main run 45489801982: the top Back on
+     * Transfer and Home's ⋮ stayed stale for every re-find) is clicked through the older `UiObject` API instead
+     * ([fallback]), which looks the node up again at the moment of the click.
      */
-    fun clickFresh(what: String, sel: androidx.test.uiautomator.BySelector, timeoutMs: Long = 10_000) {
-        repeat(3) { i ->
-            val o = checkNotNull(device.wait(Until.findObject(sel), timeoutMs)) { "no $what on screen" }
-            try {
-                o.click()
-                return
-            } catch (e: androidx.test.uiautomator.StaleObjectException) {
-                Probe.record("stale_retry", "$what #${i + 1}")
-                Thread.sleep(500)
-            }
+    fun clickFresh(what: String, sel: androidx.test.uiautomator.BySelector, fallback: androidx.test.uiautomator.UiSelector, timeoutMs: Long = 10_000) {
+        val o = checkNotNull(device.wait(Until.findObject(sel), timeoutMs)) { "no $what on screen" }
+        try {
+            o.click()
+            return
+        } catch (e: androidx.test.uiautomator.StaleObjectException) {
+            Probe.record("stale_retry", "$what: UiObject click")
         }
-        throw AssertionError("$what kept going stale")
+        repeat(3) { i ->
+            val u = device.findObject(fallback)
+            if (u.waitForExists(timeoutMs) && u.click()) return
+            Probe.record("stale_retry", "$what: UiObject click #${i + 1} failed")
+            Thread.sleep(500)
+        }
+        throw AssertionError("$what could not be clicked")
     }
 
     /** Engine runs that have finished so far (each logs "finished: Summary(…)"), to wait for the next one. */

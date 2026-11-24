@@ -102,7 +102,7 @@ class PhoneScreenshotTour {
             go(sc, Screen.Home)
             // Ph13: Settings has a ⋮ too now, so the find can catch it while Home replaces it (stale) → clickFresh.
             SendHelpers.settle()
-            SendHelpers.clickFresh("⋮", By.desc("More"))
+            SendHelpers.clickFresh("⋮", By.desc("More"), androidx.test.uiautomator.UiSelector().description("More"))
             SendHelpers.tap(ctx.getString(R.string.wrong_menu))
             SendHelpers.waitText(ctx.getString(R.string.wrong_title))
             shot("wrong-dialog")
