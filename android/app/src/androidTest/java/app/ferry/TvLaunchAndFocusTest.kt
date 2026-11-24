@@ -2,6 +2,7 @@ package app.ferry
 
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.uiautomator.By
+import app.ferry.core.log.EventLog
 import app.ferry.net.ConnectionState
 import app.ferry.net.UpdateState
 import app.ferry.probe.Probe
@@ -39,6 +40,14 @@ class TvLaunchAndFocusTest {
             SendHelpers.waitConnected()
             val c = AppGraph.connection.state.value as ConnectionState.Connected
             Probe.record("tv_launch", "connected name=${c.name} network=${AppGraph.network.chosen.value?.kind}")
+            // Ph11b (L1, L3, PO6): the TV logs its start and name and ships its log to the PC like a phone does.
+            val tail = AppGraph.events.snapshot()
+            assertTrue("app.start logged", tail.any { it.contains(" app.start ") })
+            val nameLine = tail.lastOrNull { it.contains(" device_name ") && it.contains(" src=") }
+            Probe.record("tv_device_name", nameLine)
+            assertTrue("device_name src= logged", nameLine != null)
+            val nameSeq = EventLog.seqOf(nameLine!!)!!
+            SendHelpers.waitUntil("TV log shipped past device_name (#$nameSeq)", 20_000) { AppGraph.events.shipped >= nameSeq }
             val t = TvHelpers(sc)
             val expected = listOf("big.mp4", "small.mp4", "photo1.jpg", "broken.jpg", "Test.apk", "notes.txt", "old.avi")
             SendHelpers.waitUntil("outbox listed", 30_000) {

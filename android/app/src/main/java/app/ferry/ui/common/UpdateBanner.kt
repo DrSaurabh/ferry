@@ -80,7 +80,7 @@ fun UpdateBanner(state: UpdateState, modifier: Modifier = Modifier) {
             .testTag("update-banner")
             .onFocusChanged { focused = it.isFocused }
             .border(if (focused) 3.dp else 0.dp, if (focused) Color.White else Color.Transparent, RoundedCornerShape(8.dp))
-            .clickable(enabled = !busy) {
+            .clickable(enabled = !busy, onClick = onClickLogged("update_banner") {
                 val now = AppGraph.updater.progress.value
                 when {
                     now is UpdateProgress.Downloading -> {}
@@ -91,7 +91,7 @@ fun UpdateBanner(state: UpdateState, modifier: Modifier = Modifier) {
                         AppGraph.updater.start(state.info)
                     }
                 }
-            },
+            }),
     ) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text(text, style = MaterialTheme.typography.titleMedium, modifier = Modifier.testTag("update-text"))

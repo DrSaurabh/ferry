@@ -49,6 +49,7 @@ class PlayerHost(ctx: Context, val url: String, val title: String) {
      */
     private var trackLine: String? = null
     private var frameShown = false
+    private var preparedAt = 0L
     private val main = android.os.Handler(android.os.Looper.getMainLooper())
 
     /** Evidence for the tests and the log (T2: no `PlaybackException` across a long pause). */
@@ -75,10 +76,16 @@ class PlayerHost(ctx: Context, val url: String, val title: String) {
                 playbackError = error
                 message.value = errorLine(error)
                 AppGraph.log("player", "error ${error.errorCodeName}: ${error.message} (cause ${error.cause}) → ${message.value}")
+                AppGraph.event("play", "event" to "error", "pos" to player.currentPosition, "error" to error.errorCodeName)
+                AppGraph.event("err.shown", "text" to message.value, "screen" to "tv_player")
             }
 
             override fun onIsPlayingChanged(isPlaying: Boolean) {
                 playing.value = isPlaying
+            }
+
+            override fun onPlaybackStateChanged(state: Int) {
+                if (state == Player.STATE_ENDED) AppGraph.event("play", "event" to "end", "pos" to player.currentPosition)
             }
 
             override fun onTracksChanged(tracks: Tracks) {
@@ -97,6 +104,13 @@ class PlayerHost(ctx: Context, val url: String, val title: String) {
             }
 
             override fun onRenderedFirstFrame() {
+                if (!frameShown) {
+                    val size = player.videoFormat?.let { "${it.width}x${it.height}" }
+                    AppGraph.event(
+                        "play", "event" to "first_frame", "first_frame_ms" to (System.currentTimeMillis() - preparedAt),
+                        "codec" to player.videoFormat?.sampleMimeType, "size" to size,
+                    )
+                }
                 frameShown = true
                 trackLine?.let { clearTrackLine(it, "the video does play") }
             }
@@ -120,7 +134,9 @@ class PlayerHost(ctx: Context, val url: String, val title: String) {
         player.setMediaItem(MediaItem.fromUri(url), startMs.coerceAtLeast(0))
         player.playWhenReady = autoPlay
         player.prepare()
+        preparedAt = System.currentTimeMillis()
         AppGraph.log("player", "open $title at ${startMs / 1000} s")
+        AppGraph.event("play", "event" to "start", "pos" to startMs)
     }
 
     /** OK / Play-Pause. */

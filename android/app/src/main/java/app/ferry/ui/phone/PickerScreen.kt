@@ -1,5 +1,6 @@
 package app.ferry.ui.phone
 
+import app.ferry.ui.common.onClickLogged
 import android.app.Application
 import android.database.ContentObserver
 import android.os.Handler
@@ -228,12 +229,12 @@ fun PickerScreen(nav: Navigator, mode: PickerMode, onCast: ((List<MediaPick>) ->
                     PickerMode.CastPhotos -> R.string.picker_title_photos
                 }
                 Text(stringResource(title), style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
-                TextButton(onClick = { nav.pop() }) { Text(stringResource(R.string.back)) }
+                TextButton(onClick = onClickLogged("picker.back") { nav.pop() }) { Text(stringResource(R.string.back)) }
             }
             TabRow(selectedTabIndex = if (albumsTab) 1 else 0) {
-                Tab(selected = !albumsTab, onClick = { vm.albumsTab.value = false; vm.openAlbum.value = null },
+                Tab(selected = !albumsTab, onClick = onClickLogged("picker.recent") { vm.albumsTab.value = false; vm.openAlbum.value = null },
                     text = { Text(stringResource(R.string.picker_recent)) })
-                Tab(selected = albumsTab, onClick = { vm.albumsTab.value = true },
+                Tab(selected = albumsTab, onClick = onClickLogged("picker.albums") { vm.albumsTab.value = true },
                     text = { Text(stringResource(R.string.picker_albums)) })
             }
             if (access == MediaAccess.Partial) PartialAccessBanner(Modifier.padding(8.dp))
@@ -248,7 +249,7 @@ fun PickerScreen(nav: Navigator, mode: PickerMode, onCast: ((List<MediaPick>) ->
                             if (!mode.single) {
                                 val ids = lib.items.filter { it.bucketId == album.bucketId }.map { it.id }
                                 val all = ids.isNotEmpty() && sel.containsAll(ids)
-                                TextButton(onClick = { vm.selectAll(ids, !all) }, Modifier.testTag("select-all")) {
+                                TextButton(onClick = onClickLogged("picker.select_all") { vm.selectAll(ids, !all) }, Modifier.testTag("select-all")) {
                                     Text(stringResource(if (all) R.string.picker_unselect_all else R.string.picker_select_all))
                                 }
                             }
@@ -268,9 +269,10 @@ fun PickerScreen(nav: Navigator, mode: PickerMode, onCast: ((List<MediaPick>) ->
                 Row(Modifier.fillMaxWidth().padding(12.dp).testTag("picker-bar"), verticalAlignment = Alignment.CenterVertically) {
                     Text(stringResource(R.string.picker_selected, sel.size, Format.size(PickerLogic.bytes(sel, lib.byId))),
                         style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
-                    Button(onClick = {
+                    Button(onClick = onClickLogged(if (mode == PickerMode.Send) "send" else "cast") {
                         val picks = vm.picks()
                         AppGraph.log("picker", "send ${picks.size} picked item(s)")
+                        AppGraph.event("pick", "count" to picks.size, "kind" to mode.name.lowercase())
                         when {
                             mode == PickerMode.Send -> flow.send(SendRequest.Picks(picks))
                             onCast != null -> onCast(picks)
@@ -341,7 +343,7 @@ private fun AlbumList(albums: List<Album>, onOpen: (Album) -> Unit) {
     LazyColumn(Modifier.fillMaxSize().testTag("album-list")) {
         items(albums, key = { it.bucketId }) { a ->
             Row(
-                Modifier.fillMaxWidth().clickable { onOpen(a) }.padding(horizontal = 16.dp, vertical = 8.dp),
+                Modifier.fillMaxWidth().clickable(onClick = onClickLogged("picker.album") { onOpen(a) }).padding(horizontal = 16.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(16.dp),
             ) {

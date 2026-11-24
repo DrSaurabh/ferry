@@ -77,6 +77,7 @@ object Notifications {
         }
         try {
             NotificationManagerCompat.from(ctx).notify(ID_RESULTS, b.build())
+            app.ferry.AppGraph.event("notif", "name" to "results", "posted" to 1)
         } catch (e: SecurityException) { // notifications not allowed: the summary is on the Transfer screen
             AppGraph.log("transfer", "results notification not shown: $e")
         }

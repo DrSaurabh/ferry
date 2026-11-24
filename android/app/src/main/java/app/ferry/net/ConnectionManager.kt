@@ -54,6 +54,10 @@ class ConnectionManager(
     private val installedVersionCode: Long,
     private val update: MutableStateFlow<UpdateState>,
     private val log: (String) -> Unit,
+    /** 2.1 events: every locate (`disc`, Detailed) and each new result (`conn`) [L1]. */
+    private val onLocate: (result: String, ms: Long, changed: Boolean) -> Unit = { _, _, _ -> },
+    /** A locate found the PC (its `/info` answered): clock offset, log shipping (CP137). */
+    private val onConnected: (PcInfo) -> Unit = {},
 ) {
     private val _state = MutableStateFlow<ConnectionState>(ConnectionState.Looking)
     val state: StateFlow<ConnectionState> = _state
@@ -119,6 +123,7 @@ class ConnectionManager(
             if (lastFinished >= asked) return@withLock api()
             val me = started++
             if (!quiet && _state.value !is ConnectionState.Connected) _state.value = ConnectionState.Looking
+            val t0 = System.currentTimeMillis()
             val r = try {
                 locator().locate()
             } catch (e: CancellationException) {
@@ -134,7 +139,18 @@ class ConnectionManager(
                 LocateResult.NoNetwork -> ConnectionState.NoWifi
             }
             // A quiet retry that finds nothing again says so once, not every 10 s.
-            if (!(quiet && s == _state.value)) log("locate: " + when (s) {
+            val changed = !(quiet && s == _state.value)
+            onLocate(
+                when (s) {
+                    is ConnectionState.Connected -> "connected"
+                    is ConnectionState.NotFound -> "not_found"
+                    is ConnectionState.OldPc -> "old_pc"
+                    ConnectionState.NoWifi -> "no_wifi"
+                    ConnectionState.Looking -> "looking"
+                },
+                System.currentTimeMillis() - t0, changed,
+            )
+            if (changed) log("locate: " + when (s) {
                 is ConnectionState.Connected -> "connected to ${s.name} at ${s.api.base} (Ferry ${s.info.version})"
                 is ConnectionState.NotFound -> "not found (${s.candidates.size} answered the broadcast)"
                 is ConnectionState.OldPc -> "older Ferry at ${s.base}"
@@ -142,7 +158,10 @@ class ConnectionManager(
             })
             _state.value = s
             lastFinished = me
-            if (r is LocateResult.Found) checkUpdate(r.api)
+            if (r is LocateResult.Found) {
+                checkUpdate(r.api)
+                onConnected(r.info)
+            }
             (s as? ConnectionState.Connected)?.api
         }
     }

@@ -20,6 +20,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import app.ferry.R
 import app.ferry.net.ConnectionState
+import app.ferry.ui.common.LogScreen
 import app.ferry.ui.common.StatusDot
 import app.ferry.ui.common.statusText
 import app.ferry.ui.nav.Navigator
@@ -38,6 +39,7 @@ fun TvRoot(nav: Navigator, vm: TvViewModel = viewModel()) {
         val showing = cast
         // A cast from the phone shows on top of whatever is showing (design §5.5); Back ends it (B78).
         if (showing != null) {
+            LogScreen("tv_cast")
             key(showing.id) { TvCastScreen(showing) }
         } else when (val s = nav.current) {
             is Screen.TvPlayer -> TvPlayerScreen(s) { nav.pop() }

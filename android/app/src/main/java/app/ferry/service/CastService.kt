@@ -57,6 +57,7 @@ class CastService : Service() {
     override fun onCreate() {
         super.onCreate()
         locks = TransferLocks(this, "cast")
+        AppGraph.event("svc.start", "name" to "cast")
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -200,6 +201,7 @@ class CastService : Service() {
         locks.release()
         ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
         AppGraph.log("cast", "service stopped")
+        AppGraph.event("svc.stop", "name" to "cast", "reason" to "idle")
     }
 
     private fun refreshNotification() {
@@ -216,7 +218,10 @@ class CastService : Service() {
         closeServer()
         c.client = null
         locks.release()
-        if (c.active) c.update(sessionId) { it.copy(phase = CastPhase.Ended) } // stopped by the system
+        if (c.active) {
+            AppGraph.event("svc.stop", "name" to "cast", "reason" to "destroyed_busy")
+            c.update(sessionId) { it.copy(phase = CastPhase.Ended) } // stopped by the system
+        }
         super.onDestroy()
     }
 

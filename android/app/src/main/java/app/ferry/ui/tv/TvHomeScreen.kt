@@ -167,7 +167,7 @@ fun TvHomeScreen(vm: TvViewModel, conn: ConnectionState.Connected, nav: Navigato
             item(key = "row-${r.key}") {
                 val state = rowStates.getOrPut(r.key) { LazyListState() }
                 TvRow(r, state, conn, { i -> requesters.getOrPut(RowFocus(r.key, i)) { FocusRequester() } },
-                    onFocus = { i, c, has -> vm.onCardFocus(RowFocus(r.key, i), c.title, has) }, onClick = { i, c -> onCard(r.key, i, c) })
+                    onFocus = { i, c, has -> vm.onCardFocus(RowFocus(r.key, i), c.title, has) }, onClick = { i, c -> onCard(r.key, i, c) }) // tap-id: tv_home.<kind> (TvCard)
             }
         }
     }
@@ -218,9 +218,9 @@ private fun TvRow(
                     .testTag("card-${r.key}-$i")
                     .focusRequester(requester(i))
                 if (c.kind == CardKind.Photo && c.file != null) {
-                    TvPhotoCard(m, c.file, conn, { onFocus(i, c, it) }) { onClick(i, c) }
+                    TvPhotoCard("tv_home.photo", m, c.file, conn, { onFocus(i, c, it) }) { onClick(i, c) }
                 } else {
-                    TvCard(m, c.title, c.sub, { onFocus(i, c, it) }) { onClick(i, c) }
+                    TvCard("tv_home." + c.kind.name.lowercase(), m, c.title, c.sub, { onFocus(i, c, it) }) { onClick(i, c) }
                 }
             }
         }
@@ -229,12 +229,12 @@ private fun TvRow(
 
 /** A text card (video, slideshow, APK, other file) with the TV focus ring (plan §4.9). */
 @Composable
-fun TvCard(modifier: Modifier, title: String, sub: String, onFocus: (Boolean) -> Unit, onClick: () -> Unit) {
+fun TvCard(id: String, modifier: Modifier, title: String, sub: String, onFocus: (Boolean) -> Unit, onClick: () -> Unit) {
     val shape = RoundedCornerShape(10.dp)
     Surface(
         color = MaterialTheme.colorScheme.surfaceVariant,
         shape = shape,
-        modifier = modifier.size(300.dp, 130.dp).tvClickable(shape, onFocus, onClick),
+        modifier = modifier.size(300.dp, 130.dp).tvClickable(id = id, shape, onFocus, onClick),
     ) {
         Column(Modifier.padding(14.dp).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text(title, style = MaterialTheme.typography.titleSmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
@@ -248,7 +248,7 @@ fun TvCard(modifier: Modifier, title: String, sub: String, onFocus: (Boolean) ->
  * that can't be decoded shows a warning sign instead [A11].
  */
 @Composable
-private fun TvPhotoCard(modifier: Modifier, f: OutFile, conn: ConnectionState.Connected, onFocus: (Boolean) -> Unit, onClick: () -> Unit) {
+private fun TvPhotoCard(id: String, modifier: Modifier, f: OutFile, conn: ConnectionState.Connected, onFocus: (Boolean) -> Unit, onClick: () -> Unit) {
     val ctx = LocalContext.current
     val shape = RoundedCornerShape(10.dp)
     var failed by remember(f.id) { mutableStateOf(false) }
@@ -256,7 +256,7 @@ private fun TvPhotoCard(modifier: Modifier, f: OutFile, conn: ConnectionState.Co
     Surface(
         color = MaterialTheme.colorScheme.surfaceVariant,
         shape = shape,
-        modifier = modifier.size(220.dp, 130.dp).tvClickable(shape, onFocus, onClick),
+        modifier = modifier.size(220.dp, 130.dp).tvClickable(id = id, shape, onFocus, onClick),
     ) {
         Box(Modifier.fillMaxSize()) {
             if (failed) {

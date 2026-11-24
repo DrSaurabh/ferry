@@ -1,5 +1,6 @@
 package app.ferry.ui.tv
 
+import app.ferry.ui.common.onClickLogged
 import android.view.KeyEvent
 import android.view.ViewGroup
 import androidx.activity.compose.BackHandler
@@ -86,6 +87,7 @@ fun TvPlayerScreen(s: Screen.TvPlayer, onBack: () -> Unit) {
             TvPlayerState.closedAtMs = host.player.currentPosition
             savePosition()
             AppGraph.log("player", "closed ${s.name} at ${host.player.currentPosition / 1000} s")
+            AppGraph.event("play", "event" to "stop", "pos" to host.player.currentPosition)
             TvPlayerState.host = null
             TvPlayerState.resumeOffer = null
             TvPlayerState.resumeFocused = false
@@ -194,12 +196,12 @@ private fun ResumeDialog(posMs: Long, onResume: () -> Unit, onStartOver: () -> U
         onDismissRequest = onDismiss,
         confirmButton = {
             Button(
-                onClick = onResume,
+                onClick = onClickLogged("tv_player.resume", onResume),
                 modifier = Modifier.tvFocusRing(pill) { TvPlayerState.resumeFocused = it }.focusRequester(resume).testTag("tv-resume"),
             ) { Text(stringResource(R.string.resume_from, ResumeRule.clock(posMs))) }
         },
         dismissButton = {
-            OutlinedButton(onClick = onStartOver, modifier = Modifier.tvFocusRing(pill).testTag("tv-start-over")) {
+            OutlinedButton(onClick = onClickLogged("tv_player.start_over", onStartOver), modifier = Modifier.tvFocusRing(pill).testTag("tv-start-over")) {
                 Text(stringResource(R.string.start_over))
             }
         },

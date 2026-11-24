@@ -23,6 +23,14 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import app.ferry.ui.common.TapLog
+import app.ferry.ui.common.WrongDialog
+import app.ferry.ui.common.LogError
+import app.ferry.ui.common.onClickLogged
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -116,7 +124,8 @@ fun HomeScreen(nav: Navigator, vm: HomeViewModel = viewModel()) {
                 val pc = (conn as? ConnectionState.Connected)?.name
                 if (pc != null) Text("  → $pc", style = MaterialTheme.typography.titleMedium, maxLines = 1)
                 Spacer(Modifier.weight(1f))
-                TextButton(onClick = { nav.push(Screen.Settings) }) { Text(stringResource(R.string.btn_settings)) }
+                TextButton(onClick = onClickLogged("home.settings") { nav.push(Screen.Settings) }) { Text(stringResource(R.string.btn_settings)) }
+                HomeOverflow()
             }
             Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -125,10 +134,11 @@ fun HomeScreen(nav: Navigator, vm: HomeViewModel = viewModel()) {
                         Text(statusText(conn), Modifier.padding(start = 12.dp).testTag("status"), style = MaterialTheme.typography.bodyLarge)
                     }
                     if (conn !is ConnectionState.Connected && conn !is ConnectionState.Looking) {
+                        LogError(statusText(conn))
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            OutlinedButton(onClick = vm::tryAgain) { Text(stringResource(R.string.try_again)) }
+                            OutlinedButton(onClick = onClickLogged("home.try_again", vm::tryAgain)) { Text(stringResource(R.string.try_again)) }
                             if (conn !is ConnectionState.OldPc) {
-                                OutlinedButton(onClick = { nav.push(Screen.Settings) }) { Text(stringResource(R.string.enter_address)) }
+                                OutlinedButton(onClick = onClickLogged("home.enter_address") { nav.push(Screen.Settings) }) { Text(stringResource(R.string.enter_address)) }
                             }
                         }
                     }
@@ -139,7 +149,7 @@ fun HomeScreen(nav: Navigator, vm: HomeViewModel = viewModel()) {
             transfer?.let { t ->
                 // Ongoing (or last) transfer card → Transfer screen (design §4.1)
                 val words = remember(ctx) { TransferWords(ctx.resources) }
-                Card(Modifier.fillMaxWidth().clickable { nav.push(Screen.Transfer) }.testTag("home-transfer")) {
+                Card(Modifier.fillMaxWidth().clickable(onClick = onClickLogged("home.transfer_card") { nav.push(Screen.Transfer) }).testTag("home-transfer")) {
                     Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         Text(words.headline(t), style = MaterialTheme.typography.titleMedium)
                         if (t.phase != Phase.Finished) LinearProgressIndicator(progress = { TransferMath.fraction(t) }, Modifier.fillMaxWidth())
@@ -149,7 +159,7 @@ fun HomeScreen(nav: Navigator, vm: HomeViewModel = viewModel()) {
             }
             cast?.takeIf { it.phase != CastPhase.Ended }?.let { c ->
                 // A cast is running (Ph9): back to its Remote
-                Card(Modifier.fillMaxWidth().clickable { nav.push(Screen.Remote) }.testTag("home-cast")) {
+                Card(Modifier.fillMaxWidth().clickable(onClick = onClickLogged("home.cast_card") { nav.push(Screen.Remote) }).testTag("home-cast")) {
                     Text(stringResource(R.string.cast_now, c.tvName), Modifier.padding(16.dp), style = MaterialTheme.typography.titleMedium)
                 }
             }
@@ -160,15 +170,21 @@ fun HomeScreen(nav: Navigator, vm: HomeViewModel = viewModel()) {
                         Text(LocalContext.current.resources.getQuantityString(R.plurals.interrupted, interrupted, interrupted), style = MaterialTheme.typography.titleMedium)
                         Text(stringResource(R.string.vivo_steps), style = MaterialTheme.typography.bodyMedium)
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            OutlinedButton(onClick = { nav.push(Screen.Settings) }) { Text(stringResource(R.string.btn_settings)) }
-                            TextButton(onClick = vm::dismissInterrupted) { Text(stringResource(R.string.ok)) }
+                            OutlinedButton(onClick = onClickLogged("home.interrupted_settings") { nav.push(Screen.Settings) }) { Text(stringResource(R.string.btn_settings)) }
+                            TextButton(onClick = onClickLogged("home.interrupted_ok", vm::dismissInterrupted)) { Text(stringResource(R.string.ok)) }
                         }
                     }
                 }
             }
             for (label in listOf(R.string.btn_send_photos, R.string.btn_send_files, R.string.btn_from_pc, R.string.btn_play_tv)) {
+                val tapId = when (label) {
+                    R.string.btn_send_files -> "home.send_files"
+                    R.string.btn_send_photos -> "home.send_photos"
+                    R.string.btn_from_pc -> "home.from_pc"
+                    else -> "home.play_tv"
+                }
                 Button(
-                    onClick = {
+                    onClick = onClickLogged(tapId) {
                         when (label) {
                             R.string.btn_send_files -> chooseFiles.launch(arrayOf("*/*"))
                             R.string.btn_send_photos -> gate.open()
@@ -187,4 +203,27 @@ fun HomeScreen(nav: Navigator, vm: HomeViewModel = viewModel()) {
         flow.Overlay()
         gate.Overlay()
     }
+}
+
+/** Home's overflow (⋮, L4; every screen's top bar gets one in Ph13, CP138): "Something's wrong". */
+@Composable
+private fun HomeOverflow() {
+    var open by remember { mutableStateOf(false) }
+    var wrong by remember { mutableStateOf(false) }
+    Box {
+        TextButton(onClick = onClickLogged("home.overflow") { open = true }, Modifier.testTag("home-overflow")) {
+            Text("⋮", style = MaterialTheme.typography.titleLarge, modifier = Modifier.semantics { contentDescription = "More" })
+        }
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            DropdownMenuItem(
+                text = { Text(stringResource(R.string.wrong_menu)) },
+                onClick = onClickLogged("home.wrong") {
+                    open = false
+                    wrong = true
+                },
+                modifier = Modifier.testTag("menu-wrong"),
+            )
+        }
+    }
+    if (wrong) WrongDialog(TapLog.screen) { wrong = false }
 }

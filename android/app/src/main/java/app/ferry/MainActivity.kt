@@ -14,6 +14,7 @@ import app.ferry.net.ConnectionManager
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import app.ferry.service.Notifications
+import app.ferry.ui.common.TapLog
 import app.ferry.ui.nav.Navigator
 import app.ferry.ui.nav.Screen
 import app.ferry.ui.phone.PhoneRoot
@@ -47,7 +48,15 @@ class MainActivity : ComponentActivity() {
             AppGraph.prefs.welcomeDone -> Screen.Home
             else -> Screen.Welcome
         }
-        val nav = Navigator(start)
+        AppGraph.names.refresh() // the layout may have changed (debug override): TV vs phone name chain
+        val nav = Navigator(
+            start,
+            onScreen = {
+                TapLog.screen = it
+                AppGraph.event("screen", "name" to it)
+            },
+            onBack = { s, r -> AppGraph.event("back", "screen" to s, "result" to r) },
+        )
         this.nav = nav
         // Receiving casts (design §5.5): TV mode; on a phone only with the debug extra (emulator loopback test, B27).
         val receiver = tv || (BuildConfig.DEBUG && intent?.getBooleanExtra(DeviceMode.EXTRA_CAST_RECEIVER, false) == true)
@@ -74,7 +83,12 @@ class MainActivity : ComponentActivity() {
 
     /** TV: every key press keeps the screen on for another 30 min on Home (design §5.1 [A10] [H24]). */
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
-        if (AppGraph.isTv && event.action == KeyEvent.ACTION_DOWN) KeepScreenOn.poke(this)
+        if (AppGraph.isTv && event.action == KeyEvent.ACTION_DOWN) {
+            KeepScreenOn.poke(this)
+            if (event.repeatCount == 0) {
+                AppGraph.detailed("key", "code" to KeyEvent.keyCodeToString(event.keyCode).removePrefix("KEYCODE_").lowercase(), "src" to "remote")
+            }
+        }
         // Player / Viewer keys go to the screen itself, whatever has focus (B74).
         if (AppGraph.isTv && TvKeys.dispatch(event)) return true
         return super.dispatchKeyEvent(event)
@@ -90,7 +104,11 @@ class MainActivity : ComponentActivity() {
     /** Extra `open = transfer | fromPc | remote` (from the notifications) pushes that screen (plan §4.2) [A24]. */
     private fun openFrom(i: Intent?) {
         if (AppGraph.isTv || i == null) return
-        when (i.getStringExtra(EXTRA_OPEN)) {
+        val open = i.getStringExtra(EXTRA_OPEN)
+        if (open != null && (i.flags and Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY) == 0) {
+            AppGraph.event("notif", "name" to open, "tapped" to 1, "action" to if (i.getBooleanExtra(EXTRA_RETRY, false)) "retry" else "open")
+        }
+        when (open) {
             OPEN_TRANSFER -> {
                 // Not when the task is reopened from Recents with the notification's old intent.
                 val fromHistory = (i.flags and Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY) != 0
@@ -123,7 +141,13 @@ class MainActivity : ComponentActivity() {
 
     override fun onStart() {
         super.onStart()
+        AppGraph.names.refresh() // a rename in the system settings while Ferry was away
         AppGraph.connection.start()
+    }
+
+    override fun onDestroy() {
+        if (isFinishing) AppGraph.event("app.stop", "reason" to "finish")
+        super.onDestroy()
     }
 
     companion object {

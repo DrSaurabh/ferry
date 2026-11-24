@@ -1,5 +1,8 @@
 package app.ferry.ui.phone
 
+import app.ferry.ui.common.LogDialog
+import app.ferry.ui.common.logDialog
+import app.ferry.ui.common.onClickLogged
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -24,14 +27,15 @@ fun LocationChoiceDialog(
     settings: Boolean = false,
     onOpenSettings: () -> Unit = {},
 ) {
+    LogDialog(if (settings) "location_settings" else "location")
     AlertDialog(
         onDismissRequest = onDismiss,
         modifier = Modifier.testTag(if (settings) "location-dialog-settings" else "location-dialog"),
         text = { Text(stringResource(if (settings) R.string.location_settings else R.string.location_dialog)) },
         confirmButton = {
-            if (settings) TextButton(onClick = onOpenSettings) { Text(stringResource(R.string.open_settings)) }
-            else TextButton(onClick = onAllow) { Text(stringResource(R.string.location_allow)) }
+            if (settings) TextButton(onClick = onClickLogged("location.open_settings") { logDialog("location_settings", "open_settings"); onOpenSettings() }) { Text(stringResource(R.string.open_settings)) }
+            else TextButton(onClick = onClickLogged("location.allow") { logDialog("location", "allow"); onAllow() }) { Text(stringResource(R.string.location_allow)) }
         },
-        dismissButton = { TextButton(onClick = onWithoutLocation) { Text(stringResource(R.string.location_without)) } },
+        dismissButton = { TextButton(onClick = onClickLogged("location.without") { logDialog(if (settings) "location_settings" else "location", "without"); onWithoutLocation() }) { Text(stringResource(R.string.location_without)) } },
     )
 }

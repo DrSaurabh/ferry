@@ -24,6 +24,9 @@ class NetworkBinder(
     private val ctx: Context,
     private val deviceName: () -> String,
     private val appVersion: String,
+    /** 2.1 headers `X-Ferry-Device-Id` / `X-Ferry-Device-Type` (plan §2.3, CP126). */
+    private val deviceId: () -> String? = { null },
+    private val deviceType: () -> String? = { null },
     private val log: (String) -> Unit,
 ) {
     data class Chosen(val network: Network, val kind: String, val ipv4: Inet4Address?, val prefix: Int)
@@ -34,6 +37,8 @@ class NetworkBinder(
 
     @Volatile private var client: OkHttpClient? = null
     @Volatile private var clientNetwork: Network? = null
+    /** The header values the client was built with (a rename or a layout switch rebuilds it). */
+    @Volatile private var clientIdentity: List<String?> = emptyList()
 
     /** Debug builds only (`app.ferry.debug.NET=any`) [PR2]: use the active network whatever its transport. */
     @Volatile var anyNetworkOverride = false
@@ -105,14 +110,16 @@ class NetworkBinder(
     /** The shared client for the chosen network (rebuilt when it changes). */
     fun httpClient(): OkHttpClient {
         val net = _chosen.value?.network
+        val who = listOf(deviceName(), deviceId(), deviceType())
         val c = client
-        if (c != null && net == clientNetwork) return c
+        if (c != null && net == clientNetwork && who == clientIdentity) return c
         synchronized(this) {
             val again = client
-            if (again != null && net == clientNetwork) return again
-            val fresh = FerryHttp.newClient(net?.socketFactory, deviceName(), appVersion)
+            if (again != null && net == clientNetwork && who == clientIdentity) return again
+            val fresh = FerryHttp.newClient(net?.socketFactory, who[0]!!, appVersion, who[1], who[2])
             client = fresh
             clientNetwork = net
+            clientIdentity = who
             return fresh
         }
     }

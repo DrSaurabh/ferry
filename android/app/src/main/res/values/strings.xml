@@ -236,4 +236,18 @@
         <item quantity="one">%1$d item</item>
         <item quantity="other">%1$d items</item>
     </plurals>
+    <!-- 2.1 logging (Ph11b): Something's wrong (L4), Trial logging (L2), device name (H76) -->
+    <string name="wrong_menu">Something\'s wrong</string>
+    <string name="wrong_more">More</string>
+    <string name="wrong_title">Something\'s wrong?</string>
+    <string name="wrong_text">Ferry notes the time and this screen in its log, so it can be looked at later. Add a few words if you like.</string>
+    <string name="wrong_note_hint">What happened? (optional)</string>
+    <string name="wrong_save">Note it</string>
+    <string name="wrong_skip">Skip</string>
+    <string name="wrong_noted">Noted</string>
+    <string name="settings_logging">Logging</string>
+    <string name="settings_trial_logging">Trial logging</string>
+    <string name="settings_trial_logging_text">Keeps a detailed log during the 2.1 trial. It goes to your PC only.</string>
+    <string name="settings_device_name">This phone\'s name on the PC</string>
+    <string name="settings_device_name_hint">e.g. Saurabh\'s phone</string>
 </resources>

@@ -7,6 +7,7 @@ import app.ferry.core.upload.ItemStatus
 import app.ferry.core.upload.UploadEngine
 import app.ferry.core.upload.UploadItem
 import app.ferry.core.upload.UploadSource
+import app.ferry.log.SendEvents
 import app.ferry.media.PreparedItem
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -32,12 +33,16 @@ class Transfers(
     private val rediscover: suspend () -> FerryApi?,
     private val sourceFor: (PreparedItem) -> UploadSource,
     private val log: (String) -> Unit,
+    /** 2.1 send events (L1): one per engine (batch); null in tests. */
+    private val newSendEvents: () -> SendEvents? = { null },
+    private val pcName: () -> String? = { null },
 ) {
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val _state = MutableStateFlow<EngineState?>(null)
     val state: StateFlow<EngineState?> = _state
     private var engine: UploadEngine? = null
     private var follow: Job? = null
+    private var events: SendEvents? = null
     private val ids = AtomicLong()
     private val tokens = AtomicLong()
     private val handOvers = ConcurrentHashMap<Long, List<PreparedItem>>()
@@ -78,9 +83,17 @@ class Transfers(
             val fresh = UploadEngine(scope, api, rediscover, SystemClock, log = log)
             e = fresh
             engine = fresh
+            val ev = newSendEvents()
+            events = ev
             _state.value = fresh.state.value
-            follow = scope.launch { fresh.state.collect { _state.value = it } }
+            follow = scope.launch {
+                fresh.state.collect {
+                    _state.value = it
+                    ev?.onState(it)
+                }
+            }
         }
+        events?.added(items.size, items.sumOf { it.size }, pcName())
         e.add(items.map { UploadItem(it.id, sourceFor(it), it.name, it.size, it.mtimeMs, it.original, skipPrecheck = it.unreadable) })
     }
 

@@ -25,6 +25,11 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.Switch
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.platform.LocalFocusManager
+import app.ferry.ui.common.TapLog
+import app.ferry.ui.common.onClickLogged
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -146,7 +151,7 @@ fun SettingsScreen(nav: Navigator, vm: SettingsViewModel = viewModel()) {
             StatusDot(conn)
             Text(statusText(conn), Modifier.padding(start = 12.dp), style = MaterialTheme.typography.bodyMedium)
         }
-        OutlinedButton(onClick = vm::findAgain, enabled = !vm.searching) {
+        OutlinedButton(onClick = onClickLogged("settings.find_again", vm::findAgain), enabled = !vm.searching) {
             Text(stringResource(if (vm.searching) R.string.settings_searching else R.string.settings_find_again))
         }
         vm.found?.let { pcs ->
@@ -154,7 +159,7 @@ fun SettingsScreen(nav: Navigator, vm: SettingsViewModel = viewModel()) {
             val current = (conn as? ConnectionState.Connected)?.api?.base
             for (p in pcs) {
                 val here = current != null && current.host == p.host && current.port == p.port
-                TextButton(onClick = { vm.choose(p) }) { Text((if (here) "● " else "") + "${p.name}  ${p.host}:${p.port}") }
+                TextButton(onClick = onClickLogged("settings.choose_pc") { vm.choose(p) }) { Text((if (here) "● " else "") + "${p.name}  ${p.host}:${p.port}") }
             }
         }
         OutlinedTextField(
@@ -172,8 +177,8 @@ fun SettingsScreen(nav: Navigator, vm: SettingsViewModel = viewModel()) {
             modifier = Modifier.fillMaxWidth().testTag("address-field"),
         )
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedButton(onClick = vm::saveAddress) { Text(stringResource(R.string.settings_save)) }
-            TextButton(onClick = vm::clearAddress) { Text(stringResource(R.string.settings_clear)) }
+            OutlinedButton(onClick = onClickLogged("settings.save_address", vm::saveAddress)) { Text(stringResource(R.string.settings_save)) }
+            TextButton(onClick = onClickLogged("settings.clear_address", vm::clearAddress)) { Text(stringResource(R.string.settings_clear)) }
         }
 
         HorizontalDivider()
@@ -181,28 +186,29 @@ fun SettingsScreen(nav: Navigator, vm: SettingsViewModel = viewModel()) {
         if (batteryOk) {
             Text(stringResource(R.string.battery_ok))
         } else {
-            TextButton(onClick = { Battery.request(ctx) }) { Text(stringResource(R.string.battery_fix)) }
+            TextButton(onClick = onClickLogged("settings.battery_fix") { Battery.request(ctx) }) { Text(stringResource(R.string.battery_fix)) }
         }
-        TextButton(onClick = { showSteps = !showSteps }) { Text(stringResource(R.string.settings_still_stopping)) }
+        TextButton(onClick = onClickLogged("settings.still_stopping") { showSteps = !showSteps }) { Text(stringResource(R.string.settings_still_stopping)) }
         if (showSteps) Text(stringResource(R.string.vivo_steps), style = MaterialTheme.typography.bodyMedium)
 
         HorizontalDivider()
         Text(stringResource(R.string.settings_slideshow), style = MaterialTheme.typography.titleMedium)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             for (s in listOf(3, 5, 10)) {
-                FilterChip(selected = vm.slideshow == s, onClick = { vm.setSlideshowSeconds(s) }, label = { Text("$s s") })
+                FilterChip(selected = vm.slideshow == s, onClick = onClickLogged("settings.slideshow_$s") { vm.setSlideshowSeconds(s) }, label = { Text("$s s") })
             }
         }
 
         HorizontalDivider()
-        TextButton(onClick = { shareLog(ctx) }) { Text(stringResource(R.string.settings_share_log)) }
+        LoggingSettings()
+        TextButton(onClick = onClickLogged("settings.share_log") { shareLog(ctx) }) { Text(stringResource(R.string.settings_share_log)) }
         Text(stringResource(R.string.settings_version, BuildConfig.VERSION_NAME), style = MaterialTheme.typography.bodySmall)
     }
 }
 
-/** Settings → "Share diagnostics log" (design §9): the RingLog file(s) through FileProvider `logs/` [A14]. */
+/** Settings → "Share diagnostics log" (design §9): the event log file(s) through FileProvider `logs/` [A14]. */
 fun shareLog(ctx: Context) {
-    val files = listOfNotNull(AppGraph.ringLog.previousFile, AppGraph.logFile).filter { it.isFile && it.length() > 0 }
+    val files = listOfNotNull(AppGraph.events.previousFile, AppGraph.events.file).filter { it.isFile && it.length() > 0 }
     if (files.isEmpty()) {
         Toast.makeText(ctx, R.string.settings_no_log, Toast.LENGTH_SHORT).show()
         return
@@ -225,4 +231,52 @@ fun shareLog(ctx: Context) {
         AppGraph.log("settings", "share log failed: $e")
         Toast.makeText(ctx, e.toString(), Toast.LENGTH_LONG).show()
     }
+}
+
+/**
+ * "Trial logging" (L2, H55: on = Detailed, the 2.1 default) and this phone's name on the PC (H76). The name is
+ * saved when the field loses focus or Done is pressed; empty = the system's name again.
+ */
+@Composable
+private fun LoggingSettings() {
+    val prefs = AppGraph.prefs
+    var detailed by remember { mutableStateOf(prefs.logDetailed) }
+    var name by remember { mutableStateOf(prefs.deviceNameOverride ?: "") }
+    val focus = LocalFocusManager.current
+    fun saveName() {
+        val n = name.trim()
+        if (n != (prefs.deviceNameOverride ?: "")) {
+            prefs.deviceNameOverride = n
+            AppGraph.names.refresh()
+        }
+    }
+    Text(stringResource(R.string.settings_logging), style = MaterialTheme.typography.titleMedium)
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+        Column(Modifier.weight(1f)) {
+            Text(stringResource(R.string.settings_trial_logging), style = MaterialTheme.typography.bodyLarge)
+            Text(stringResource(R.string.settings_trial_logging_text), style = MaterialTheme.typography.bodySmall)
+        }
+        Switch(
+            checked = detailed,
+            onCheckedChange = { on -> // tap-id: settings.trial_logging_on / _off
+                TapLog.tap(if (on) "settings.trial_logging_on" else "settings.trial_logging_off")
+                detailed = on
+                prefs.logDetailed = on
+            },
+            modifier = Modifier.testTag("trial-logging"),
+        )
+    }
+    OutlinedTextField(
+        value = name,
+        onValueChange = { name = it.take(40) },
+        label = { Text(stringResource(R.string.settings_device_name)) },
+        placeholder = { Text(AppGraph.deviceName) },
+        singleLine = true,
+        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+        keyboardActions = KeyboardActions(onDone = {
+            saveName()
+            focus.clearFocus()
+        }),
+        modifier = Modifier.fillMaxWidth().testTag("device-name-field").onFocusChanged { if (!it.isFocused) saveName() },
+    )
 }

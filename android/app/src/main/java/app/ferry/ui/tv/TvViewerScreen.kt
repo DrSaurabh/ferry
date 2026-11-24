@@ -86,6 +86,7 @@ fun TvViewerScreen(
         if (n == 0) return
         index = ((to % n) + n) % n
         TvViewerState.moved(index, photos[index].name, how)
+        AppGraph.detailed("slide", "event" to how, "i" to index, "n" to n)
     }
 
     DisposableEffect(s) {
@@ -147,6 +148,7 @@ fun TvViewerScreen(
         restart++
         overlay++
         AppGraph.log("tv", "slideshow: $next s per photo")
+        AppGraph.detailed("slide", "event" to "interval_${next}s")
     }
     TvKeys.Handle { e ->
         val down = e.action == KeyEvent.ACTION_DOWN

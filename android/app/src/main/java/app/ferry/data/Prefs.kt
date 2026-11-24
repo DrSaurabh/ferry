@@ -56,9 +56,29 @@ class Prefs(ctx: Context) : PcStore {
         get() = sp.getBoolean(K_MEDIA_DENIED, false)
         set(v) = sp.edit().putBoolean(K_MEDIA_DENIED, v).apply()
 
+    /** "Trial logging" (L2, H55): Detailed while on (the 2.1 default), Normal when the user turns it off. */
+    var logDetailed: Boolean
+        get() = sp.getBoolean(K_LOG_DETAILED, true)
+        set(v) = sp.edit().putBoolean(K_LOG_DETAILED, v).apply()
+
+    /**
+     * 4 hex chars, made at first use (CP126): `X-Ferry-Device-Id`, the PC's log folder and the TV name fallback.
+     * Kept by [clear] (it names this install, it is not a setting).
+     */
+    val installId: String
+        get() = sp.getString(K_INSTALL_ID, null) ?: synchronized(this) {
+            sp.getString(K_INSTALL_ID, null) ?: newInstallId().also { sp.edit().putString(K_INSTALL_ID, it).commit() }
+        }
+
+    /** The user's own name for this phone (Settings, H76); null/blank = the system name. */
+    var deviceNameOverride: String?
+        get() = sp.getString(K_DEVICE_NAME, null)?.takeIf { it.isNotBlank() }
+        set(v) = sp.edit().putString(K_DEVICE_NAME, v?.trim()?.takeIf { it.isNotEmpty() }).apply()
+
     /** Tests start from a clean state (plan §4.14: never `pm clear`, which would drop granted permissions). */
     fun clear() {
-        sp.edit().clear().commit()
+        val id = sp.getString(K_INSTALL_ID, null)
+        sp.edit().clear().apply { if (id != null) putString(K_INSTALL_ID, id) }.commit()
     }
 
     private fun host(key: String): HostPort? = sp.getString(key, null)?.let { HostPort.parse(it) }
@@ -78,5 +98,10 @@ class Prefs(ctx: Context) : PcStore {
         const val K_INTERRUPTED = "interrupted_count"
         const val K_NOTIF = "notifications_asked"
         const val K_MEDIA_DENIED = "media_denied"
+        const val K_LOG_DETAILED = "log_detailed"
+        const val K_INSTALL_ID = "install_id"
+        const val K_DEVICE_NAME = "device_name_override"
+
+        fun newInstallId(): String = String.format(java.util.Locale.US, "%04x", java.security.SecureRandom().nextInt(0x10000))
     }
 }

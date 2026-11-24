@@ -1,5 +1,6 @@
 package app.ferry.ui.tv
 
+import app.ferry.ui.common.onClickLogged
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -95,9 +96,9 @@ fun TvInstallDialog(file: OutFile, installer: InstallFlow, onClose: () -> Unit) 
         },
         confirmButton = {
             if (failed) {
-                TextButton(onClick = onClose, modifier = ring) { Text(stringResource(R.string.ok)) }
+                TextButton(onClick = onClickLogged("tv_install.ok", onClose), modifier = ring) { Text(stringResource(R.string.ok)) }
             } else {
-                TextButton(onClick = {
+                TextButton(onClick = onClickLogged("tv_install.cancel") {
                     FromPcActions.cancel(ctx, file.id)
                     onClose()
                 }, modifier = ring) { Text(stringResource(R.string.cancel)) }

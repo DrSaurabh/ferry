@@ -2,11 +2,16 @@ package app.ferry
 
 import android.app.Application
 import android.os.Build
-import android.provider.Settings
 import android.util.Log
 import app.ferry.cast.Casting
 import app.ferry.core.SystemClock
-import app.ferry.core.log.RingLog
+import app.ferry.core.log.Detail
+import app.ferry.core.log.EventLog
+import app.ferry.core.log.LogReader
+import app.ferry.core.log.LogStateStore
+import app.ferry.log.DeviceNames
+import app.ferry.log.LogShipper
+import app.ferry.log.SendEvents
 import app.ferry.data.Prefs
 import app.ferry.data.ResumeStore
 import app.ferry.data.StaleFiles
@@ -41,7 +46,19 @@ object AppGraph {
         private set
     lateinit var prefs: Prefs
         private set
-    lateinit var ringLog: RingLog
+    /** The 2.1 event log (design §7.1, CP108): every `log()`, `event()` and `detailed()` line goes here. */
+    lateinit var events: EventLog
+        private set
+
+    /** 2.0 name kept for the androidTests that read `ringLog.snapshot()` [PS3]: the event log's in-memory tail. */
+    val ringLog: EventLog get() = events
+
+    /** Sends the event log to the PC (CP137). */
+    lateinit var shipper: LogShipper
+        private set
+
+    /** This phone's/TV's name chain (M25-C15). */
+    lateinit var names: DeviceNames
         private set
     lateinit var network: NetworkBinder
         private set
@@ -87,20 +104,47 @@ object AppGraph {
     /** TV or phone layout; MainActivity may change it (debug override) before anything is shown. */
     @Volatile var isTv = false
 
-    val logFile: File get() = File(app.filesDir, "logs/ferry-app-log.txt")
+    /** `files/logs/` (FileProvider `logs/` for "Share diagnostics log" [A14]): `ferry-app-log.txt` + `.1.txt`. */
+    val logDir: File get() = File(app.filesDir, "logs")
 
-    /** "Saurabh's vivo X200 Pro" (Settings → device name), else the model. Shown in the PC's log [B10]. */
-    val deviceName: String by lazy {
-        val n = try { Settings.Global.getString(app.contentResolver, Settings.Global.DEVICE_NAME) } catch (e: Exception) { null }
-        if (n.isNullOrBlank()) Build.MODEL ?: "Android" else n
+    val logFile: File get() = events.file
+
+    /** "Saurabh's vivo X200 Pro": the user's name for it, the system's, else maker + model [B10, H76, M25-C15]. */
+    val deviceName: String get() = names.name
+
+    /** `clock peer=pc offset_ms=` (M18), written when the offset moved by more than a second. */
+    @Volatile private var lastOffset: Long? = null
+
+    fun pcTime(pcMs: Long) {
+        val off = pcMs - System.currentTimeMillis()
+        val last = lastOffset
+        if (last == null || Math.abs(off - last) > 1_000) {
+            lastOffset = off
+            event("clock", "peer" to "pc", "offset_ms" to off)
+        }
     }
 
     fun init(app: Application) {
         this.app = app
         prefs = Prefs(app)
-        ringLog = RingLog(logFile, SystemClock)
+        val dir = logDir
+        events = EventLog(dir, SystemClock, LogStateStore(File(dir, EventLog.STATE_FILE_NAME)), {
+            if (prefs.logDetailed) Detail.Detailed else Detail.Normal
+        })
         isTv = DeviceMode.isTv(app, null)
-        network = NetworkBinder(app, { deviceName }, BuildConfig.VERSION_NAME) { log("net", it) }
+        event(
+            "app.start", "ver" to BuildConfig.VERSION_NAME, "api" to Build.VERSION.SDK_INT,
+            "tz" to EventLog.tzOffset(java.util.TimeZone.getDefault(), System.currentTimeMillis()),
+            "exit" to (ExitReason.last(app) ?: "unknown"), "layout" to (if (isTv) "tv" else "phone"),
+            "model" to "${Build.MANUFACTURER} ${Build.MODEL}",
+        )
+        names = DeviceNames(app, { isTv }, { prefs.deviceNameOverride }, { prefs.installId }) { n, src ->
+            event("device_name", "name" to n, "src" to src)
+        }
+        names.refresh()
+        network = NetworkBinder(app, { deviceName }, BuildConfig.VERSION_NAME, { prefs.installId }, { if (isTv) "tv" else "phone" }) {
+            log("net", it)
+        }
         connection = ConnectionManager(
             scope = scope,
             network = network,
@@ -109,12 +153,22 @@ object AppGraph {
             installedVersionCode = BuildConfig.VERSION_CODE.toLong(),
             update = update,
             log = { log("conn", it) },
+            onLocate = { result, ms, changed ->
+                detailed("disc", "target" to "pc", "result" to result, "ms" to ms)
+                if (changed) event("conn", "peer" to "pc", "result" to result)
+            },
+            onConnected = { info ->
+                info.timeMs?.let(::pcTime)
+                shipper.afterPcCall()
+            },
         )
         transfers = Transfers(
             api = { connection.api() },
             rediscover = { connection.relocate() },
             sourceFor = { UploadItemFactory(app, { 0L }).sourceFor(it) },
             log = { log("engine", it) },
+            newSendEvents = { SendEvents(events, System::currentTimeMillis, onEnded = { shipper.afterSend() }) },
+            pcName = { (connection.state.value as? app.ferry.net.ConnectionState.Connected)?.name },
         )
         downloads = Downloads(
             api = { connection.api() },
@@ -124,6 +178,7 @@ object AppGraph {
         )
         casting = Casting { log("cast", it) }
         updater = AppUpdater(scope, File(app.filesDir, "update"), { connection.api() }, { connection.relocate() }) { log("update", it) }
+        shipper = LogShipper(scope, events, LogReader(dir), { connection.api() }, SystemClock, ::pcTime, { log("logs", it) })
         interrupted.value = prefs.interruptedCount
         network.start()
         cleanup = scope.async(Dispatchers.IO) {
@@ -134,8 +189,6 @@ object AppGraph {
             StaleFiles.deleteOld(File(app.filesDir, "update"), now) // an older update APK
             Unit
         }
-        log("app", "app start ${BuildConfig.VERSION_NAME} ${Build.MANUFACTURER} ${Build.MODEL} API ${Build.VERSION.SDK_INT}" +
-            if (isTv) " (TV)" else "")
     }
 
     /** TV video positions (Ph8b, design §5.2). */
@@ -151,6 +204,7 @@ object AppGraph {
         val a = connection.api() ?: return false
         return try {
             outbox.value = a.outbox()
+            shipper.afterPcCall()
             true
         } catch (e: CancellationException) {
             throw e
@@ -161,8 +215,19 @@ object AppGraph {
         }
     }
 
+    /** The 2.0 shim (CP108): `diag tag=<tag> msg="…"`, shown in the tail as `diag <tag> <msg>` (B107). */
     fun log(tag: String, msg: String) {
         Log.i("Ferry", "$tag: $msg")
-        if (this::ringLog.isInitialized) ringLog.log(tag, msg)
+        if (this::events.isInitialized) events.event("diag", "tag" to tag, "msg" to msg)
+    }
+
+    /** A 2.1 event (catalogue `docs/v2.1-log-events.md` part 1; `EventCatalogueTest`). */
+    fun event(name: String, vararg kv: Pair<String, Any?>) {
+        if (this::events.isInitialized) events.event(name, *kv)
+    }
+
+    /** A Detailed-only event (dropped when "Trial logging" is off, L2). */
+    fun detailed(name: String, vararg kv: Pair<String, Any?>) {
+        if (this::events.isInitialized) events.detailed(name, *kv)
     }
 }

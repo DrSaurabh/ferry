@@ -91,6 +91,7 @@ fun rememberMediaGate(onReady: () -> Unit): MediaGate {
     val request = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { result ->
         val a = mediaAccess(ctx)
         AppGraph.log("perm", "media permissions ${result.filterValues { it }.keys.map { it.substringAfterLast('.') }} → $a")
+        AppGraph.event("perm", "name" to "media", "result" to if (a == MediaAccess.None) "denied" else a.name.lowercase())
         if (a != MediaAccess.None) {
             gate.ask = null
             ready()
@@ -107,22 +108,32 @@ fun rememberMediaGate(onReady: () -> Unit): MediaGate {
     }
     gate.overlay = {
         when (gate.ask) {
-            MediaGate.Ask.Rationale -> AlertDialog(
+            MediaGate.Ask.Rationale -> {
+              LogDialog("media_rationale")
+              AlertDialog(
                 onDismissRequest = { gate.ask = null },
                 text = { Text(stringResource(R.string.media_rationale), Modifier.testTag("media-rationale")) },
                 confirmButton = {
-                    TextButton(onClick = { request.launch(perms.toTypedArray()) }) { Text(stringResource(R.string.continue_)) }
+                    TextButton(onClick = onClickLogged("media_rationale.continue") {
+                        logDialog("media_rationale", "continue")
+                        AppGraph.event("perm", "name" to "media", "ask" to 1)
+                        request.launch(perms.toTypedArray())
+                    }) { Text(stringResource(R.string.continue_)) }
                 },
-                dismissButton = { TextButton(onClick = { gate.ask = null }) { Text(stringResource(R.string.cancel)) } },
-            )
-            MediaGate.Ask.Settings -> AlertDialog(
+                dismissButton = { TextButton(onClick = onClickLogged("media_rationale.cancel") { logDialog("media_rationale", "cancel"); gate.ask = null }) { Text(stringResource(R.string.cancel)) } },
+              )
+            }
+            MediaGate.Ask.Settings -> {
+              LogDialog("media_denied")
+              AlertDialog(
                 onDismissRequest = { gate.ask = null },
                 text = { Text(stringResource(R.string.media_denied), Modifier.testTag("media-denied")) },
                 confirmButton = {
-                    TextButton(onClick = { gate.ask = null; openAppSettings(ctx) }) { Text(stringResource(R.string.open_settings)) }
+                    TextButton(onClick = onClickLogged("media_denied.open_settings") { logDialog("media_denied", "open_settings"); gate.ask = null; openAppSettings(ctx) }) { Text(stringResource(R.string.open_settings)) }
                 },
-                dismissButton = { TextButton(onClick = { gate.ask = null }) { Text(stringResource(R.string.cancel)) } },
-            )
+                dismissButton = { TextButton(onClick = onClickLogged("media_denied.cancel") { logDialog("media_denied", "cancel"); gate.ask = null }) { Text(stringResource(R.string.cancel)) } },
+              )
+            }
             null -> {}
         }
     }
@@ -137,7 +148,7 @@ fun PartialAccessBanner(modifier: Modifier = Modifier) {
         color = FerryAmber,
         contentColor = Color.Black,
         shape = RoundedCornerShape(8.dp),
-        modifier = modifier.fillMaxWidth().testTag("partial-access").clickable { openAppSettings(ctx) },
+        modifier = modifier.fillMaxWidth().testTag("partial-access").clickable(onClick = onClickLogged("partial_access.fix") { openAppSettings(ctx) }),
     ) {
         Text(stringResource(R.string.partial_access), style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(12.dp))
     }

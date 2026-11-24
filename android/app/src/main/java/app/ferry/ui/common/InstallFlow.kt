@@ -123,15 +123,15 @@ class InstallFlow internal constructor(private val ctx: Context) {
             },
             confirmButton = {
                 if (showSteps) {
-                    TextButton(onClick = { dismiss() }, mainRing) { Text(stringResource(R.string.ok)) }
+                    TextButton(onClick = onClickLogged("install_allow.ok") { dismiss() }, mainRing) { Text(stringResource(R.string.ok)) }
                 } else {
-                    TextButton(onClick = { openSettings() }, mainRing.testTag("install-open-settings")) {
+                    TextButton(onClick = onClickLogged("install_allow.open_settings") { openSettings() }, mainRing.testTag("install-open-settings")) {
                         Text(stringResource(R.string.open_settings))
                     }
                 }
             },
             dismissButton = {
-                if (!showSteps) TextButton(onClick = { away = false; dismiss() }, ring) { Text(stringResource(R.string.cancel)) }
+                if (!showSteps) TextButton(onClick = onClickLogged("install_allow.cancel") { away = false; dismiss() }, ring) { Text(stringResource(R.string.cancel)) }
             },
             modifier = Modifier.testTag("install-allow"),
         )

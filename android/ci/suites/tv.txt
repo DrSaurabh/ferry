@@ -1,6 +1,6 @@
 # TV suite (API 30 android-tv). Class | host steps before | host check after (plan CP6, §4.14)
 # Ph8a: classes 1, 5, 6 (TvLaunchAndFocusTest replaces Ph4's TvLaunchTest [PB20]); Ph8b: classes 2, 3, 4, 7
-app.ferry.TvLaunchAndFocusTest | |
+app.ferry.TvLaunchAndFocusTest | | check_device_log T device_name,app.start
 app.ferry.TvLongPauseTest | |
 app.ferry.TvResumeTest | |
 app.ferry.TvSlideshowTest | |

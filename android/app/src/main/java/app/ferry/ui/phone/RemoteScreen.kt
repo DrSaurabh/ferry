@@ -1,5 +1,6 @@
 package app.ferry.ui.phone
 
+import app.ferry.ui.common.onClickLogged
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -72,7 +73,7 @@ fun RemoteScreen(nav: Navigator, vm: CastViewModel) {
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(stringResource(R.string.remote_title), style = MaterialTheme.typography.headlineSmall, modifier = Modifier.weight(1f))
-            TextButton(onClick = { nav.pop() }) { Text(stringResource(R.string.back)) }
+            TextButton(onClick = onClickLogged("remote.back") { nav.pop() }) { Text(stringResource(R.string.back)) }
         }
         val s = session
         if (s == null) {
@@ -127,16 +128,16 @@ private fun RemoteControls(s: CastSession, vm: CastViewModel, ctx: android.conte
     val st = s.tvState
     val playing = st?.playing != false
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-        RemoteIconButton(R.drawable.ic_prev, R.string.remote_prev, Modifier.weight(1f)) { vm.control(ControlRequest.PREV) }
-        RemoteIconButton(if (playing) R.drawable.ic_pause else R.drawable.ic_play, R.string.remote_toggle, Modifier.weight(1f)) {
+        RemoteIconButton("remote.prev", R.drawable.ic_prev, R.string.remote_prev, Modifier.weight(1f)) { vm.control(ControlRequest.PREV) }
+        RemoteIconButton("remote.toggle", if (playing) R.drawable.ic_pause else R.drawable.ic_play, R.string.remote_toggle, Modifier.weight(1f)) {
             vm.control(ControlRequest.TOGGLE)
         }
-        RemoteIconButton(R.drawable.ic_next, R.string.remote_next, Modifier.weight(1f)) { vm.control(ControlRequest.NEXT) }
+        RemoteIconButton("remote.next", R.drawable.ic_next, R.string.remote_next, Modifier.weight(1f)) { vm.control(ControlRequest.NEXT) }
     }
     if (s.kind == CastRequest.VIDEO) {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-            RemoteButton("−10 s", R.string.remote_back10, Modifier.weight(1f), outlined = true) { vm.control(ControlRequest.SEEK, deltaMs = -10_000) }
-            RemoteButton("+10 s", R.string.remote_fwd10, Modifier.weight(1f), outlined = true) { vm.control(ControlRequest.SEEK, deltaMs = 10_000) }
+            RemoteButton("remote.back10", "−10 s", R.string.remote_back10, Modifier.weight(1f), outlined = true) { vm.control(ControlRequest.SEEK, deltaMs = -10_000) }
+            RemoteButton("remote.fwd10", "+10 s", R.string.remote_fwd10, Modifier.weight(1f), outlined = true) { vm.control(ControlRequest.SEEK, deltaMs = 10_000) }
         }
     } else {
         Text(stringResource(R.string.remote_interval), style = MaterialTheme.typography.titleSmall)
@@ -146,7 +147,7 @@ private fun RemoteControls(s: CastSession, vm: CastViewModel, ctx: android.conte
                 val label = stringResource(R.string.remote_interval_s, sec)
                 FilterChip(
                     selected = sec == now,
-                    onClick = { vm.control(ControlRequest.INTERVAL, intervalMs = sec * 1000L) },
+                    onClick = onClickLogged("remote.interval_$sec") { vm.control(ControlRequest.INTERVAL, intervalMs = sec * 1000L) },
                     label = { Text(label) },
                     modifier = Modifier.semantics { contentDescription = label },
                 )
@@ -154,7 +155,7 @@ private fun RemoteControls(s: CastSession, vm: CastViewModel, ctx: android.conte
         }
     }
     Button(
-        onClick = { vm.stop(ctx) },
+        onClick = onClickLogged("remote.stop") { vm.stop(ctx) },
         colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
         modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp).semantics { contentDescription = ctx.getString(R.string.remote_stop) },
     ) {
@@ -166,20 +167,20 @@ private fun RemoteControls(s: CastSession, vm: CastViewModel, ctx: android.conte
 
 /** ⏮ ⏯ ⏭ as drawn icons (Ph10): the ⏸ / ⏹ characters render as colour emoji on Android 14. */
 @Composable
-private fun RemoteIconButton(icon: Int, desc: Int, modifier: Modifier, onClick: () -> Unit) {
+private fun RemoteIconButton(id: String, icon: Int, desc: Int, modifier: Modifier, onClick: () -> Unit) {
     val d = stringResource(desc)
-    Button(onClick = onClick, modifier = modifier.heightIn(min = 64.dp).semantics { contentDescription = d }) {
+    Button(onClick = onClickLogged(id, onClick), modifier = modifier.heightIn(min = 64.dp).semantics { contentDescription = d }) {
         Icon(painterResource(icon), contentDescription = null, modifier = Modifier.size(32.dp))
     }
 }
 
 @Composable
-private fun RemoteButton(symbol: String, desc: Int, modifier: Modifier, outlined: Boolean = false, onClick: () -> Unit) {
+private fun RemoteButton(id: String, symbol: String, desc: Int, modifier: Modifier, outlined: Boolean = false, onClick: () -> Unit) {
     val d = stringResource(desc)
     val m = modifier.heightIn(min = 64.dp).semantics { contentDescription = d }
     if (outlined) {
-        OutlinedButton(onClick = onClick, modifier = m) { Text(symbol, style = MaterialTheme.typography.titleMedium) }
+        OutlinedButton(onClick = onClickLogged(id, onClick), modifier = m) { Text(symbol, style = MaterialTheme.typography.titleMedium) }
     } else {
-        Button(onClick = onClick, modifier = m) { Text(symbol, style = MaterialTheme.typography.headlineSmall) }
+        Button(onClick = onClickLogged(id, onClick), modifier = m) { Text(symbol, style = MaterialTheme.typography.headlineSmall) }
     }
 }

@@ -1,5 +1,6 @@
 package app.ferry.ui.phone
 
+import app.ferry.ui.common.onClickLogged
 import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
@@ -163,8 +164,8 @@ fun FromPcScreen(nav: Navigator, vm: OutboxViewModel = viewModel()) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(stringResource(R.string.from_pc_title), style = MaterialTheme.typography.headlineSmall)
             Spacer(Modifier.weight(1f))
-            TextButton(onClick = { scope.launch { vm.refresh() } }) { Text(stringResource(R.string.refresh)) }
-            if (nav.stack.size > 1) TextButton(onClick = { nav.pop() }) { Text(stringResource(R.string.back)) }
+            TextButton(onClick = onClickLogged("from_pc.refresh") { scope.launch { vm.refresh() } }) { Text(stringResource(R.string.refresh)) }
+            if (nav.stack.size > 1) TextButton(onClick = onClickLogged("from_pc.back") { nav.pop() }) { Text(stringResource(R.string.back)) }
         }
         if (connected == null) {
             Text(statusText(conn), style = MaterialTheme.typography.bodyLarge)
@@ -180,7 +181,7 @@ fun FromPcScreen(nav: Navigator, vm: OutboxViewModel = viewModel()) {
             Text(stringResource(R.string.from_pc_empty), style = MaterialTheme.typography.bodyLarge)
         }
         if (canDownload && files.size > 1) {
-            Button(onClick = { start(files.filter { !FromPcActions.active(downloads[it.id]) }) }, Modifier.testTag("download-all")) {
+            Button(onClick = onClickLogged("from_pc.download_all") { start(files.filter { !FromPcActions.active(downloads[it.id]) }) }, Modifier.testTag("download-all")) {
                 Text(stringResource(R.string.download_all))
             }
         }
@@ -211,7 +212,7 @@ private fun OutboxRow(
     val active = FromPcActions.active(st)
     Row(
         Modifier.fillMaxWidth().testTag("outbox-${f.id}")
-            .clickable(enabled = canDownload && !active, onClick = onDownload),
+            .clickable(enabled = canDownload && !active, onClick = onClickLogged("from_pc.download", onDownload)),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         KindBadge(f)
@@ -229,8 +230,8 @@ private fun OutboxRow(
             }
         }
         when {
-            active -> TextButton(onClick = onCancel) { Text(stringResource(R.string.cancel)) }
-            st is DownloadStatus.Done && st.openUri.isNotEmpty() -> OutlinedButton(onClick = { onOpen(st.openUri) }, Modifier.testTag("open-${f.id}")) {
+            active -> TextButton(onClick = onClickLogged("from_pc.cancel", onCancel)) { Text(stringResource(R.string.cancel)) }
+            st is DownloadStatus.Done && st.openUri.isNotEmpty() -> OutlinedButton(onClick = onClickLogged("from_pc.open") { onOpen(st.openUri) }, Modifier.testTag("open-${f.id}")) {
                 Text(stringResource(if (f.kind == "apk") R.string.install else R.string.open))
             }
         }

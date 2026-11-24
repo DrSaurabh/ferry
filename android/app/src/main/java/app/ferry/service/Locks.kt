@@ -14,7 +14,7 @@ import kotlinx.coroutines.launch
  * and re-taken every 3.5 h while held; the Wi-Fi lock uses LOW_LATENCY on 29+, HIGH_PERF below (not relied on with
  * the screen off). [release] is idempotent. A lock the system refuses is skipped (the FGS still keeps the upload).
  */
-class TransferLocks(ctx: Context, tag: String) {
+class TransferLocks(ctx: Context, private val tag: String) {
     private val wake: PowerManager.WakeLock? = try {
         (ctx.getSystemService(Context.POWER_SERVICE) as PowerManager)
             .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "Ferry:$tag").apply { setReferenceCounted(false) }
@@ -32,10 +32,12 @@ class TransferLocks(ctx: Context, tag: String) {
     }
 
     private var renew: Job? = null
+    private var heldSince = 0L
 
     @Synchronized
     fun acquire(scope: CoroutineScope) {
         if (renew?.isActive == true) return
+        heldSince = System.currentTimeMillis()
         hold()
         renew = scope.launch {
             while (true) {
@@ -47,6 +49,10 @@ class TransferLocks(ctx: Context, tag: String) {
 
     @Synchronized
     fun release() {
+        if (heldSince > 0) {
+            app.ferry.AppGraph.detailed("lock", "what" to tag, "held_ms" to System.currentTimeMillis() - heldSince)
+            heldSince = 0
+        }
         renew?.cancel()
         renew = null
         try { if (wake?.isHeld == true) wake.release() } catch (e: Exception) { }

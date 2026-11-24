@@ -23,8 +23,9 @@ import kotlinx.coroutines.delay
  * scale 1.05, and [onFocus] for the focus memory) + **`clickable(onClick)` only**. `clickable` is itself the focus
  * target and already turns D-pad centre / Enter into one click, so there is no extra `focusable()` (two focus stops
  * per card) and no own key handler (two clicks per OK). `TvLaunchAndFocusTest` checks both.
+ * 2.1: [id] is the tap id logged on OK (`tap id=`, CP129).
  */
-fun Modifier.tvClickable(shape: Shape, onFocus: (Boolean) -> Unit = {}, onClick: () -> Unit): Modifier = composed {
+fun Modifier.tvClickable(id: String, shape: Shape, onFocus: (Boolean) -> Unit = {}, onClick: () -> Unit): Modifier = composed { // tap-id: id
     var focused by remember { mutableStateOf(false) }
     this
         .scale(if (focused) 1.05f else 1f)
@@ -35,7 +36,7 @@ fun Modifier.tvClickable(shape: Shape, onFocus: (Boolean) -> Unit = {}, onClick:
             }
         }
         .border(3.dp, if (focused) FerryAmber else Color.Transparent, shape)
-        .clickable(onClick = onClick)
+        .clickable(onClick = onClickLogged(id, onClick))
 }
 
 /**

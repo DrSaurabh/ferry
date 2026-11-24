@@ -22,21 +22,50 @@ sealed interface Screen {
     data class TvViewer(val photos: List<app.ferry.ui.tv.TvPhoto>, val start: Int, val slideshow: Boolean) : Screen
 }
 
+/** The screen's name in the log (`screen name=`, `back screen=`, `tap … screen=`; design §7.1). */
+val Screen.logName: String
+    get() = when (this) {
+        Screen.Welcome -> "welcome"
+        Screen.Home -> "home"
+        Screen.Settings -> "settings"
+        Screen.Transfer -> "transfer"
+        Screen.FromPc -> "from_pc"
+        is Screen.Picker -> "picker_" + mode.name.lowercase(java.util.Locale.US)
+        Screen.PlayOnTv -> "play_on_tv"
+        Screen.Remote -> "remote"
+        Screen.TvHome -> "tv_home"
+        is Screen.TvPlayer -> "tv_player"
+        is Screen.TvViewer -> if (slideshow) "tv_slideshow" else "tv_viewer"
+    }
+
 /**
  * A tiny back stack instead of navigation-compose [CP1]. Each screen installs
  * `BackHandler(enabled = stack.size > 1) { pop() }`; on the root, Back finishes the activity.
+ * 2.1 (design §7.1): every new top screen is reported to [onScreen] (`screen name=`), every pop to [onBack]
+ * (`back screen=<the screen left> result=popped`).
  */
-class Navigator(start: Screen) {
+class Navigator(
+    start: Screen,
+    private val onScreen: (String) -> Unit = {},
+    private val onBack: (screen: String, result: String) -> Unit = { _, _ -> },
+) {
     val stack: SnapshotStateList<Screen> = mutableStateListOf(start)
     val current: Screen get() = stack.last()
 
+    init {
+        onScreen(start.logName)
+    }
+
     fun push(s: Screen) {
         stack.add(s)
+        onScreen(s.logName)
     }
 
     fun pop(): Boolean {
         if (stack.size <= 1) return false
-        stack.removeAt(stack.lastIndex)
+        val left = stack.removeAt(stack.lastIndex)
+        onBack(left.logName, "popped")
+        onScreen(current.logName)
         return true
     }
 
@@ -48,5 +77,6 @@ class Navigator(start: Screen) {
     fun replaceAll(s: Screen) {
         stack.clear()
         stack.add(s)
+        onScreen(s.logName)
     }
 }

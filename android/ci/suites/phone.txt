@@ -17,6 +17,8 @@ app.ferry.ShareLocationAllowTest | push_media gps.jpg /sdcard/DCIM/Camera/$SHARE
 app.ferry.GpsOriginalTest | grant ACCESS_MEDIA_LOCATION | check_original
 # Ph6: the picker across two albums [P3].
 app.ferry.PickerAcrossAlbumsTest | push_pick_photos | check_picker
+# Ph11b: a send ships the app's log to PC-A (L3, CP137).
+app.ferry.LogShippingTest | | check_device_log A send.start,send.done
 # Ph5b: Share → Ferry from the helper app (another UID, grant only) and the screen-off upload.
 app.ferry.ShareToFerryTest | | check_share
 app.ferry.ScreenOffUploadTest | make_big_jpeg /sdcard/DCIM/Camera/SCREENOFF_280MB.jpg 280; scan_media /sdcard/DCIM/Camera/SCREENOFF_280MB.jpg | check_screen_off

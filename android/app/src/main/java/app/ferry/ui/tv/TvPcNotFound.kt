@@ -1,5 +1,6 @@
 package app.ferry.ui.tv
 
+import app.ferry.ui.common.onClickLogged
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -39,6 +40,7 @@ import app.ferry.net.BroadcastAddress
 import app.ferry.net.ConnectionState
 import app.ferry.ui.common.requestFocusSoon
 import app.ferry.ui.common.statusText
+import app.ferry.ui.common.LogError
 import app.ferry.ui.common.tvFocusRing
 
 /**
@@ -91,11 +93,12 @@ fun TvPcNotFound(vm: TvViewModel, conn: ConnectionState) {
     Column(verticalArrangement = Arrangement.spacedBy(16.dp), modifier = Modifier.testTag("tv-pc-not-found")) {
         Text(stringResource(R.string.tv_pc_not_found), style = MaterialTheme.typography.headlineMedium)
         Text(statusText(conn), style = MaterialTheme.typography.titleMedium)
+        LogError(statusText(conn))
         Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-            Button(onClick = { AppGraph.connection.refresh() }, modifier = ring("try").focusRequester(first)) {
+            Button(onClick = onClickLogged("tv_pc_not_found.try_again") { AppGraph.connection.refresh() }, modifier = ring("try").focusRequester(first)) {
                 Text(stringResource(R.string.try_again))
             }
-            OutlinedButton(onClick = {
+            OutlinedButton(onClick = onClickLogged("tv_pc_not_found.enter_address") {
                 val prefill = BroadcastAddress.firstThreeOctets(AppGraph.network.ownIpv4)
                 field = TextFieldValue(prefill, TextRange(prefill.length)) // cursor after the last dot (O3)
                 vm.addressDraft = prefill
@@ -107,7 +110,7 @@ fun TvPcNotFound(vm: TvViewModel, conn: ConnectionState) {
         if (candidates.isNotEmpty()) {
             Text(stringResource(R.string.tv_found_pcs), style = MaterialTheme.typography.titleMedium)
             for (p in candidates) {
-                OutlinedButton(onClick = {
+                OutlinedButton(onClick = onClickLogged("tv_pc_not_found.choose_pc") {
                     AppGraph.prefs.manual = HostPort(p.host, p.port)
                     AppGraph.connection.refresh()
                 }, modifier = ring("pc-${p.host}")) { Text("${p.name}  ${p.host}:${p.port}") }
@@ -129,7 +132,7 @@ fun TvPcNotFound(vm: TvViewModel, conn: ConnectionState) {
                     modifier = Modifier.width(420.dp).focusRequester(fieldFocus)
                         .onFocusChanged { vm.addressFieldFocused = it.isFocused }.testTag("tv-address-field"),
                 )
-                Button(onClick = { save() }, modifier = ring("save")) { Text(stringResource(R.string.settings_save)) }
+                Button(onClick = onClickLogged("tv_pc_not_found.save") { save() }, modifier = ring("save")) { Text(stringResource(R.string.settings_save)) }
             }
             if (bad) Text(stringResource(R.string.settings_address_bad), color = MaterialTheme.colorScheme.error)
         }

@@ -51,6 +51,7 @@ class TransferService : Service() {
     override fun onCreate() {
         super.onCreate()
         locks = TransferLocks(this, "transfer")
+        AppGraph.event("svc.start", "name" to "transfer")
         ticker = t.scope.launch { tick() }
     }
 
@@ -145,6 +146,7 @@ class TransferService : Service() {
         val s = t.state.value
         val sum = s?.summary
         AppGraph.log("transfer", "service stopped: $sum")
+        AppGraph.event("svc.stop", "name" to "transfer", "reason" to "idle")
         if (uploadsSeen && s != null && sum != null && sum.stop != StopReason.Cancelled && s.phase == Phase.Finished) {
             Notifications.postResults(this, sum, s.pcName ?: getString(app.ferry.R.string.your_pc))
         }
@@ -153,6 +155,7 @@ class TransferService : Service() {
 
     override fun onTimeout(startId: Int, fgsType: Int) { // API 35: the dataSync daily limit [A6] [PR15]
         AppGraph.log("transfer", "dataSync time limit reached")
+        AppGraph.event("svc.stop", "name" to "transfer", "reason" to "time_limit")
         t.stopForTimeLimit()
         d.cancelAll()
         stopSelf()
@@ -162,6 +165,7 @@ class TransferService : Service() {
         ticker?.cancel()
         if (t.busy) { // stopped by the user ("Active apps") or the system: Cancel, not a crash [A6]
             AppGraph.log("transfer", "service destroyed while busy: cancel")
+            AppGraph.event("svc.stop", "name" to "transfer", "reason" to "destroyed_busy")
             t.cancel()
         }
         if (d.busy) {

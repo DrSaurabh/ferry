@@ -1,5 +1,6 @@
 package app.ferry.ui.phone
 
+import app.ferry.ui.common.onClickLogged
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.WindowInsets
@@ -50,12 +51,12 @@ fun WelcomeScreen(onDone: () -> Unit) {
             Card(Modifier.fillMaxWidth().testTag("battery-card")) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text(stringResource(R.string.battery_card), style = MaterialTheme.typography.bodyLarge)
-                    OutlinedButton(onClick = { Battery.request(ctx) }) { Text(stringResource(R.string.battery_allow)) }
+                    OutlinedButton(onClick = onClickLogged("welcome.battery") { Battery.request(ctx) }) { Text(stringResource(R.string.battery_allow)) }
                 }
             }
         }
         Button(
-            onClick = {
+            onClick = onClickLogged("welcome.continue") {
                 AppGraph.prefs.welcomeDone = true
                 onDone()
             },

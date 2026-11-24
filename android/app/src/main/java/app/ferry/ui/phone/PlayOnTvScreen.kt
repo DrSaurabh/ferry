@@ -1,5 +1,6 @@
 package app.ferry.ui.phone
 
+import app.ferry.ui.common.onClickLogged
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -54,7 +55,7 @@ import app.ferry.ui.nav.Screen
 @Composable
 private fun TvAddressEntry(vm: CastViewModel) {
     if (!vm.addressEditing) {
-        TextButton(onClick = { vm.beginAddress() }, modifier = Modifier.testTag("cast-enter-address")) {
+        TextButton(onClick = onClickLogged("play_on_tv.enter_address") { vm.beginAddress() }, modifier = Modifier.testTag("cast-enter-address")) {
             Text(stringResource(R.string.cast_enter_address))
         }
         return
@@ -73,7 +74,7 @@ private fun TvAddressEntry(vm: CastViewModel) {
         modifier = Modifier.fillMaxWidth().testTag("cast-address-field"),
     )
     vm.addressProblem?.let { Text(stringResource(it), color = MaterialTheme.colorScheme.error, modifier = Modifier.testTag("cast-address-problem")) }
-    Button(onClick = { vm.tryAddress() }, modifier = Modifier.testTag("cast-use-address")) { Text(stringResource(R.string.cast_use_address)) }
+    Button(onClick = onClickLogged("play_on_tv.use_address") { vm.tryAddress() }, modifier = Modifier.testTag("cast-use-address")) { Text(stringResource(R.string.cast_use_address)) }
 }
 
 /**
@@ -100,11 +101,11 @@ fun PlayOnTvScreen(nav: Navigator, vm: CastViewModel) {
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(stringResource(R.string.btn_play_tv), style = MaterialTheme.typography.headlineSmall, modifier = Modifier.weight(1f))
-                TextButton(onClick = { nav.pop() }) { Text(stringResource(R.string.back)) }
+                TextButton(onClick = onClickLogged("play_on_tv.back") { nav.pop() }) { Text(stringResource(R.string.back)) }
             }
             val s = session
             if (s != null && s.phase != CastPhase.Ended) {
-                Card(Modifier.fillMaxWidth().clickable { nav.push(Screen.Remote) }.testTag("cast-now")) {
+                Card(Modifier.fillMaxWidth().clickable(onClick = onClickLogged("play_on_tv.cast_now") { nav.push(Screen.Remote) }).testTag("cast-now")) {
                     Text(stringResource(R.string.cast_now, s.tvName), Modifier.padding(16.dp), style = MaterialTheme.typography.titleMedium)
                 }
             }
@@ -118,17 +119,17 @@ fun PlayOnTvScreen(nav: Navigator, vm: CastViewModel) {
                         }
                         c != null -> {
                             Text(stringResource(R.string.cast_tv, c.name), style = MaterialTheme.typography.titleMedium, modifier = Modifier.testTag("cast-tv"))
-                            TextButton(onClick = { vm.find() }) { Text(stringResource(R.string.cast_find_again)) }
+                            TextButton(onClick = onClickLogged("play_on_tv.find_again") { vm.find() }) { Text(stringResource(R.string.cast_find_again)) }
                         }
                         found.size > 1 -> {
                             Text(stringResource(R.string.cast_choose_tv), style = MaterialTheme.typography.titleMedium)
                             for (t in found) {
-                                OutlinedButton(onClick = { vm.choose(t) }, Modifier.fillMaxWidth()) { Text("${t.name} (${t.hp.host})") }
+                                OutlinedButton(onClick = onClickLogged("play_on_tv.choose_tv") { vm.choose(t) }, Modifier.fillMaxWidth()) { Text("${t.name} (${t.hp.host})") }
                             }
                         }
                         else -> {
                             Text(stringResource(R.string.tv_not_found), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.testTag("cast-no-tv"))
-                            OutlinedButton(onClick = { vm.find() }) { Text(stringResource(R.string.cast_find_again)) } // the text says "tap Find again"
+                            OutlinedButton(onClick = onClickLogged("play_on_tv.find_again") { vm.find() }) { Text(stringResource(R.string.cast_find_again)) } // the text says "tap Find again"
                             TvAddressEntry(vm)
                         }
                     }
@@ -137,7 +138,7 @@ fun PlayOnTvScreen(nav: Navigator, vm: CastViewModel) {
             if (chosen != null) {
                 for ((mode, label) in listOf(PickerMode.CastVideo to R.string.cast_videos, PickerMode.CastPhotos to R.string.cast_photos)) {
                     Button(
-                        onClick = {
+                        onClick = onClickLogged(if (mode == PickerMode.CastVideo) "play_on_tv.videos" else "play_on_tv.photos") {
                             target = mode
                             gate.open()
                         },

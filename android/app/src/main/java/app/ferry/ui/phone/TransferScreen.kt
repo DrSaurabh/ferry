@@ -1,5 +1,8 @@
 package app.ferry.ui.phone
 
+import app.ferry.ui.common.LogDialog
+import app.ferry.ui.common.logDialog
+import app.ferry.ui.common.onClickLogged
 import android.content.pm.PackageManager
 import android.os.Build
 import androidx.activity.compose.BackHandler
@@ -81,7 +84,7 @@ fun TransferScreen(nav: Navigator, vm: TransferViewModel = viewModel()) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(stringResource(R.string.transfer_title), style = MaterialTheme.typography.headlineSmall)
             Spacer(Modifier.weight(1f))
-            if (nav.stack.size > 1) TextButton(onClick = { nav.pop() }) { Text(stringResource(R.string.back)) }
+            if (nav.stack.size > 1) TextButton(onClick = onClickLogged("transfer.back") { nav.pop() }) { Text(stringResource(R.string.back)) }
         }
         val st = s
         if (st == null) {
@@ -96,16 +99,17 @@ fun TransferScreen(nav: Navigator, vm: TransferViewModel = viewModel()) {
         }
     }
     if (confirmCancel) {
+        LogDialog("cancel_confirm")
         AlertDialog(
             onDismissRequest = { confirmCancel = false },
             title = { Text(stringResource(R.string.cancel_confirm_title)) },
             text = { Text(stringResource(R.string.cancel_confirm_text)) },
             confirmButton = {
-                TextButton(onClick = { confirmCancel = false; SendCoordinator.cancel(ctx) }, Modifier.testTag("cancel-confirm")) {
+                TextButton(onClick = onClickLogged("cancel_confirm.yes") { logDialog("cancel_confirm", "yes"); confirmCancel = false; SendCoordinator.cancel(ctx) }, Modifier.testTag("cancel-confirm")) {
                     Text(stringResource(R.string.cancel_confirm_yes))
                 }
             },
-            dismissButton = { TextButton(onClick = { confirmCancel = false }) { Text(stringResource(R.string.cancel_confirm_no)) } },
+            dismissButton = { TextButton(onClick = onClickLogged("cancel_confirm.no") { logDialog("cancel_confirm", "no"); confirmCancel = false }) { Text(stringResource(R.string.cancel_confirm_no)) } },
         )
     }
 }
@@ -118,7 +122,7 @@ private fun androidx.compose.foundation.layout.ColumnScope.TransferBody(st: Engi
     if (detail.isNotEmpty()) Text(detail, Modifier.testTag("transfer-detail"), style = MaterialTheme.typography.bodyMedium)
     if (running) {
         LinearProgressIndicator(progress = { TransferMath.fraction(st) }, modifier = Modifier.fillMaxWidth())
-        OutlinedButton(onClick = onCancel, Modifier.testTag("transfer-cancel")) { Text(stringResource(R.string.cancel)) }
+        OutlinedButton(onClick = onClickLogged("transfer.cancel", onCancel), Modifier.testTag("transfer-cancel")) { Text(stringResource(R.string.cancel)) }
     } else {
         SummaryCard(st, words)
     }
@@ -141,10 +145,10 @@ private fun SummaryCard(st: EngineState, words: TransferWords) {
             for (line in extras) Text(line, style = MaterialTheme.typography.bodyMedium)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (TransferMath.retryable(sum) > 0) {
-                    Button(onClick = { SendCoordinator.retry(ctx) }, Modifier.testTag("transfer-retry")) { Text(stringResource(R.string.retry)) }
+                    Button(onClick = onClickLogged("transfer.retry") { SendCoordinator.retry(ctx) }, Modifier.testTag("transfer-retry")) { Text(stringResource(R.string.retry)) }
                 }
                 if (already.isNotEmpty()) {
-                    OutlinedButton(onClick = { SendCoordinator.sendAnyway(ctx, already) }, Modifier.testTag("send-anyway-all")) {
+                    OutlinedButton(onClick = onClickLogged("transfer.send_anyway_all") { SendCoordinator.sendAnyway(ctx, already) }, Modifier.testTag("send-anyway-all")) {
                         Text(stringResource(R.string.send_anyway))
                     }
                 }
@@ -163,7 +167,7 @@ private fun RowLine(row: ItemRow, words: TransferWords, finished: Boolean) {
                 style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         if (finished && row.status is ItemStatus.AlreadyOnPc) {
-            TextButton(onClick = { SendCoordinator.sendAnyway(ctx, listOf(row.id)) }) { Text(stringResource(R.string.send_anyway)) }
+            TextButton(onClick = onClickLogged("transfer.send_anyway") { SendCoordinator.sendAnyway(ctx, listOf(row.id)) }) { Text(stringResource(R.string.send_anyway)) }
         }
     }
 }
