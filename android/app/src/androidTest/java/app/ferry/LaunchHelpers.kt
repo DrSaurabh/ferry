@@ -16,6 +16,9 @@ object LaunchHelpers {
         AppGraph.prefs.manual = HostPort.parse(Probe.pc)
         AppGraph.prefs.welcomeDone = welcomeDone
         AppGraph.resume.clear() // TV video positions (Ph8b)
+        // Ph13: the stop card reads the in-memory copy, loaded at process start before this clear (a class that was
+        // force-stopped mid-send leaves a count; the taller 2.1 card pushed Home's last button off screen).
+        AppGraph.interrupted.value = 0
     }
 
     /** MainActivity with the debug extras the suite asks for (`-e app.ferry.debug.NET any` on API 25 [PR2]). */
