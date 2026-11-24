@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Stop card illustration (other phones, M23/PO16a): a battery with a tick — "let Ferry work with the screen off". -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="56dp" android:height="56dp" android:viewportWidth="56" android:viewportHeight="56">
+    <path android:fillColor="#00000000" android:strokeColor="#1D4ED8" android:strokeWidth="2"
+        android:pathData="M18,8 L38,8 L38,52 L18,52 Z" />
+    <path android:fillColor="#1D4ED8" android:pathData="M24,3 L32,3 L32,8 L24,8 Z" />
+    <path android:fillColor="#00000000" android:strokeColor="#16A34A" android:strokeWidth="3"
+        android:pathData="M22,30 L27,36 L35,24" />
+</vector>

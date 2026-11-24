@@ -79,6 +79,28 @@ class CastViewModel : ViewModel() {
         }
     }
 
+    /**
+     * M19: while Play on TV is visible and no TV was found, a quiet broadcast on the [app.ferry.net.RetrySchedule]
+     * (10 s for a minute, then 60 s). Nothing on screen changes unless a TV answers; never while the user types an
+     * address or a find/choice is in progress.
+     */
+    fun retryQuietly(retry: Int) {
+        if (finding.value || chosen.value != null || found.value.isNotEmpty() || addressEditing) return
+        if (findJob?.isActive == true) return
+        findJob = viewModelScope.launch {
+            val t0 = System.currentTimeMillis()
+            val tvs = AppGraph.connection.discoverTvs().map { TvChoice(HostPort(it.host, it.port), it.name) }.distinctBy { it.hp }
+            if (retry <= 1 || tvs.isNotEmpty()) {
+                AppGraph.detailed("disc", "target" to "tv", "result" to if (tvs.isEmpty()) "not_found" else "found",
+                    "ms" to System.currentTimeMillis() - t0, "retry" to retry)
+            }
+            if (tvs.isEmpty() || finding.value || chosen.value != null || addressEditing) return@launch
+            AppGraph.log("cast", "TVs found on retry $retry: ${tvs.map { "${it.name} at ${it.hp}" }}")
+            found.value = tvs
+            if (tvs.size == 1) chosen.value = tvs[0]
+        }
+    }
+
     // ---- "Enter the TV's address" (audit O2): the way in when the broadcast finds no TV.
     var addressEditing by mutableStateOf(false)
     var address by mutableStateOf(TextFieldValue(""))

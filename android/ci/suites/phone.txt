@@ -28,6 +28,12 @@ app.ferry.FromPcDownloadTest | clear_downloads |
 app.ferry.UpdateBannerTest | |
 # Ph9: casting through the loopback (the TV's receiver in this app, debug CAST_RECEIVER) [P9] [T5].
 app.ferry.CastLoopbackTest | push_cast_media |
+# Ph13: Back is the same everywhere (B1, U1, L4) and leaving the picker with picks asks (H59); PICK_ photos from above.
+app.ferry.BackEverywhereTest | |
+app.ferry.PickerDiscardTest | |
 # Ph10: screenshot tour (states the other classes do not reach; dialogs drawn on their own).
 app.ferry.PhoneScreenshotTour | |
 app.ferry.PhoneDialogsTour | |
+# Ph13 (CP142): the first setup on a fresh install — always LAST (new phone lines go above it). `fresh_install`
+# reinstalls the APK (no permissions, no exemptions) after saving the screenshots/probe results so far.
+app.ferry.SetupFlowTest | fresh_install | idle_whitelist off

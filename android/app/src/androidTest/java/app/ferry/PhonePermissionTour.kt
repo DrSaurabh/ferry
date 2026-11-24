@@ -14,7 +14,8 @@ import java.util.regex.Pattern
 
 /**
  * Phone suite, Ph10 screenshot tour: the **real** first "Send photos & videos" on a fresh install with no media
- * permission (design §4.2 [A15] [H23]): Ferry's explanation → Continue → Android's own permission dialog → "Don't
+ * permission (design §4.2 [A15] [H23]; adapted in Ph13: the picker opens with "Ferry isn't allowed…" + Fix, U2):
+ * Fix → Ferry's explanation → Continue → Android's own permission dialog → "Don't
  * allow" once → Ferry explains again. Runs before the host grants any media permission; refuses only once, so
  * Android keeps asking and the later `pm grant`s work as before. Checks are on app state (access None, the RingLog
  * line of the permission result); the dialogs are photographed for the wording review.
@@ -31,6 +32,12 @@ class PhonePermissionTour {
         LaunchHelpers.launch().use {
             // No wait for the PC: this class is about the permission dialogs (run 1: the PC once didn't answer here).
             SendHelpers.tap(ctx.getString(R.string.btn_send_photos))
+            // Ph13 (U2, H72): no pop-up by itself — the picker opens with the banner; its Fix starts the flow.
+            SendHelpers.waitText(ctx.getString(R.string.missing_media))
+            SendHelpers.settle()
+            Shots.take("tour-perm-banner")
+            SendHelpers.tap(ctx.getString(R.string.fix))
+            SendHelpers.waitText(ctx.getString(R.string.continue_))
             SendHelpers.settle()
             Shots.take("tour-perm-rationale")
             SendHelpers.tap(ctx.getString(R.string.continue_))

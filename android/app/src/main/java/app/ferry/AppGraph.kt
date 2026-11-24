@@ -90,6 +90,10 @@ object AppGraph {
     /** Files left unsent when the previous process died mid-transfer [A8]; 0 = no banner. */
     val interrupted = MutableStateFlow(0)
 
+    /** Why the previous process ended (API 30+, `ExitReason`; null when unknown): the stop card rule (M23). */
+    @Volatile var lastExit: String? = null
+        private set
+
     /**
      * Startup cleanup (plan §4.2 [PB16]): Ferry's own unfinished `Download/Ferry` rows [B7], and files older than an
      * hour in `files/apk` (TV APKs [PB18]) and `files/update` ([StaleFiles], audit S5); downloads await it before
@@ -132,10 +136,11 @@ object AppGraph {
             if (prefs.logDetailed) Detail.Detailed else Detail.Normal
         })
         isTv = DeviceMode.isTv(app, null)
+        lastExit = ExitReason.last(app)
         event(
             "app.start", "ver" to BuildConfig.VERSION_NAME, "api" to Build.VERSION.SDK_INT,
             "tz" to EventLog.tzOffset(java.util.TimeZone.getDefault(), System.currentTimeMillis()),
-            "exit" to (ExitReason.last(app) ?: "unknown"), "layout" to (if (isTv) "tv" else "phone"),
+            "exit" to (lastExit ?: "unknown"), "layout" to (if (isTv) "tv" else "phone"),
             "model" to "${Build.MANUFACTURER} ${Build.MODEL}",
         )
         names = DeviceNames(app, { isTv }, { prefs.deviceNameOverride }, { prefs.installId }) { n, src ->
@@ -153,8 +158,10 @@ object AppGraph {
             installedVersionCode = BuildConfig.VERSION_CODE.toLong(),
             update = update,
             log = { log("conn", it) },
-            onLocate = { result, ms, changed ->
-                detailed("disc", "target" to "pc", "result" to result, "ms" to ms)
+            fixedRetry = { isTv },
+            onLocate = { result, ms, changed, retry ->
+                // M8/M19: quiet back-off retries are logged only when something changed or as the first of a series.
+                if (retry <= 1 || changed) detailed("disc", "target" to "pc", "result" to result, "ms" to ms, "retry" to retry)
                 if (changed) event("conn", "peer" to "pc", "result" to result)
             },
             onConnected = { info ->

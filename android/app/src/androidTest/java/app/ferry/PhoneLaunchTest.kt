@@ -43,6 +43,10 @@ class PhoneLaunchTest {
         }
     }
 
+    /**
+     * Adapted in Ph13 (U2): Welcome is now the setup steps (SetupFlowTest walks them on a fresh install). Here every
+     * step is skipped (`perm … result=skipped`), then the name screen's Done → Home.
+     */
     @Test
     fun welcomeFirstThenHome() {
         LaunchHelpers.cleanPrefs(welcomeDone = false)
@@ -50,7 +54,12 @@ class PhoneLaunchTest {
             LaunchHelpers.waitFor("welcome", compose, 10_000) { LaunchHelpers.hasTag(compose, "welcome") }
             LaunchHelpers.settle(compose)
             Shots.take("welcome")
-            compose.onNodeWithText("Continue").performClick()
+            for (i in 1..6) {
+                if (LaunchHelpers.hasTag(compose, "setup-done")) break
+                compose.onNodeWithTag("setup-skip").performClick()
+                compose.waitForIdle()
+            }
+            compose.onNodeWithTag("setup-done").performClick()
             LaunchHelpers.waitFor("home", compose, 10_000) { LaunchHelpers.hasTag(compose, "home") }
             assertTrue(AppGraph.prefs.welcomeDone)
             assertTrue(compose.onAllNodesWithText("Welcome to Ferry").fetchSemanticsNodes().isEmpty())

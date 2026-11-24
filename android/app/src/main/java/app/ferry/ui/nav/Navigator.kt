@@ -61,10 +61,11 @@ class Navigator(
         onScreen(s.logName)
     }
 
-    fun pop(): Boolean {
+    /** [result]: `popped`, or e.g. `discarded_picks` when leaving the picker threw picks away (G5). */
+    fun pop(result: String = "popped"): Boolean {
         if (stack.size <= 1) return false
         val left = stack.removeAt(stack.lastIndex)
-        onBack(left.logName, "popped")
+        onBack(left.logName, result)
         onScreen(current.logName)
         return true
     }

@@ -250,4 +250,40 @@
     <string name="settings_trial_logging_text">Keeps a detailed log during the 2.1 trial. It goes to your PC only.</string>
     <string name="settings_device_name">This phone\'s name on the PC</string>
     <string name="settings_device_name_hint">e.g. Saurabh\'s phone</string>
+    <!-- 2.1 Ph13: setup (U2, M23, H85, H94), banners with Fix (U2, H72), discard picks (B1, H59), stop card (U9, M23) -->
+    <string name="setup_step">Step %1$d of %2$d</string>
+    <string name="setup_skip">Skip</string>
+    <string name="setup_allow">Allow</string>
+    <string name="setup_open">Open the setting</string>
+    <string name="setup_media_title">Photos and videos</string>
+    <string name="setup_media_text">Ferry needs to see your photos and videos to send them — with their location, so photos arrive on the PC with the place they were taken.\n\nOn the next screen choose **Allow all**. If your phone asks about location in photos, choose **Allow**.</string>
+    <string name="setup_notifications_title">Notifications</string>
+    <string name="setup_notifications_text">Ferry shows how a send is going and tells you when it is done.\n\nOn the next screen choose **Allow**.</string>
+    <string name="setup_battery_title">Let Ferry work with the screen off</string>
+    <string name="setup_battery_text">So a big send keeps going when the screen turns off. Ferry uses the battery only while it sends.\n\nOn the next screen choose **Allow**. If your phone shows its own page instead, choose **Don\'t restrict**.</string>
+    <string name="setup_updates_title">Allow Ferry to install its updates</string>
+    <string name="setup_updates_text">New versions of Ferry come from your PC. Android needs your OK once.\n\nOn the next screen turn on **Allow from this source**, then press Back.</string>
+    <string name="setup_name_title">Almost done</string>
+    <string name="setup_name_text">This phone will appear on your PC as **%1$s**</string>
+    <string name="setup_name_change">Change</string>
+    <string name="setup_name_field">Name on the PC</string>
+    <string name="setup_done">Done</string>
+    <string name="missing_media">Ferry isn\'t allowed to see your photos and videos.</string>
+    <string name="missing_notifications">Notifications are off, so Ferry can\'t show how a send is going.</string>
+    <string name="fix">Fix</string>
+    <plurals name="discard_picks">
+        <item quantity="one">Discard %1$d pick?</item>
+        <item quantity="other">Discard %1$d picks?</item>
+    </plurals>
+    <string name="discard">Discard</string>
+    <string name="keep_picking">Keep picking</string>
+    <string name="stop_card_title">Your phone stopped the send</string>
+    <string name="stop_card_title_plain">The last send stopped early</string>
+    <plurals name="stop_card_unsent">
+        <item quantity="one">%1$d file was not sent. Send it again.</item>
+        <item quantity="other">%1$d files were not sent. Send them again.</item>
+    </plurals>
+    <string name="stop_card_vivo_steps">So vivo doesn\'t stop Ferry again, do this once:\n1. Press ≡ (or swipe up from the bottom and pause) to see your recent apps.\n2. Tap “Ferry” above its card → Lock.\n3. Settings → Battery → Background power consumption → Ferry → Allow.</string>
+    <string name="stop_card_generic_steps">Your phone closed Ferry to save battery. So it can keep sending with the screen off, tap Allow below and choose Allow (or “Don\'t restrict”).</string>
+    <string name="stop_card_battery">Allow</string>
 </resources>

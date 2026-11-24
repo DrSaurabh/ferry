@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Stop card illustration (vivo, M23/PO16a): the recent-apps card of Ferry with a lock above it. Drawn, no screenshot. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="56dp" android:height="56dp" android:viewportWidth="56" android:viewportHeight="56">
+    <!-- phone outline -->
+    <path android:fillColor="#00000000" android:strokeColor="#1D4ED8" android:strokeWidth="2"
+        android:pathData="M14,3 L42,3 Q46,3 46,7 L46,49 Q46,53 42,53 L14,53 Q10,53 10,49 L10,7 Q10,3 14,3 Z" />
+    <!-- Ferry's card in Recents -->
+    <path android:fillColor="#DBEAFE" android:strokeColor="#1D4ED8" android:strokeWidth="1.5"
+        android:pathData="M17,22 L39,22 L39,46 L17,46 Z" />
+    <!-- lock above the card -->
+    <path android:fillColor="#FBBF24" android:pathData="M23,13 L33,13 L33,20 L23,20 Z" />
+    <path android:fillColor="#00000000" android:strokeColor="#1F2937" android:strokeWidth="1.5"
+        android:pathData="M25,13 L25,10.5 Q28,7 31,10.5 L31,13" />
+</vector>

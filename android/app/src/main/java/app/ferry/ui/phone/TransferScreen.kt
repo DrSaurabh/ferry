@@ -1,13 +1,16 @@
 package app.ferry.ui.phone
 
+import androidx.lifecycle.compose.LifecycleEventEffect
+import androidx.lifecycle.Lifecycle
+import app.ferry.ui.common.openNotificationSettings
+import app.ferry.ui.common.notificationsMissing
+import app.ferry.ui.common.MissingPermissionBanner
+import app.ferry.ui.common.MissingPermission
+import app.ferry.ui.common.PhoneTopBar
 import app.ferry.ui.common.LogDialog
 import app.ferry.ui.common.logDialog
 import app.ferry.ui.common.onClickLogged
-import android.content.pm.PackageManager
-import android.os.Build
 import androidx.activity.compose.BackHandler
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -30,7 +33,6 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -53,7 +55,6 @@ import app.ferry.core.upload.ItemStatus
 import app.ferry.core.upload.Phase
 import app.ferry.media.SendCoordinator
 import app.ferry.ui.common.Format
-import app.ferry.ui.common.PermissionPlanner
 import app.ferry.ui.common.TransferMath
 import app.ferry.ui.common.TransferWords
 import app.ferry.ui.nav.Navigator
@@ -75,17 +76,18 @@ fun TransferScreen(nav: Navigator, vm: TransferViewModel = viewModel()) {
     val ctx = LocalContext.current
     val s by vm.state.collectAsState()
     val words = remember(ctx) { TransferWords(ctx.resources) }
-    AskNotificationsOnce()
     var confirmCancel by remember { mutableStateOf(false) }
     Column(
         Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing).padding(16.dp).testTag("transfer"),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(stringResource(R.string.transfer_title), style = MaterialTheme.typography.headlineSmall)
-            Spacer(Modifier.weight(1f))
-            if (nav.stack.size > 1) TextButton(onClick = onClickLogged("transfer.back") { nav.pop() }) { Text(stringResource(R.string.back)) }
-        }
+        // Back during a send goes Home; the send continues (design §5.1).
+        PhoneTopBar(stringResource(R.string.transfer_title), showBack = nav.stack.size > 1)
+        // Notifications refused at setup (U2, PO16b): one line with Fix, never a pop-up.
+        var notifMissing by remember { mutableStateOf(notificationsMissing(ctx)) }
+        LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { notifMissing = notificationsMissing(ctx) }
+        if (notifMissing) MissingPermissionBanner(MissingPermission.Notifications) { openNotificationSettings(ctx) }
+        StopCardView("transfer")
         val st = s
         if (st == null) {
             val lost by vm.retryLost.collectAsState()
@@ -168,21 +170,6 @@ private fun RowLine(row: ItemRow, words: TransferWords, finished: Boolean) {
         }
         if (finished && row.status is ItemStatus.AlreadyOnPc) {
             TextButton(onClick = onClickLogged("transfer.send_anyway") { SendCoordinator.sendAnyway(ctx, listOf(row.id)) }) { Text(stringResource(R.string.send_anyway)) }
-        }
-    }
-}
-
-/** POST_NOTIFICATIONS once, when the first transfer starts (design §4.2) [H23]; a refusal changes nothing else. */
-@Composable
-fun AskNotificationsOnce() {
-    val ctx = LocalContext.current
-    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
-    LaunchedEffect(Unit) {
-        val granted = Build.VERSION.SDK_INT < 33 ||
-            ctx.checkSelfPermission(PermissionPlanner.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
-        if (PermissionPlanner.needsNotificationRequest(Build.VERSION.SDK_INT, granted, AppGraph.prefs.notificationsAsked)) {
-            AppGraph.prefs.notificationsAsked = true
-            launcher.launch(PermissionPlanner.POST_NOTIFICATIONS)
         }
     }
 }

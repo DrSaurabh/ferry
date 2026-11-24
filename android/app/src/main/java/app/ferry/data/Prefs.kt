@@ -41,6 +41,11 @@ class Prefs(ctx: Context) : PcStore {
         get() = sp.getBoolean(K_WELCOME, false)
         set(v) = sp.edit().putBoolean(K_WELCOME, v).apply()
 
+    /** The setup step shown last (`SetupStep.logName`): setup left with Back on step 1 resumes there (H94, Ph13). */
+    var firstSetupStep: String?
+        get() = sp.getString(K_SETUP_STEP, null)
+        set(v) = sp.edit().putString(K_SETUP_STEP, v).apply()
+
     /** Files still unsent when the process died (interrupted-transfer banner [A8], Ph5a). */
     var interruptedCount: Int
         get() = sp.getInt(K_INTERRUPTED, 0)
@@ -95,6 +100,7 @@ class Prefs(ctx: Context) : PcStore {
         const val K_LAST_TV_NAME = "last_tv_name"
         const val K_SLIDESHOW = "slideshow_seconds"
         const val K_WELCOME = "welcome_done"
+        const val K_SETUP_STEP = "first_setup_step"
         const val K_INTERRUPTED = "interrupted_count"
         const val K_NOTIF = "notifications_asked"
         const val K_MEDIA_DENIED = "media_denied"

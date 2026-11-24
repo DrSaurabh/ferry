@@ -31,6 +31,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.LinearProgressIndicator
@@ -44,6 +45,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -69,12 +73,19 @@ import app.ferry.media.MediaItem
 import app.ferry.media.MediaPick
 import app.ferry.media.MediaRepo
 import app.ferry.media.MediaThumb
+import app.ferry.media.PickerBack
 import app.ferry.media.PickerLogic
 import app.ferry.media.PickerMode
 import app.ferry.media.SendRequest
 import app.ferry.ui.common.Format
 import app.ferry.ui.common.MediaAccess
+import app.ferry.ui.common.LogDialog
+import app.ferry.ui.common.MissingPermission
+import app.ferry.ui.common.MissingPermissionBanner
 import app.ferry.ui.common.PartialAccessBanner
+import app.ferry.ui.common.PhoneTopBar
+import app.ferry.ui.common.logDialog
+import app.ferry.ui.common.rememberMediaGate
 import app.ferry.ui.common.mediaAccess
 import app.ferry.ui.common.rememberSendFlow
 import app.ferry.ui.nav.Navigator
@@ -214,30 +225,37 @@ fun PickerScreen(nav: Navigator, mode: PickerMode, onCast: ((List<MediaPick>) ->
     DisposableEffect(Unit) {
         onDispose { if (nav.stack.none { it is Screen.Picker }) vm.reset() }
     }
+    // Back (top or system, the same path, H69): album → album list → leave; leaving with picks asks first (B1, H59).
+    var askDiscard by remember { mutableStateOf(false) }
     BackHandler {
-        if (openAlbum != null) vm.openAlbum.value = null else nav.pop()
+        when (PickerLogic.back(openAlbum != null, sel.size)) {
+            PickerBack.CloseAlbum -> { vm.openAlbum.value = null }
+            PickerBack.AskDiscard -> { askDiscard = true }
+            PickerBack.Leave -> { nav.pop() }
+        }
     }
+    // Refused at setup (U2): a banner with Fix runs the permission flow; never a pop-up by itself.
+    val gate = rememberMediaGate(onReady = { vm.onResume() })
     val flow = rememberSendFlow(onStarted = { nav.pop(); nav.push(Screen.Transfer) })
     val album = openAlbum?.let { id -> lib.albums.firstOrNull { it.bucketId == id } }
 
     Box(Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing).testTag("picker")) {
-            Row(Modifier.padding(start = 16.dp, end = 8.dp, top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                val title = when (mode) {
-                    PickerMode.Send -> R.string.btn_send_photos
-                    PickerMode.CastVideo -> R.string.picker_title_video
-                    PickerMode.CastPhotos -> R.string.picker_title_photos
-                }
-                Text(stringResource(title), style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
-                TextButton(onClick = onClickLogged("picker.back") { nav.pop() }) { Text(stringResource(R.string.back)) }
+            val title = when (mode) {
+                PickerMode.Send -> R.string.btn_send_photos
+                PickerMode.CastVideo -> R.string.picker_title_video
+                PickerMode.CastPhotos -> R.string.picker_title_photos
             }
+            PhoneTopBar(stringResource(title), showBack = true, modifier = Modifier.padding(start = 8.dp, end = 4.dp, top = 4.dp))
             TabRow(selectedTabIndex = if (albumsTab) 1 else 0) {
                 Tab(selected = !albumsTab, onClick = onClickLogged("picker.recent") { vm.albumsTab.value = false; vm.openAlbum.value = null },
                     text = { Text(stringResource(R.string.picker_recent)) })
-                Tab(selected = albumsTab, onClick = onClickLogged("picker.albums") { vm.albumsTab.value = true },
+                // Inside an album the Albums tab goes back to the album list (B1).
+                Tab(selected = albumsTab, onClick = onClickLogged("picker.albums") { vm.albumsTab.value = true; vm.openAlbum.value = null },
                     text = { Text(stringResource(R.string.picker_albums)) })
             }
             if (access == MediaAccess.Partial) PartialAccessBanner(Modifier.padding(8.dp))
+            if (access == MediaAccess.None) MissingPermissionBanner(MissingPermission.Media, Modifier.padding(8.dp)) { gate.open() }
             if (loading) LinearProgressIndicator(Modifier.fillMaxWidth())
             Box(Modifier.weight(1f).fillMaxWidth()) {
                 when {
@@ -259,7 +277,7 @@ fun PickerScreen(nav: Navigator, mode: PickerMode, onCast: ((List<MediaPick>) ->
                     }
                     else -> AlbumList(lib.albums) { vm.openAlbum.value = it.bucketId }
                 }
-                if (!loading && lib.items.isEmpty()) {
+                if (!loading && lib.items.isEmpty() && access != MediaAccess.None) {
                     Text(stringResource(R.string.picker_empty), Modifier.align(Alignment.Center).padding(24.dp),
                         style = MaterialTheme.typography.bodyLarge)
                 }
@@ -283,6 +301,27 @@ fun PickerScreen(nav: Navigator, mode: PickerMode, onCast: ((List<MediaPick>) ->
             }
         }
         flow.Overlay()
+        gate.Overlay()
+    }
+    if (askDiscard) {
+        LogDialog("discard_picks")
+        AlertDialog(
+            onDismissRequest = { logDialog("discard_picks", "dismiss"); askDiscard = false },
+            modifier = Modifier.testTag("discard-dialog"),
+            text = { Text(ctx.resources.getQuantityString(R.plurals.discard_picks, sel.size, sel.size), style = MaterialTheme.typography.titleMedium) },
+            confirmButton = {
+                TextButton(onClick = onClickLogged("discard_picks.discard") {
+                    logDialog("discard_picks", "discard")
+                    askDiscard = false
+                    vm.reset()
+                    nav.pop("discarded_picks")
+                }, Modifier.testTag("discard-yes")) { Text(stringResource(R.string.discard)) }
+            },
+            dismissButton = {
+                TextButton(onClick = onClickLogged("discard_picks.keep") { logDialog("discard_picks", "keep"); askDiscard = false },
+                    Modifier.testTag("discard-keep")) { Text(stringResource(R.string.keep_picking)) }
+            },
+        )
     }
 }
 

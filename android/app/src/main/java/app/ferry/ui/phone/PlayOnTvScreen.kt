@@ -1,5 +1,6 @@
 package app.ferry.ui.phone
 
+import app.ferry.ui.common.PhoneTopBar
 import app.ferry.ui.common.onClickLogged
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.clickable
@@ -41,10 +42,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import android.os.SystemClock
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import app.ferry.R
+import app.ferry.net.ConnectionManager
+import app.ferry.net.RetrySchedule
+import kotlinx.coroutines.delay
 import app.ferry.cast.CastPhase
 import app.ferry.media.PickerMode
-import app.ferry.ui.common.rememberMediaGate
 import app.ferry.ui.nav.Navigator
 import app.ferry.ui.nav.Screen
 
@@ -88,9 +94,18 @@ fun PlayOnTvScreen(nav: Navigator, vm: CastViewModel) {
     val found by vm.found.collectAsState()
     val chosen by vm.chosen.collectAsState()
     val session by vm.session.collectAsState()
-    var target by remember { mutableStateOf(PickerMode.CastVideo) }
-    val gate = rememberMediaGate(onReady = { nav.push(Screen.Picker(target)) })
     LaunchedEffect(Unit) { vm.find() }
+    // M19: no TV found → look again quietly, 10 s for a minute, then every 60 s; fast again on resume.
+    val retry = remember { RetrySchedule(SystemClock.elapsedRealtime()) }
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { retry.reset(SystemClock.elapsedRealtime()) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(ConnectionManager.RETRY_TICK_MS)
+            val now = SystemClock.elapsedRealtime()
+            if (vm.finding.value || vm.chosen.value != null || vm.found.value.isNotEmpty()) retry.reset(now)
+            else if (retry.due(now)) vm.retryQuietly(retry.fired(now))
+        }
+    }
     BackHandler { nav.pop() }
 
     Box(Modifier.fillMaxSize()) {
@@ -99,10 +114,7 @@ fun PlayOnTvScreen(nav: Navigator, vm: CastViewModel) {
                 .padding(16.dp).testTag("play-on-tv"),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(stringResource(R.string.btn_play_tv), style = MaterialTheme.typography.headlineSmall, modifier = Modifier.weight(1f))
-                TextButton(onClick = onClickLogged("play_on_tv.back") { nav.pop() }) { Text(stringResource(R.string.back)) }
-            }
+            PhoneTopBar(stringResource(R.string.btn_play_tv), showBack = true)
             val s = session
             if (s != null && s.phase != CastPhase.Ended) {
                 Card(Modifier.fillMaxWidth().clickable(onClick = onClickLogged("play_on_tv.cast_now") { nav.push(Screen.Remote) }).testTag("cast-now")) {
@@ -139,14 +151,12 @@ fun PlayOnTvScreen(nav: Navigator, vm: CastViewModel) {
                 for ((mode, label) in listOf(PickerMode.CastVideo to R.string.cast_videos, PickerMode.CastPhotos to R.string.cast_photos)) {
                     Button(
                         onClick = onClickLogged(if (mode == PickerMode.CastVideo) "play_on_tv.videos" else "play_on_tv.photos") {
-                            target = mode
-                            gate.open()
+                            nav.push(Screen.Picker(mode)) // the picker shows the media banner with Fix if needed (U2)
                         },
                         modifier = Modifier.fillMaxWidth().heightIn(min = 64.dp),
                     ) { Text(stringResource(label), style = MaterialTheme.typography.titleMedium) }
                 }
             }
         }
-        gate.Overlay()
     }
 }

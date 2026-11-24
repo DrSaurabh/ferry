@@ -1,5 +1,6 @@
 package app.ferry.ui.phone
 
+import app.ferry.ui.common.PhoneTopBar
 import android.content.ClipData
 import android.content.Context
 import android.content.Intent
@@ -144,7 +145,7 @@ fun SettingsScreen(nav: Navigator, vm: SettingsViewModel = viewModel()) {
             .padding(16.dp).testTag("settings"),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Text(stringResource(R.string.btn_settings), style = MaterialTheme.typography.headlineMedium)
+        PhoneTopBar(stringResource(R.string.btn_settings), showBack = nav.stack.size > 1)
 
         Text(stringResource(R.string.settings_pc), style = MaterialTheme.typography.titleMedium)
         Row(verticalAlignment = Alignment.CenterVertically) {

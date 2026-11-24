@@ -54,8 +54,11 @@ class ConnectionManager(
     private val installedVersionCode: Long,
     private val update: MutableStateFlow<UpdateState>,
     private val log: (String) -> Unit,
-    /** 2.1 events: every locate (`disc`, Detailed) and each new result (`conn`) [L1]. */
-    private val onLocate: (result: String, ms: Long, changed: Boolean) -> Unit = { _, _, _ -> },
+    /** 2.1 events: every locate (`disc`, Detailed; `retry` = n for a quiet back-off retry, else 0) and each new result (`conn`) [L1]. */
+    private val onLocate: (result: String, ms: Long, changed: Boolean, retry: Int) -> Unit = { _, _, _, _ -> },
+    /** The TV keeps a fixed 10 s retry (mains power); the phone backs off (M19). */
+    private val fixedRetry: () -> Boolean = { false },
+    private val clock: () -> Long = { android.os.SystemClock.elapsedRealtime() },
     /** A locate found the PC (its `/info` answered): clock offset, log shipping (CP137). */
     private val onConnected: (PcInfo) -> Unit = {},
 ) {
@@ -66,11 +69,18 @@ class ConnectionManager(
     @Volatile private var started = 0
     @Volatile private var lastFinished = -1
 
+    /** M19: when the next quiet retry is due while a screen is visible and nothing was found. */
+    private val retry by lazy { RetrySchedule(clock(), fixed = fixedRetry()) }
+
+    /** Back to the fast first minute: screen resumed, "Try again", network change (M19). */
+    fun resetRetry() = retry.reset(clock())
+
     init {
         scope.launch {
             network.chosen.map { it?.network }.distinctUntilChanged().drop(1).collect {
                 // Only once the app has started locating (activity start), never from the process start alone.
                 if (started > 0) {
+                    resetRetry()
                     log("network changed → locate again")
                     relocate()
                 }
@@ -89,7 +99,7 @@ class ConnectionManager(
     @Volatile private var heldForTest = false
 
     /**
-     * Audit O16 [P8]: called every [AUTO_RETRY_MS] while a Ferry screen is visible. If the PC was not found (or there
+     * Audit O16 [P8]: called every [RETRY_TICK_MS] while a Ferry screen is visible; retries when the [RetrySchedule] says so (M19). If the PC was not found (or there
      * was no Wi-Fi), looks again **quietly**: the screen keeps saying "not found" (no flicker to "Looking…", an
      * address being typed is not disturbed) and changes only when the PC is there. So starting Ferry on the PC
      * after opening the app needs no "Try again".
@@ -97,7 +107,9 @@ class ConnectionManager(
     suspend fun retryIfNotFound() {
         val s = _state.value
         if (heldForTest || (s !is ConnectionState.NotFound && s != ConnectionState.NoWifi)) return
-        relocate(quiet = true)
+        val now = clock()
+        if (!retry.due(now)) return
+        relocate(quiet = true, retryNo = retry.fired(now))
     }
 
     /** The PC in use, or null. */
@@ -106,6 +118,7 @@ class ConnectionManager(
     /** Activity start (`onStart`) and "Try again". */
     fun refresh() {
         heldForTest = false
+        resetRetry()
         scope.launch { relocate() }
     }
 
@@ -115,7 +128,7 @@ class ConnectionManager(
     fun reportFailure() = refresh()
 
     /** Locates now (or waits for the locate in progress) and returns the PC's API, or null. */
-    suspend fun relocate(quiet: Boolean = false): FerryApi? {
+    suspend fun relocate(quiet: Boolean = false, retryNo: Int = 0): FerryApi? {
         val asked = started // a locate that begins from now on answers this request
         return lock.withLock {
             // Ph4 CI (B41): only a locate that *began after* the request may answer it; one already running
@@ -148,7 +161,7 @@ class ConnectionManager(
                     ConnectionState.NoWifi -> "no_wifi"
                     ConnectionState.Looking -> "looking"
                 },
-                System.currentTimeMillis() - t0, changed,
+                System.currentTimeMillis() - t0, changed, retryNo,
             )
             if (changed) log("locate: " + when (s) {
                 is ConnectionState.Connected -> "connected to ${s.name} at ${s.api.base} (Ferry ${s.info.version})"
@@ -189,7 +202,8 @@ class ConnectionManager(
     }
 
     companion object {
-        const val AUTO_RETRY_MS = 10_000L
+        /** How often the visible screen asks [retryIfNotFound]; the [RetrySchedule] decides whether a retry is due. */
+        const val RETRY_TICK_MS = 1_000L
     }
 
     private fun checkUpdate(api: FerryApi) {

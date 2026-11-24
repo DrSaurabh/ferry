@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -23,12 +22,6 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
-import app.ferry.ui.common.TapLog
-import app.ferry.ui.common.WrongDialog
 import app.ferry.ui.common.LogError
 import app.ferry.ui.common.onClickLogged
 import androidx.compose.material3.TextButton
@@ -61,7 +54,7 @@ import app.ferry.media.PickerMode
 import app.ferry.ui.common.MediaAccess
 import app.ferry.ui.common.PartialAccessBanner
 import app.ferry.ui.common.mediaAccess
-import app.ferry.ui.common.rememberMediaGate
+import app.ferry.ui.common.PhoneTopBar
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.Lifecycle
@@ -73,16 +66,9 @@ class HomeViewModel : ViewModel() {
     val connection = AppGraph.connection.state
     val update = AppGraph.update
     val transfer = AppGraph.transfers.state
-    val interrupted = AppGraph.interrupted
     val outbox = AppGraph.outbox
     val cast = AppGraph.casting.session
     fun tryAgain() = AppGraph.connection.refresh()
-
-    /** The user has seen the interrupted-transfer banner [A8]. */
-    fun dismissInterrupted() {
-        AppGraph.interrupted.value = 0
-        if (!AppGraph.transfers.busy) AppGraph.prefs.interruptedCount = 0
-    }
 }
 
 /**
@@ -96,7 +82,6 @@ fun HomeScreen(nav: Navigator, vm: HomeViewModel = viewModel()) {
     val conn by vm.connection.collectAsState()
     val update by vm.update.collectAsState()
     val transfer by vm.transfer.collectAsState()
-    val interrupted by vm.interrupted.collectAsState()
     val outbox by vm.outbox.collectAsState()
     val cast by vm.cast.collectAsState()
     // The From PC badge: the outbox is listed once per connection (From PC refreshes it every 5 s itself).
@@ -106,8 +91,6 @@ fun HomeScreen(nav: Navigator, vm: HomeViewModel = viewModel()) {
     Box(Modifier.fillMaxSize()) {
         // "Send other files (documents, APKs…)" [A19]: the system chooser (SAF), any type, several files.
         val flow = rememberSendFlow(onStarted = { nav.push(Screen.Transfer) })
-        // "Send photos & videos" (P3, P10): media permission flow first [A15], then the picker.
-        val gate = rememberMediaGate(onReady = { nav.push(Screen.Picker(PickerMode.Send)) })
         var access by remember { mutableStateOf<MediaAccess?>(null) }
         LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { access = mediaAccess(ctx) }
         val chooseFiles = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
@@ -119,13 +102,13 @@ fun HomeScreen(nav: Navigator, vm: HomeViewModel = viewModel()) {
                 .padding(16.dp).testTag("home"),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            // The one top bar (CP138): no Back on Home (Back leaves the app), Settings, ⋮ "Something's wrong".
+            PhoneTopBar(showBack = false, actions = {
+                TextButton(onClick = onClickLogged("home.settings") { nav.push(Screen.Settings) }) { Text(stringResource(R.string.btn_settings)) }
+            }) {
                 Text("Ferry", style = MaterialTheme.typography.headlineMedium, color = MaterialTheme.colorScheme.primary)
                 val pc = (conn as? ConnectionState.Connected)?.name
-                if (pc != null) Text("  → $pc", style = MaterialTheme.typography.titleMedium, maxLines = 1)
-                Spacer(Modifier.weight(1f))
-                TextButton(onClick = onClickLogged("home.settings") { nav.push(Screen.Settings) }) { Text(stringResource(R.string.btn_settings)) }
-                HomeOverflow()
+                if (pc != null) Text("  → $pc", style = MaterialTheme.typography.titleMedium, maxLines = 1, modifier = Modifier.weight(1f, fill = false))
             }
             Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -163,19 +146,8 @@ fun HomeScreen(nav: Navigator, vm: HomeViewModel = viewModel()) {
                     Text(stringResource(R.string.cast_now, c.tvName), Modifier.padding(16.dp), style = MaterialTheme.typography.titleMedium)
                 }
             }
-            if (interrupted > 0 && transfer == null) {
-                // After a kill: the vivo steps, prominently [A8]
-                Card(Modifier.fillMaxWidth().testTag("home-interrupted")) {
-                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text(LocalContext.current.resources.getQuantityString(R.plurals.interrupted, interrupted, interrupted), style = MaterialTheme.typography.titleMedium)
-                        Text(stringResource(R.string.vivo_steps), style = MaterialTheme.typography.bodyMedium)
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            OutlinedButton(onClick = onClickLogged("home.interrupted_settings") { nav.push(Screen.Settings) }) { Text(stringResource(R.string.btn_settings)) }
-                            TextButton(onClick = onClickLogged("home.interrupted_ok", vm::dismissInterrupted)) { Text(stringResource(R.string.ok)) }
-                        }
-                    }
-                }
-            }
+            // After the phone stopped a send: "Your phone stopped the send" (U9, M23).
+            if (transfer == null) StopCardView("home")
             for (label in listOf(R.string.btn_send_photos, R.string.btn_send_files, R.string.btn_from_pc, R.string.btn_play_tv)) {
                 val tapId = when (label) {
                     R.string.btn_send_files -> "home.send_files"
@@ -187,7 +159,8 @@ fun HomeScreen(nav: Navigator, vm: HomeViewModel = viewModel()) {
                     onClick = onClickLogged(tapId) {
                         when (label) {
                             R.string.btn_send_files -> chooseFiles.launch(arrayOf("*/*"))
-                            R.string.btn_send_photos -> gate.open()
+                            // The picker itself shows a banner with Fix when media access was refused (U2).
+                            R.string.btn_send_photos -> nav.push(Screen.Picker(PickerMode.Send))
                             R.string.btn_from_pc -> nav.push(Screen.FromPc)
                             else -> nav.push(Screen.PlayOnTv) // Ph9
                         }
@@ -201,29 +174,5 @@ fun HomeScreen(nav: Navigator, vm: HomeViewModel = viewModel()) {
             }
         }
         flow.Overlay()
-        gate.Overlay()
     }
-}
-
-/** Home's overflow (⋮, L4; every screen's top bar gets one in Ph13, CP138): "Something's wrong". */
-@Composable
-private fun HomeOverflow() {
-    var open by remember { mutableStateOf(false) }
-    var wrong by remember { mutableStateOf(false) }
-    Box {
-        TextButton(onClick = onClickLogged("home.overflow") { open = true }, Modifier.testTag("home-overflow")) {
-            Text("⋮", style = MaterialTheme.typography.titleLarge, modifier = Modifier.semantics { contentDescription = "More" })
-        }
-        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
-            DropdownMenuItem(
-                text = { Text(stringResource(R.string.wrong_menu)) },
-                onClick = onClickLogged("home.wrong") {
-                    open = false
-                    wrong = true
-                },
-                modifier = Modifier.testTag("menu-wrong"),
-            )
-        }
-    }
-    if (wrong) WrongDialog(TapLog.screen) { wrong = false }
 }

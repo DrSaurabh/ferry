@@ -1,5 +1,6 @@
 package app.ferry.ui.phone
 
+import app.ferry.ui.common.PhoneTopBar
 import app.ferry.ui.common.onClickLogged
 import android.content.ActivityNotFoundException
 import android.content.Context
@@ -139,7 +140,6 @@ fun FromPcScreen(nav: Navigator, vm: OutboxViewModel = viewModel()) {
     val waiting by vm.waiting.collectAsState()
     val installer = rememberInstallFlow()
     val scope = rememberCoroutineScope()
-    var asked by remember { mutableStateOf(false) }
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     val connected = conn as? ConnectionState.Connected
     LaunchedEffect(connected?.api) {
@@ -154,19 +154,15 @@ fun FromPcScreen(nav: Navigator, vm: OutboxViewModel = viewModel()) {
     val canDownload = DownloadSinks.supported
     val files = if (connected != null) outbox?.files.orEmpty() else emptyList()
     val start = { list: List<OutFile> ->
-        asked = true
         FromPcActions.download(ctx, list)
     }
     Column(
         Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing).padding(16.dp).testTag("from-pc"),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(stringResource(R.string.from_pc_title), style = MaterialTheme.typography.headlineSmall)
-            Spacer(Modifier.weight(1f))
+        PhoneTopBar(stringResource(R.string.from_pc_title), showBack = nav.stack.size > 1, actions = {
             TextButton(onClick = onClickLogged("from_pc.refresh") { scope.launch { vm.refresh() } }) { Text(stringResource(R.string.refresh)) }
-            if (nav.stack.size > 1) TextButton(onClick = onClickLogged("from_pc.back") { nav.pop() }) { Text(stringResource(R.string.back)) }
-        }
+        })
         if (connected == null) {
             Text(statusText(conn), style = MaterialTheme.typography.bodyLarge)
         } else if (canDownload) {
@@ -195,7 +191,6 @@ fun FromPcScreen(nav: Navigator, vm: OutboxViewModel = viewModel()) {
             }
         }
     }
-    if (asked) AskNotificationsOnce() // POST_NOTIFICATIONS when the first download starts [H23]
     installer.Overlay()
 }
 

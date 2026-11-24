@@ -247,6 +247,35 @@ check_screen_off() {
 
 # ---------- one test class ----------
 # Pass rule (plan §4.14 [PA16]): INSTRUMENTATION_CODE: -1 and an "OK (" line, and none of the failure marks.
+# pull_files SUBDIR DEST: copy the app's SUBDIR (screenshots, probe) to DEST/SUBDIR [CP16].
+# STORE=external: `adb pull` from the external files dir. STORE=internal (images where the shell may not
+# read Android/data, e.g. API 30 TV): `run-as` + tar from filesDir (debug APK).
+pull_files() {
+  local sub=$1 dest=$2 err
+  if [ "$STORE" = external ]; then
+    err=$(adb pull "$EXT/$sub" "$dest/" 2>&1) && { echo "adb pull $EXT/$sub"; return 0; }
+    echo "  (adb pull $EXT/$sub: $err)" >&2; return 1
+  fi
+  adb exec-out run-as "$PKG" tar -cf - -C files "$sub" | tar -xf - -C "$dest" && [ -e "$dest/$sub" ] &&
+    { echo "adb exec-out run-as $PKG tar -cf - -C files $sub"; return 0; }
+  return 1
+}
+# Ph13 (CP142, B135): SetupFlowTest needs a fresh install. The APK is reinstalled (uninstall + install, no -g): that
+# resets runtime permissions, app-ops and the battery exemption, which `pm clear` does not promise. The app's files
+# (screenshots, probe results of the classes so far) are saved first; the probe results are merged at the end.
+fresh_install() {
+  pull_files screenshots "$OUT" > /dev/null && log "fresh_install: screenshots so far saved"
+  mkdir -p "$TMP/pre-fresh" && pull_files probe "$TMP/pre-fresh" > /dev/null && log "fresh_install: probe results so far saved"
+  adb uninstall "$PKG" > /dev/null 2>&1
+  adb shell rm -rf "/sdcard/Android/data/$PKG" > /dev/null 2>&1
+  if adb install -r "$APKS/app-debug.apk" > /dev/null 2>&1; then log "fresh_install: app reinstalled (no permissions)"
+  else log "fresh_install: reinstall FAILED"; FAILED=1; fi
+}
+# Battery-optimisation allow-list (setup step 3; Ph15's staged job uses "on").
+idle_whitelist() {
+  case $1 in on) adbs dumpsys deviceidle whitelist "+$PKG" > /dev/null 2>&1 ;; *) adbs dumpsys deviceidle whitelist "-$PKG" > /dev/null 2>&1 ;; esac
+  log "idle_whitelist $1"
+}
 judge() {
   grep -q 'INSTRUMENTATION_CODE: -1' "$1" && grep -q '^OK (' "$1" &&
     ! grep -qE 'FAILURES!!!|INSTRUMENTATION_STATUS_CODE: -2|INSTRUMENTATION_FAILED|Process crashed' "$1"
@@ -334,19 +363,6 @@ while IFS='|' read -r cls before after <&3; do
 done 3< "$CI/suites/$suite.txt"
 
 # ---------- collect ----------
-# pull_files SUBDIR DEST: copy the app's SUBDIR (screenshots, probe) to DEST/SUBDIR [CP16].
-# STORE=external: `adb pull` from the external files dir. STORE=internal (images where the shell may not
-# read Android/data, e.g. API 30 TV): `run-as` + tar from filesDir (debug APK).
-pull_files() {
-  local sub=$1 dest=$2 err
-  if [ "$STORE" = external ]; then
-    err=$(adb pull "$EXT/$sub" "$dest/" 2>&1) && { echo "adb pull $EXT/$sub"; return 0; }
-    echo "  (adb pull $EXT/$sub: $err)" >&2; return 1
-  fi
-  adb exec-out run-as "$PKG" tar -cf - -C files "$sub" | tar -xf - -C "$dest" && [ -e "$dest/$sub" ] &&
-    { echo "adb exec-out run-as $PKG tar -cf - -C files $sub"; return 0; }
-  return 1
-}
 if [ "${OFFLINE:-0}" = 1 ]; then
   log "screenshots, probe files and logcat not collected: the emulator is offline"
 elif how=$(pull_files screenshots "$OUT"); then
@@ -357,6 +373,11 @@ else
 fi
 if [ "${OFFLINE:-0}" != 1 ]; then
   if how=$(pull_files probe "$OUT"); then cp "$OUT/probe/results.txt" "$OUT/probe-results.txt" 2>/dev/null; fi
+  # fresh_install (Ph13): the probe results written before the reinstall come first.
+  if [ -f "$TMP/pre-fresh/probe/results.txt" ]; then
+    cat "$TMP/pre-fresh/probe/results.txt" "$OUT/probe-results.txt" > "$OUT/probe-merged.txt" 2>/dev/null &&
+      mv "$OUT/probe-merged.txt" "$OUT/probe-results.txt"
+  fi
   timeout 120 adb logcat -d > "$OUT/logcat.txt" 2>&1 || true
 fi
 echo "----- app log lines (tag Ferry) in logcat ($suite) -----"

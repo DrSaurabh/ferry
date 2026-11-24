@@ -60,8 +60,21 @@ class PagedStream(private val pageSize: Int, private val fetch: (offset: Int, li
     }
 }
 
+/** What Back does in the picker (B1, U1, H59; PickerBackTest). */
+enum class PickerBack { CloseAlbum, AskDiscard, Leave }
+
 object PickerLogic {
     const val PAGE = 500
+
+    /**
+     * Back in the picker — top Back and system Back are the same path (H69): an open album → the album list;
+     * otherwise leaving, which asks "Discard N picks?" first when something is picked.
+     */
+    fun back(albumOpen: Boolean, picks: Int): PickerBack = when {
+        albumOpen -> PickerBack.CloseAlbum
+        picks > 0 -> PickerBack.AskDiscard
+        else -> PickerBack.Leave
+    }
 
     private val newestFirst = compareByDescending<MediaItem> { it.dateModifiedS }.thenByDescending { it.id }
 

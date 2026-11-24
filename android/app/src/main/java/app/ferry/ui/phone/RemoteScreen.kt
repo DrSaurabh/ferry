@@ -1,5 +1,6 @@
 package app.ferry.ui.phone
 
+import app.ferry.ui.common.PhoneTopBar
 import app.ferry.ui.common.onClickLogged
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
@@ -63,7 +64,6 @@ fun RemoteScreen(nav: Navigator, vm: CastViewModel) {
         AppGraph.casting.remoteVisible.incrementAndGet()
         onDispose { AppGraph.casting.remoteVisible.decrementAndGet() }
     }
-    AskNotificationsOnce() // the casting notification carries Pause / Next / Stop [H23]
     BackHandler { nav.pop() }
 
     Column(
@@ -71,10 +71,7 @@ fun RemoteScreen(nav: Navigator, vm: CastViewModel) {
             .padding(16.dp).testTag("remote"),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(stringResource(R.string.remote_title), style = MaterialTheme.typography.headlineSmall, modifier = Modifier.weight(1f))
-            TextButton(onClick = onClickLogged("remote.back") { nav.pop() }) { Text(stringResource(R.string.back)) }
-        }
+        PhoneTopBar(stringResource(R.string.remote_title), showBack = true)
         val s = session
         if (s == null) {
             Text(stringResource(R.string.remote_nothing), style = MaterialTheme.typography.bodyLarge)

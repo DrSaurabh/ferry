@@ -63,11 +63,12 @@ class MainActivity : ComponentActivity() {
         AppGraph.castReceiverOn = receiver
         if (receiver) lifecycle.addObserver(CastReceiverHost(this))
         if (savedInstanceState == null) openFrom(intent)
-        // "PC not found" looks again by itself while Ferry is on screen (audit O16).
+        // "PC not found" looks again by itself while Ferry is on screen (audit O16): phone 10 s for a minute, then
+        // 60 s, reset when Ferry comes to the front again (M19); the TV every 10 s.
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 while (true) {
-                    delay(ConnectionManager.AUTO_RETRY_MS)
+                    delay(ConnectionManager.RETRY_TICK_MS)
                     AppGraph.connection.retryIfNotFound()
                 }
             }
@@ -137,6 +138,11 @@ class MainActivity : ComponentActivity() {
         } catch (e: Exception) { // a service start refused: the Transfer screen has its own Retry button
             AppGraph.log("transfer", "Retry from the notification not started: $e")
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        AppGraph.connection.resetRetry() // M19: the fast first minute again
     }
 
     override fun onStart() {
