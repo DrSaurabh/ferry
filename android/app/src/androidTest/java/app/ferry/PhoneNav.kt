@@ -3,6 +3,7 @@ package app.ferry
 import androidx.lifecycle.ViewModelProvider
 import androidx.test.core.app.ActivityScenario
 import androidx.test.uiautomator.By
+import androidx.test.uiautomator.UiSelector
 import app.ferry.media.PickerMode
 import app.ferry.probe.Probe
 import app.ferry.ui.nav.Screen
@@ -53,14 +54,14 @@ object PhoneNav {
     /** Taps the top Back until [done] (the expected result) holds. */
     fun tapTopBack(done: () -> Boolean) {
         SendHelpers.settle() // the screen just pushed may still be replacing the previous one
-        SendHelpers.tapUntil("top Back", By.text(topBack), done)
+        SendHelpers.tapUntil("top Back", By.text(topBack), UiSelector().text(topBack), done)
     }
 
     /** Opens ⋮ (its "Something's wrong" item shows). */
     fun tapMore() {
         SendHelpers.settle()
         val item = ctx.getString(R.string.wrong_menu)
-        SendHelpers.tapUntil("⋮", By.desc(more)) { SendHelpers.device.hasObject(By.text(item)) }
+        SendHelpers.tapUntil("⋮", By.desc(more), UiSelector().description(more)) { SendHelpers.device.hasObject(By.text(item)) }
     }
 
     fun discardText(n: Int): String = ctx.resources.getQuantityString(R.plurals.discard_picks, n, n)

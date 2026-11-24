@@ -150,7 +150,7 @@ object SendHelpers {
      * afresh and taps the centre of its bounds as a real touch; up to 4 tries, each waiting 5 s for [done]. On failure
      * the focused window and a screenshot go to the job log.
      */
-    fun tapUntil(what: String, sel: androidx.test.uiautomator.BySelector, done: () -> Boolean) {
+    fun tapUntil(what: String, sel: androidx.test.uiautomator.BySelector, uiSel: androidx.test.uiautomator.UiSelector, done: () -> Boolean) {
         repeat(4) { i ->
             val o = device.wait(Until.findObject(sel), 10_000)
             if (o != null) {
@@ -158,7 +158,10 @@ object SendHelpers {
                     val r = o.visibleBounds
                     device.click(r.centerX(), r.centerY())
                 } catch (e: androidx.test.uiautomator.StaleObjectException) {
-                    Probe.record("stale_retry", "$what #${i + 1}")
+                    // Run 45498110424: the node went stale on every find; the older API reads the bounds at once.
+                    val r = runCatching { device.findObject(uiSel).bounds }.getOrNull()
+                    Probe.record("stale_retry", "$what #${i + 1} bounds=$r")
+                    if (r != null && !r.isEmpty) device.click(r.centerX(), r.centerY())
                 }
             }
             val end = System.currentTimeMillis() + 5_000
