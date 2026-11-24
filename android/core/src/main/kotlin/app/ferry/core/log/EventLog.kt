@@ -185,8 +185,27 @@ class EventLog(
                 val i = vals.indices.maxByOrNull { vals[it].length }!!
                 val v = vals[i]
                 if (v.length <= 1) return line.take(MAX_LINE_BYTES / 2) // pathological: hundreds of fields
-                vals[i] = v.take(maxOf(0, v.length - maxOf(over, 8) - 1)) + "…"
+                vals[i] = cutToBytes(v, v.toByteArray(Charsets.UTF_8).size - over - 3) + "…" // "…" = 3 bytes
             }
+        }
+
+        /** The longest prefix of [v] with at most [maxBytes] UTF-8 bytes (never splits a surrogate pair). */
+        private fun cutToBytes(v: String, maxBytes: Int): String {
+            var bytes = 0
+            var i = 0
+            while (i < v.length) {
+                val cp = v.codePointAt(i)
+                val n = when {
+                    cp < 0x80 -> 1
+                    cp < 0x800 -> 2
+                    cp < 0x10000 -> 3
+                    else -> 4
+                }
+                if (bytes + n > maxBytes) break
+                bytes += n
+                i += Character.charCount(cp)
+            }
+            return v.substring(0, i)
         }
 
         /** Tail line: values as given (searchable, PS3); `diag` as `diag <tag> <msg>` like 2.0's RingLog. */

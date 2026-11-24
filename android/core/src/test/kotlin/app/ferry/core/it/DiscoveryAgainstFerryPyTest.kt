@@ -52,7 +52,7 @@ class DiscoveryAgainstFerryPyTest {
         assertEquals("127.0.0.1", p.host)
         assertEquals("reply carries the TCP port [B16]", pc.base.port, p.port)
         assertEquals(2, p.protocol)
-        assertEquals("2.0.0", p.version)
+        assertEquals("2.1.0", p.version)
 
         val store = Store()
         val locator = PcLocator({ FerryClient(http, it) }, client, store, log = { println("[locator] $it") })
