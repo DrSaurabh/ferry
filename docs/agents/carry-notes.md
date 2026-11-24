@@ -40,3 +40,20 @@
 - Test-only hooks in product code: `ConnectionManager.showForTest`, `Casting.showForTest`, `InstallFlow.mainFocused` (B84).
 - Real-device items: `pc/DEVICE-CHECKLIST.txt` (user) and `docs/v2-handoff.md` §6.
 
+
+# 2.1
+## From Ph11a (for Ph11b and later)
+- `EventLog` exists in `:core` but nothing writes through it yet: `AppGraph` still creates `RingLog` on
+  `files/ferry-app-log.txt` (2.0 line format; rotation `.txt.1`). Ph11b: `EventLog(filesDir, …,
+  LogStateStore(File(filesDir, EventLog.STATE_FILE_NAME)))` takes over the same file name; old 2.0 lines in it have
+  no `#seq` and are skipped by `LogReader`/the PC; `SettingsScreen` share-log uses `ringLog.previousFile` (2.0
+  name `ferry-app-log.txt.1`) → switch to `EventLog.previousFile` (`ferry-app-log.1.txt`). Decide `RingLog`'s fate (B106).
+- `FerryHttp.newClient(…, deviceId, deviceType)`: `NetworkBinder` must pass `Prefs.installId` (4 hex) and
+  `"phone"`/`"tv"` once Ph11b adds `installId`.
+- Ship with `LogReader(filesDir).linesAfter(eventLog.shipped)` → `api.postLogs(chunk.fromSeq, chunk.body)` →
+  `eventLog.markShipped(reply.lastSeq)`; `FerryException.LogsUnsupported` → off for the process; log
+  `clock peer=pc offset_ms=` from `reply.timeMs` / `PcInfo.timeMs`.
+- Host check for LogShippingTest / TV: suite "after" step `check_device_log A send.done` / `check_device_log T device_name`
+  (wraps `verify_inbox.py device-log`, B104). Logs come out of CI with `python3 android/ci/shots_from_log.py --logs job.log OUT`.
+- `EventLog` tail keeps `diag` as `diag <tag> <msg>` (B107), so 2.0 androidTests that search `ringLog.snapshot()`
+  keep matching once the shim is in.
