@@ -42,7 +42,7 @@ class BackEverywhereTest {
                     PhoneNav.waitScreen(sc, s)
                     SendHelpers.settle()
                     PhoneNav.waitOverflow(s.logName)
-                    if (how == "top") PhoneNav.tapTopBack() else d.pressBack()
+                    if (how == "top") PhoneNav.tapTopBack { PhoneNav.screen(sc) == Screen.Home } else d.pressBack()
                     PhoneNav.waitScreen(sc, Screen.Home, "$how Back from ${s.logName} → Home")
                     Probe.record("back_ok", "$how ${s.logName} → home")
                 }
@@ -62,7 +62,7 @@ class BackEverywhereTest {
             SendHelpers.clickDesc("PICK_B1.jpg")
             PhoneNav.waitSelection(sc, "PICK_A1.jpg", "PICK_B1.jpg")
 
-            PhoneNav.tapTopBack() // album → album list
+            PhoneNav.tapTopBack { vm.openAlbum.value == null } // album → album list
             SendHelpers.waitUntil("top Back: album list", 10_000) { vm.openAlbum.value == null && vm.albumsTab.value }
             assertEquals(picker, PhoneNav.screen(sc))
             PhoneNav.waitSelection(sc, "PICK_A1.jpg", "PICK_B1.jpg")
@@ -93,7 +93,7 @@ class BackEverywhereTest {
             SendHelpers.waitUntil("dialog closed", 5_000) { !d.hasObject(By.text(PhoneNav.discardText(2))) }
             assertEquals(picker, PhoneNav.screen(sc))
             PhoneNav.waitSelection(sc, "PICK_A1.jpg", "PICK_B1.jpg")
-            PhoneNav.tapTopBack()
+            PhoneNav.tapTopBack { d.hasObject(By.text(PhoneNav.discardText(2))) }
             SendHelpers.waitText(PhoneNav.discardText(2))
             SendHelpers.tap(ctx.getString(R.string.discard))
             PhoneNav.waitScreen(sc, Screen.Home, "Discard → Home")

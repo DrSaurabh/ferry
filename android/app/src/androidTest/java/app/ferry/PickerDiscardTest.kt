@@ -43,7 +43,7 @@ class PickerDiscardTest {
             assertEquals(picker, PhoneNav.screen(sc))
             PhoneNav.waitSelection(sc, "PICK_A2.jpg", "PICK_A3.jpg")
 
-            PhoneNav.tapTopBack()
+            PhoneNav.tapTopBack { d.hasObject(By.text(PhoneNav.discardText(2))) }
             SendHelpers.waitText(PhoneNav.discardText(2))
             SendHelpers.tap(ctx.getString(R.string.discard))
             PhoneNav.waitScreen(sc, Screen.Home, "Discard → Home")

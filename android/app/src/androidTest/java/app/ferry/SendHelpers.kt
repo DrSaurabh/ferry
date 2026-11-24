@@ -145,25 +145,32 @@ object SendHelpers {
     }
 
     /**
-     * Finds and clicks [sel]; a node that went stale between find and click (main run 45489801982: the top Back on
-     * Transfer and Home's ⋮ stayed stale for every re-find) is clicked through the older `UiObject` API instead
-     * ([fallback]), which looks the node up again at the moment of the click.
+     * Taps [sel] until [done] holds (Ph13, B141/B142): after leaving Settings, the next screen's top Back / ⋮ node
+     * stayed stale or its click got no answer for a while (runs 45489801982, 45494643731). Each try finds the node
+     * afresh and taps the centre of its bounds as a real touch; up to 4 tries, each waiting 5 s for [done]. On failure
+     * the focused window and a screenshot go to the job log.
      */
-    fun clickFresh(what: String, sel: androidx.test.uiautomator.BySelector, fallback: androidx.test.uiautomator.UiSelector, timeoutMs: Long = 10_000) {
-        val o = checkNotNull(device.wait(Until.findObject(sel), timeoutMs)) { "no $what on screen" }
-        try {
-            o.click()
-            return
-        } catch (e: androidx.test.uiautomator.StaleObjectException) {
-            Probe.record("stale_retry", "$what: UiObject click")
+    fun tapUntil(what: String, sel: androidx.test.uiautomator.BySelector, done: () -> Boolean) {
+        repeat(4) { i ->
+            val o = device.wait(Until.findObject(sel), 10_000)
+            if (o != null) {
+                try {
+                    val r = o.visibleBounds
+                    device.click(r.centerX(), r.centerY())
+                } catch (e: androidx.test.uiautomator.StaleObjectException) {
+                    Probe.record("stale_retry", "$what #${i + 1}")
+                }
+            }
+            val end = System.currentTimeMillis() + 5_000
+            while (System.currentTimeMillis() < end) {
+                if (done()) return
+                Thread.sleep(100)
+            }
+            Probe.record("tap_retry", "$what #${i + 1} found=${o != null}")
         }
-        repeat(3) { i ->
-            val u = device.findObject(fallback)
-            if (u.waitForExists(timeoutMs) && u.click()) return
-            Probe.record("stale_retry", "$what: UiObject click #${i + 1} failed")
-            Thread.sleep(500)
-        }
-        throw AssertionError("$what could not be clicked")
+        Probe.record("tap_failed", "$what; focus=" + shell("dumpsys window").lineSequence().filter { it.contains("mCurrentFocus") || it.contains("mFocusedApp") }.joinToString(" | ").trim())
+        runCatching { Shots.take("fail-tap-" + what.filter { it.isLetterOrDigit() }.take(20)) }
+        throw AssertionError("tapping $what had no effect")
     }
 
     /** Engine runs that have finished so far (each logs "finished: Summary(…)"), to wait for the next one. */

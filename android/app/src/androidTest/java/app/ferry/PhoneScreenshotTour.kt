@@ -100,9 +100,9 @@ class PhoneScreenshotTour {
 
             // ---- Ph11b (L4): Home ⋮ → "Something's wrong" → the dialog; Skip writes the marker.
             go(sc, Screen.Home)
-            // Ph13: Settings has a ⋮ too now, so the find can catch it while Home replaces it (stale) → clickFresh.
+            // Ph13: Settings has a ⋮ too now, so the find can catch it while Home replaces it (stale) → tapUntil.
             SendHelpers.settle()
-            SendHelpers.clickFresh("⋮", By.desc("More"), androidx.test.uiautomator.UiSelector().description("More"))
+            SendHelpers.tapUntil("⋮", By.desc("More")) { SendHelpers.device.hasObject(By.text(ctx.getString(R.string.wrong_menu))) }
             SendHelpers.tap(ctx.getString(R.string.wrong_menu))
             SendHelpers.waitText(ctx.getString(R.string.wrong_title))
             shot("wrong-dialog")
