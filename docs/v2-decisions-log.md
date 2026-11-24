@@ -89,3 +89,17 @@ User-given permissions: use GitHub Actions minutes freely; self-approve stages; 
 | H74 | A2 | Every tappable control carries a log id, enforced by a unit test | L1 completeness for log review | §7.1 |
 | H75 | A2 | PC prints the "can't connect" tip only after an observed failed attempt; QR only until the first phone; keys A (QR) and Z (zip logs) | F13/F15/L7 | §8 |
 | H76 | A2 | Device name: DEVICE_NAME → bluetooth_name → "Maker Model"; optional rename in phone Settings | F6 ("V2413") | §10 |
+| H77 | A3 | Portrait video: keep TextureView, log rotation facts, ship a tested manual-rotation fallback behind one switch; B3 is judged from the first real Fire TV log (the emulator can't show the bug) | Emulator decoders rotate correctly; only the stick shows the fault | design M2 |
+| H78 | A3 | Waiting sends are checked about every 15 min on Wi-Fi (requirement P14 corrected: Android has no reliable "network change" trigger) | Platform fact; honest notification text | M5 |
+| H79 | A3 | Every phone cast ends after 10 min with nothing playing; wake/Wi-Fi locks only while a video plays | User's battery rule (F24, V8) | M17 |
+| H80 | A3 | Logs carry an intent→outcome catalogue, request ids, clock offsets and key source (remote/phone) so the review script can judge real use | F30 testing-by-logs needs it (V11) | M18 |
+| H81 | A3 | Dropped the phone "follow-only" service for PC-sourced TV playback; lock-screen controls only for phone casts | Lighter (V8, V12); controller screen covers it | M17 (supersedes part of H66) |
+| H82 | A3 | Controller touch pad gets edge arrows + centre OK; one-finger drag pans when zoomed; compact layout with no scrolling | R2/R8, non-developer use | M20 |
+| H83 | A3 | One "TV" button on phone Home replaces "Play on TV" + "TV remote"; opens the controller (Browse first when the TV is idle) | One entry, one controller (V12, R1/R11) — **user may prefer the old Play on TV button; review** | M21 |
+| H84 | A3 | TV Menu items depend on the screen; Menu also on TV home/cast screens; "Something's wrong" in phone notifications | V7, L4 | M22 |
+| H85 | A3 | Last setup screen shows the phone's name for the PC with "Change" (one optional typing) | F6: the 2.0 name chain already gave "V2413" | M23 |
+| H86 | A3 | Share: name+size match also needs the same date taken; "location may have been removed" note only with evidence | Never send the wrong photo (V1); honest message (V5) | M4 |
+| H87 | A3 | "Your phone stopped the send" card shows vivo steps only on vivo phones, generic otherwise | Friends' phones (V13) | M23 |
+| H88 | A3 | After 3 days waiting: one "Keep waiting / Cancel" notification; unanswered → background checks stop, the send stays and resumes when Ferry is opened | V8 battery, V6 nothing thrown away | M5 |
+| H89 | A3 | PC always logs in full detail (no setting) | Simplest (V12); L2 PC part | M18 |
+| H90 | A3 | Review-script rules renamed G1–G11 (clashed with controller IDs R1–R11) | Clarity | M18 |
