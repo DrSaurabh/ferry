@@ -9,8 +9,8 @@ import ferry
 def test_zip_logs(tmp_path):
     logs = tmp_path / "logs"
     (logs / "vivo V2413 (a3f9)").mkdir(parents=True)
-    (logs / "ferry-log.txt").write_text("pc line\n", encoding="utf-8")
-    (logs / "vivo V2413 (a3f9)" / "app-log.txt").write_text("phone line\n", encoding="utf-8")
+    (logs / "ferry-log.txt").write_bytes(b"pc line\n")
+    (logs / "vivo V2413 (a3f9)" / "app-log.txt").write_bytes(b"phone line\n")
     (logs / "ferry-logs-20200101-000000.zip").write_bytes(b"old zip")
     now = time.mktime((2026, 11, 24, 9, 5, 7, 0, 0, -1))
     path = ferry.zip_logs(str(logs), now)
