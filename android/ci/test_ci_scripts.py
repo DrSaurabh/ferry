@@ -378,3 +378,54 @@ def test_shots_from_log_end_line_with_byte_order_mark():
            "2026-11-16T11:32:50.4898708Z %s\n" % base64.b64encode(png).decode(),
            "﻿2026-11-16T11:32:51.7433364Z FERRY_PNG_END\n"]
     assert list(shots_from_log.extract(log)) == [("screenshots/tv/tv-player-controller.png", png)]
+
+
+# ---------- 2.1 logs in the job log (Ph11a, CP110, CP134) ----------
+def _print_logs_output(tmp_path):
+    """Runs run_instrumented.sh's print_logs function on a fake $TMP with one PC's data/logs folder."""
+    import subprocess
+    src = open(os.path.join(HERE, "run_instrumented.sh"), encoding="utf-8").read()
+    start = src.index("print_logs() {")
+    func = src[start:src.index("\n}\n", start) + 3]
+    script = 'TMP="%s"\n%s\nprint_logs\n' % (tmp_path / "tmp", func)
+    return subprocess.run(["bash", "-c", script], capture_output=True, text=True, check=True).stdout
+
+
+def test_logs_printed_and_extracted(tmp_path):
+    import shots_from_log
+    logs = tmp_path / "tmp" / "A" / "data" / "logs"
+    (logs / "vivo V2413 (a3f9)").mkdir(parents=True)
+    pc_log = "2026-11-24 02:01:03.456\t-\t-\tEVENT\t-\t-\t-\t-\t-\tFerry 2.1.0 started\t-\n" * 50
+    app_log = "2026-11-24 02:01:03.456 #1 s=7f3a send.done batch=3f2a sent=1\n"
+    (logs / "ferry-log.txt").write_text(pc_log, encoding="utf-8")
+    (logs / "vivo V2413 (a3f9)" / "app-log.txt").write_text(app_log, encoding="utf-8")
+    out = _print_logs_output(tmp_path)
+    assert "FERRY_LOG_BEGIN A/logs/ferry-log.txt" in out
+    stamped = ["2026-11-24T08:00:00.0000000Z " + l + "\n" for l in out.splitlines()]
+    got = dict(shots_from_log.extract(stamped, "LOG"))
+    assert got == {"A/logs/ferry-log.txt": pc_log.encode(), "A/logs/vivo V2413 (a3f9)/app-log.txt": app_log.encode()}
+    f = tmp_path / "job.log"
+    f.write_text("".join(stamped), encoding="utf-8")
+    assert shots_from_log.main(["x", "--logs", str(f), str(tmp_path / "out")]) == 0
+    assert (tmp_path / "out" / "A" / "logs" / "vivo V2413 (a3f9)" / "app-log.txt").read_text() == app_log
+    assert list(shots_from_log.extract(stamped)) == []          # PNG mode ignores log blocks
+
+
+def test_suite_reads_the_pc_log_in_logs_folder():
+    src = open(os.path.join(HERE, "run_instrumented.sh"), encoding="utf-8").read()
+    assert '"$TMP/A/data/logs/ferry-log.txt"' in src and "data/ferry-log.txt" not in src
+
+
+def test_verify_device_log(tmp_path):
+    import ferry
+    store = ferry.DeviceLogStore(str(tmp_path), is_win=False)
+    store.append("vivo V2413", "a3f9", 1, "2026-11-24 02:01:03.456 #1 s=7f3a app.start ver=2.1.5\n"
+                 "2026-11-24 02:01:04.456 #2 s=7f3a send.done batch=3f2a\n")
+    store.append("Fire TV", "77aa", 1, "2026-11-24 02:01:03.456 #1 s=0b0b device_name name=\"Fire TV 77aa\" src=model\n")
+    ok, text = verify_inbox.check_device_log(str(tmp_path), ["send.done"])
+    assert ok and "vivo V2413 (a3f9)" in text
+    assert verify_inbox.check_device_log(str(tmp_path), ["device_name"], device="Fire TV")[0]
+    assert not verify_inbox.check_device_log(str(tmp_path), ["device_name"], device="vivo")[0]
+    assert not verify_inbox.check_device_log(str(tmp_path), ["send.done", "tap"])[0]
+    assert not verify_inbox.check_device_log(str(tmp_path / "missing"), ["tap"])[0]
+    assert verify_inbox.main(["device-log", "--logs", str(tmp_path), "--expect", "app.start,send.done"]) == 0

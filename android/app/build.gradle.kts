@@ -11,7 +11,7 @@ plugins {
 val ferryRelease = System.getenv("FERRY_RELEASE") == "1"
 val ferryRun = System.getenv("FERRY_RUN_NUMBER")?.toIntOrNull()
 val ferryVersionCode = if (ferryRelease && ferryRun != null) 20000 + ferryRun else 1
-val ferryVersionName = if (ferryRelease && ferryRun != null) "2.0.$ferryRun" else "2.0.0-dev"
+val ferryVersionName = if (ferryRelease && ferryRun != null) "2.1.$ferryRun" else "2.1.0-dev"
 
 // Release signing [H38]: the keystore is committed ENCRYPTED (android/signing/ferry-release.jks.enc).
 // CI decrypts it before the build; the passphrase (also store/key password) is the repository

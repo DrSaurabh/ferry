@@ -201,8 +201,8 @@ def test_main_starts_and_stops_quickly(tmp_path, monkeypatch):
     assert not t.is_alive() and rc["v"] == 0
     assert time.time() - t0 < 3
     assert os.path.isdir(tmp_path / "Downloads" / "Phone") and os.path.isdir(tmp_path / "Desktop" / "Ferry outbox")
-    log = (tmp_path / ferry.LOG_NAME).read_text(encoding="utf-8")
-    assert "Ferry 2.0.0 started" in log and "Ferry stopped" in log
+    log = (tmp_path / ferry.LOGS_DIR_NAME / ferry.LOG_NAME).read_text(encoding="utf-8")
+    assert "Ferry 2.1.0 started" in log and "Ferry stopped" in log
 
 
 def test_message_catalogue_present():

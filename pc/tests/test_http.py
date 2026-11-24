@@ -18,8 +18,9 @@ def test_page_and_info(srv):
     assert b"{{" not in d
     st, j = srv.json("GET", "/api/v1/info")
     assert st == 200 and j["app"] == "ferry" and j["protocol"] == 2
-    assert j["capabilities"] == ["receive", "outbox", "check_batch", "app_update", "discovery"]
-    assert j["app_version_code"] is None and j["version"] == "2.0.0"
+    assert j["capabilities"] == ["receive", "outbox", "check_batch", "app_update", "discovery", "logs"]
+    assert j["app_version_code"] is None and j["version"] == "2.1.0"
+    assert abs(j["time_ms"] - time.time() * 1000) < 60_000       # 2.1 clock offset (M18)
     assert j["inbox_label"] == "Downloads/Phone"
     assert str(srv.inbox) not in json.dumps(j)     # no full paths [U18]
     assert isinstance(j["free_bytes"], int)

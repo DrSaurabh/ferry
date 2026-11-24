@@ -1,13 +1,13 @@
 # Ferry Android CI (plan §5.2). NEVER rename this file: versionCode = 20000 + its run number [H26].
 # Branch pushes run the fast jobs only; emulator suites run on main, on a manual run, or on a branch
 # when the head commit message carries [emu] / [emu:phone] / [emu:tv] / [emu:api25] [H28] [CP18].
-# On main, `package` builds the PC zip with the APK (artifact Ferry-2.0.<n>, or -UNVERIFIED unless all three
+# On main, `package` builds the PC zip with the APK (artifact Ferry-2.1.<n>, or -UNVERIFIED unless all three
 # emulator suites passed [CP19]) and `dist` commits a verified zip + APK to the orphan branch `dist` (B38).
 name: android
 on:
   push:
     branches-ignore: [dist]
-    paths: ["android/**", "pc/**", ".github/workflows/android.yml"]
+    paths: ["android/**", "pc/**", "tools/**", "docs/v2.1-log-events.md", "docs/guide/**", "LICENSE", ".github/workflows/android.yml"]
   workflow_dispatch:
     inputs:
       emulators:
@@ -91,7 +91,7 @@ jobs:
         run: |
           BT=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
           echo "build-tools: $BT"
-          if [ "$FERRY_RELEASE" = 1 ]; then CODE=$((20000 + FERRY_RUN_NUMBER)); NAME="2.0.$FERRY_RUN_NUMBER"; else CODE=1; NAME=2.0.0-dev; fi
+          if [ "$FERRY_RELEASE" = 1 ]; then CODE=$((20000 + FERRY_RUN_NUMBER)); NAME="2.1.$FERRY_RUN_NUMBER"; else CODE=1; NAME=2.1.0-dev; fi
           APK=android/app/build/outputs/apk/release/app-release.apk
           mkdir -p out/ferry-apk out/test-apks
           "$BT/aapt2" dump xmltree --file AndroidManifest.xml "$APK" > out/manifest.txt

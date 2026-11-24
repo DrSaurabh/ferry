@@ -26,7 +26,11 @@ mkdir -p "$OUT" "$TMP"
 PIDS=()
 cleanup() {
   for p in "${PIDS[@]}"; do kill "$p" 2>/dev/null; done
-  for d in "$TMP"/*/; do cp "$d"data/ferry-*.txt "$d"data/ferry-*.log "$OUT/" 2>/dev/null; done
+  for d in "$TMP"/*/; do
+    cp "$d"data/ferry-*.txt "$d"data/ferry-*.log "$OUT/" 2>/dev/null
+    # 2.1 (CP110, CP134): the PC log and the shipped phone/TV logs live in data/logs/
+    if [ -d "$d"data/logs ]; then mkdir -p "$OUT/logs-$(basename "$d")" && cp -r "$d"data/logs/. "$OUT/logs-$(basename "$d")/" 2>/dev/null; fi
+  done
   true
 }
 trap cleanup EXIT
@@ -212,13 +216,16 @@ check_negative() { verify redacted --inbox "$TMP/B/inbox" --name "$GPS_NAME" --f
 check_original() {
   sleep 1 # the PC writes its request log on a background thread
   verify identical --inbox "$TMP/A/inbox" --name "$GPS_NAME" --fixture "$CI/fixtures/gps.jpg" --mtime-s "$(date_modified "$GPS_NAME")" --label PC-A
-  verify uploads --log "$TMP/A/data/ferry-log.txt" --name "$GPS_NAME" --expect saved,skipped --label PC-A
+  verify uploads --log "$TMP/A/data/logs/ferry-log.txt" --name "$GPS_NAME" --expect saved,skipped --label PC-A
 }
 # Stage 7 (audit O1): the photo shared with "Allow" reached PC-U as the original.
 check_share_original() {
   sleep 1
   verify identical --inbox "$TMP/U/inbox" --name "$SHARE_GPS_NAME" --fixture "$CI/fixtures/gps.jpg" --mtime-s "$(date_modified "$SHARE_GPS_NAME")" --label PC-U
 }
+# 2.1 (Ph11a, used from Ph11b): PC NAME holds a shipped device log with these events (comma list), e.g.
+#   check_device_log A send.done     check_device_log T device_name
+check_device_log() { sleep 2; verify device-log --logs "$TMP/$1/data/logs" --expect "$2" --label "PC-$1"; }
 check_no_partials() { sleep 2; verify no-partials --inbox "$TMP/$1/inbox" --label "PC-$1"; }
 # Ph5b: the three files the share helper sent (android/sharehelper ShareActivity.FILES) arrived byte-identical.
 check_share() {
@@ -361,6 +368,21 @@ grep 'FERRY_PROBE' "$OUT/logcat.txt" | sed 's/^.*FERRY_PROBE[^:]*: //'
 find "$OUT" -name '*.png' | sort | while read -r png; do
   echo "FERRY_PNG_BEGIN ${png#$OUT/}"; base64 -w 0 "$png"; echo; echo "FERRY_PNG_END"
 done
+
+# 2.1 (CP134 [PS9]): every PC's logs folder (its ferry-log.txt and the phone/TV app-log.txt it received) goes
+# into the job log too, gzip + base64 between "FERRY_LOG_BEGIN <PC>/logs/<path>" and "FERRY_LOG_END";
+# `shots_from_log.py --logs JOB.log OUTDIR` turns them back into files.
+print_logs() {
+  local d name f
+  for d in "$TMP"/*/; do
+    name=$(basename "$d")
+    [ -d "$d"data/logs ] || continue
+    find "$d"data/logs -type f -name '*.txt' | sort | while read -r f; do
+      echo "FERRY_LOG_BEGIN $name/logs/${f#"$d"data/logs/}"; gzip -c "$f" | base64 -w 0; echo; echo "FERRY_LOG_END"
+    done
+  done
+}
+print_logs
 
 echo "----- probe results ($suite) -----"
 cat "$OUT/probe-results.txt" 2>/dev/null

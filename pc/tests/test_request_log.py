@@ -310,7 +310,7 @@ def test_start_stop_events(tmp_path):
     p = start_ferry_process(tmp_path, "--port", "0", "--discovery-port", "off")
     try:
         lines = await_log(p.port, p.log_path)
-        assert "Ferry 2.0.0 started (port %d" % p.port in lines[0]
+        assert "Ferry 2.1.0 started (port %d" % p.port in lines[0]
     finally:
         p.close()
 
@@ -323,8 +323,11 @@ def test_stop_event_written_by_main(tmp_path, monkeypatch):
     monkeypatch.setattr(ferry, "DATA_DIR", ferry.DATA_DIR)       # main() sets it; restore afterwards
     t = threading.Thread(target=ferry.main, args=(args,), kwargs={"stop_event": stop})
     t.start()
-    assert wait_for(lambda: (tmp_path / "d" / ferry.LOG_NAME).exists())
-    stop.set()
-    t.join(5)
-    text = (tmp_path / "d" / ferry.LOG_NAME).read_text(encoding="utf-8")
-    assert "Ferry 2.0.0 started" in text and "Ferry stopped" in text
+    log = tmp_path / "d" / ferry.LOGS_DIR_NAME / ferry.LOG_NAME      # 2.1: logs/ [CP110]
+    try:
+        assert wait_for(lambda: log.exists())
+    finally:
+        stop.set()
+        t.join(5)
+    text = log.read_text(encoding="utf-8")
+    assert "Ferry 2.1.0 started" in text and "Ferry stopped" in text

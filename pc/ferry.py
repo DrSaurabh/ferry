@@ -55,9 +55,9 @@ except Exception:  # missing, or incompatible: run without a QR code
 # Constants
 # =============================================================================================
 
-VERSION = "2.0.0"
+VERSION = "2.1.0"
 PROTOCOL = 2
-CAPABILITIES = ["receive", "outbox", "check_batch", "app_update", "discovery"]
+CAPABILITIES = ["receive", "outbox", "check_batch", "app_update", "discovery", "logs"]
 DEFAULT_PORT = 8765
 CHUNK = 1 << 20                  # 1 MiB
 SOCKET_TIMEOUT = 60              # seconds of silence before a connection is dropped
@@ -70,7 +70,7 @@ WATCH_INTERVAL = 1.0
 WATCHDOG_SECONDS = 60
 IS_WIN = os.name == "nt"
 HERE = os.path.dirname(os.path.abspath(__file__))
-DATA_DIR = HERE                  # ferry-state.json, ferry-error.log, ferry-selftest.txt, ferry-log*.txt;
+DATA_DIR = HERE                  # ferry-state.json, ferry-error.log, ferry-selftest.txt, logs/ (2.1);
                                  # set once by main() from the hidden --data-dir flag
 STATE_NAME = "ferry-state.json"
 ERROR_LOG_NAME = "ferry-error.log"
@@ -89,6 +89,16 @@ LOG_HARD_CAP = 10 << 20
 LOG_QUEUE_MAX = 10000
 LOG_POLL_FLUSH_S = 600
 LOG_DISCOVERY_EVERY_S = 60
+LOGS_DIR_NAME = "logs"           # 2.1 (M12, CP110): <data-dir>/logs holds ferry-log*.txt and the device logs
+DEVICE_LOG_NAME = "app-log.txt"
+DEVICE_LOG_OLD_NAME = "app-log.1.txt"
+DEVICE_LOG_SEQ_NAME = ".last-seq"
+DEVICE_LOG_MAX = 20 << 20        # per device, x2 with the rotated file
+LOGS_TOTAL_CAP = 200 << 20       # whole logs folder
+LOG_UPLOAD_MAX = 512 << 10       # one POST /api/v1/logs body
+DEVICE_ID_HEADER = "X-Ferry-Device-Id"
+DEVICE_TYPE_HEADER = "X-Ferry-Device-Type"
+LOG_FROM_HEADER = "X-Ferry-Log-From"
 APP_DIR = os.path.join(HERE, "app")
 APK_NAME = "Ferry.apk"
 APK_JSON = "Ferry.apk.json"
@@ -1674,6 +1684,134 @@ class RequestLog:
         self._close()
 
 
+def migrate_old_logs(data_dir: str, note: Callable[[str], None], replace=os.replace) -> str:
+    """2.1 (M12, CP110): moves 2.0's ferry-log.txt / ferry-log.1.txt from the data folder into <data>/logs.
+    Returns the folder the request log should use: logs/, or the old place when a move failed (one note)."""
+    logs = os.path.join(data_dir, LOGS_DIR_NAME)
+    try:
+        os.makedirs(logs, exist_ok=True)
+    except OSError as e:
+        note("Can't create the logs folder (%s); ferry-log.txt stays next to ferry.py." % (e.strerror or e))
+        return data_dir
+    for name in (LOG_NAME, LOG_OLD_NAME):
+        src, dst = os.path.join(data_dir, name), os.path.join(logs, name)
+        if not os.path.isfile(src) or os.path.exists(dst):
+            continue
+        try:
+            replace(src, dst)
+        except OSError as e:
+            note("Can't move %s into the logs folder (%s); it stays next to ferry.py." % (name, e.strerror or e))
+            return data_dir
+    return logs
+
+
+RX_EVENT_SEQ = re.compile(r"^\S+ \S+ #(\d{1,18}) ")
+RX_DEVICE_ID = re.compile(r"^[0-9a-fA-F]{1,16}$")
+
+
+class DeviceLogStore:
+    """Phone/TV logs shipped with POST /api/v1/logs (design §7.2-7.3, M8, M12; plan §2.3):
+    <logs>/<sanitize_name("<name> (<id>)")>/app-log.txt (+ app-log.1.txt), the last stored seq in .last-seq
+    (repeats are dropped), and a cap on the whole logs folder (oldest rotated files go first; never a zip, never
+    a file being written). Thread-safe; disk errors become OSError for the handler."""
+
+    def __init__(self, logs_dir: str, is_win: bool = IS_WIN, max_bytes: int = DEVICE_LOG_MAX,
+                 total_cap: int = LOGS_TOTAL_CAP, protected: Tuple[str, ...] = (LOG_NAME,)):
+        self.dir = logs_dir
+        self.is_win = is_win
+        self.max_bytes, self.total_cap = max_bytes, total_cap
+        self.protected = protected
+        self._lock = threading.Lock()
+
+    def folder_name(self, device_name: str, device_id: Optional[str]) -> str:
+        if not device_id or not RX_DEVICE_ID.match(device_id):
+            return "unknown"
+        name = sanitize_name("%s (%s)" % (device_name or "device", device_id.lower()), self.dir, self.is_win)
+        return name if name not in (".", "..") else "unknown"
+
+    def _read_last(self, path: str) -> int:
+        try:
+            with open(path, encoding="ascii") as f:
+                return int(f.read().strip() or "0")
+        except (OSError, ValueError):
+            return 0
+
+    def _write_last(self, path: str, seq: int) -> None:
+        tmp = path + ".tmp"
+        with open(tmp, "w", encoding="ascii") as f:
+            f.write("%d\n" % seq)
+        os.replace(tmp, path)
+
+    def append(self, device_name: str, device_id: Optional[str], from_seq: Optional[int], body: str) -> Tuple[int, int]:
+        """Stores the new lines of [body]; returns (stored, last_seq)."""
+        folder = os.path.join(self.dir, self.folder_name(device_name, device_id))
+        if os.path.dirname(os.path.abspath(folder)) != os.path.abspath(self.dir):   # never outside logs/
+            folder = os.path.join(self.dir, "unknown")
+        with self._lock:
+            os.makedirs(folder, exist_ok=True)
+            seq_path = os.path.join(folder, DEVICE_LOG_SEQ_NAME)
+            last = self._read_last(seq_path)
+            keep: List[str] = []
+            top = last
+            for line in body.split("\n"):
+                if not line.strip():
+                    continue
+                m = RX_EVENT_SEQ.match(line)
+                if m:
+                    seq = int(m.group(1))
+                    if seq <= top:
+                        continue
+                    top = seq
+                elif from_seq is not None and from_seq <= last:
+                    continue                      # a repeated body whose lines carry no seq
+                keep.append(line.replace("\r", " "))
+            path = os.path.join(folder, DEVICE_LOG_NAME)
+            if keep:
+                data = ("\n".join(keep) + "\n").encode("utf-8")
+                try:
+                    size = os.path.getsize(path)
+                except OSError:
+                    size = 0
+                if size and size + len(data) > self.max_bytes:
+                    os.replace(path, os.path.join(folder, DEVICE_LOG_OLD_NAME))
+                with open(path, "ab") as f:
+                    f.write(data)
+            if top != last:
+                self._write_last(seq_path, top)
+            self._sweep(path)
+            return len(keep), top
+
+    def _sweep(self, open_path: str) -> None:
+        """Total cap: delete the oldest rotated files first, then other devices' current files."""
+        files = []
+        for base, _dirs, names in os.walk(self.dir):
+            for n in names:
+                p = os.path.join(base, n)
+                try:
+                    st = os.stat(p)
+                except OSError:
+                    continue
+                files.append((p, n, st.st_size, st.st_mtime))
+        total = sum(f[2] for f in files)
+        if total <= self.total_cap:
+            return
+        never = {os.path.abspath(open_path)}
+
+        def removable(p: str, n: str) -> bool:
+            return (not n.lower().endswith(".zip") and n not in self.protected and n != DEVICE_LOG_SEQ_NAME
+                    and os.path.abspath(p) not in never)
+        rotated = sorted((f for f in files if removable(f[0], f[1]) and ".1." in f[1]), key=lambda f: f[3])
+        current = sorted((f for f in files if removable(f[0], f[1]) and ".1." not in f[1]), key=lambda f: f[3])
+        for p, _n, size, _t in rotated + current:
+            if total <= self.total_cap:
+                break
+            try:
+                os.remove(p)
+                total -= size
+            except OSError:
+                pass
+
+
 # =============================================================================================
 # Discovery responder (UDP 8765, C2): answers the app's broadcast "where is Ferry?"
 # =============================================================================================
@@ -1938,8 +2076,9 @@ ROUTES_EXACT = {
     "/app": "send_app", "/app/" + APK_NAME: "send_app", "/api/v1/app": "api_app",
     "/api/v1/info": "api_info", "/api/v1/check": "api_check", "/api/v1/check-batch": "api_check_batch",
     "/api/v1/upload": "api_upload", "/api/v1/outbox": "api_outbox", "/api/v1/outbox.zip": "send_zip",
+    "/api/v1/logs": "api_logs",
 }
-POST_ROUTES = {"api_upload", "api_check_batch"}
+POST_ROUTES = {"api_upload", "api_check_batch", "api_logs"}
 RX_OUTBOX = re.compile(r"^/api/v1/outbox/(\d{1,9})(?:/(.*))?$", re.DOTALL)
 RX_HOST = re.compile(r"^\d{1,3}(?:\.\d{1,3}){3}(?::\d{1,5})?$")
 APP_COPYING = "The app is being copied, try again in a moment"
@@ -2148,7 +2287,48 @@ class FerryHandler(BaseHTTPRequestHandler):
             "capabilities": CAPABILITIES,
             "inbox_label": app.cfg.inbox_label, "outbox_label": app.cfg.outbox_label,
             "free_bytes": app.inbox.free_bytes(),
-            "app_version_code": meta["version_code"] if state == "ok" else None})
+            "app_version_code": meta["version_code"] if state == "ok" else None,
+            "time_ms": int(time.time() * 1000)})        # clock offset for the log review (M18)
+
+    def api_logs(self) -> None:
+        """POST /api/v1/logs (plan §2.3): new phone/TV log lines, stored per device (M8, M12)."""
+        length = self.content_length()
+        if length is None:
+            self.close_connection = True
+            return self.send_json(411, {"result": "error", "message": "Content-Length required"})
+        if length < 0:
+            self.close_connection = True
+            return self.send_json(400, {"result": "error", "message": "bad Content-Length"})
+        if length > LOG_UPLOAD_MAX:
+            self.drain(length)
+            return self.send_json(413, {"result": "error", "message": "request too large"})
+        body = b""
+        try:
+            while len(body) < length:
+                b = self.rfile.read(length - len(body))
+                if not b:
+                    break
+                body += b
+        finally:
+            self._nbytes += len(body)
+        if len(body) < length:
+            self.close_connection = True
+            return
+        try:
+            text = body.decode("utf-8")
+        except UnicodeDecodeError:
+            return self.send_json(400, {"result": "error", "message": "log body is not UTF-8"})
+        if not text.endswith("\n"):
+            return self.send_json(400, {"result": "error", "message": "log body must be whole lines"})
+        from_seq = parse_int(self.headers.get(LOG_FROM_HEADER))
+        dev_id = (self.headers.get(DEVICE_ID_HEADER) or "").strip()
+        try:
+            stored, last = self.app.devlogs.append(self.device, dev_id, from_seq, text)
+        except OSError as e:
+            self._error = "can't store log: %s" % (e.strerror or e)
+            return self.send_json(500, {"result": "error", "message": "The PC couldn't store the log"})
+        self._outcome = "log %d line%s" % (stored, "" if stored == 1 else "s")
+        self.send_json(200, {"ok": True, "stored": stored, "last_seq": last, "time_ms": int(time.time() * 1000)})
 
     def api_check(self) -> None:
         name = self.q.get("name", "")
@@ -2574,7 +2754,7 @@ def page_url(primary: Optional[str], port: int) -> Optional[str]:
 
 def make_app(cfg: Config, console: Console, primary: Optional[str], is_win: bool = IS_WIN,
              app_dir: Optional[str] = None, free_override: Optional[int] = None,
-             reqlog: Optional[RequestLog] = None) -> AppContext:
+             reqlog: Optional[RequestLog] = None, logs_dir: Optional[str] = None) -> AppContext:
     pc_name = socket.gethostname().split(".")[0] or "PC"
     app = AppContext(cfg=cfg, console=console, primary=primary, primary_url=page_url(primary, cfg.port),
                      pc_name=pc_name, reqlog=reqlog)
@@ -2588,6 +2768,7 @@ def make_app(cfg: Config, console: Console, primary: Optional[str], is_win: bool
                         url_base=lambda: app.primary_url or "http://<PC address>:%d" % cfg.port)
     app.tracker = TransferTracker(console.note, is_win)
     app.bundle = AppBundle(app_dir or APP_DIR)
+    app.devlogs = DeviceLogStore(logs_dir or os.path.join(DATA_DIR, LOGS_DIR_NAME), is_win)
     return app
 
 
@@ -2680,9 +2861,10 @@ def main(argv=None, stop_event: Optional[threading.Event] = None) -> int:
         cfg = resolve_folders(args, state)
         cfg.port = args.port
         primary, others = detect_addresses()
-        reqlog = RequestLog(DATA_DIR, console.note)
+        logs_dir = os.path.join(DATA_DIR, LOGS_DIR_NAME)
+        reqlog = RequestLog(migrate_old_logs(DATA_DIR, console.note), console.note)   # 2.1: into logs/ [CP110]
         app = make_app(cfg, console, primary, app_dir=args.app_dir, free_override=args.test_free_bytes,
-                       reqlog=reqlog)
+                       reqlog=reqlog, logs_dir=logs_dir)
         server = bind_server(cfg.port, app)
     except FatalError as e:
         console.print("")

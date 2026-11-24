@@ -66,7 +66,8 @@ def test_data_dir_holds_runtime_files(proc):
     from helpers import await_log
     await_log(p.port, p.log_path)
     names = set(os.listdir(str(p.data)))
-    assert ferry.STATE_NAME in names and ferry.LOG_NAME in names
+    assert ferry.STATE_NAME in names and ferry.LOGS_DIR_NAME in names
+    assert ferry.LOG_NAME in os.listdir(str(p.data / ferry.LOGS_DIR_NAME))   # 2.1: logs/ [CP110]
     new = {n for n in set(os.listdir(ROOT)) - before if not n.startswith((".", "__"))}
     assert not new, new
 

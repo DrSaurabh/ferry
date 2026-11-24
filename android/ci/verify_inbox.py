@@ -19,6 +19,11 @@
   verify_inbox.py names       --inbox DIR --prefix P --expect A,B,C [--label PC-A]
       (Ph6) the inbox files whose names start with P are exactly A, B, C (as a set; picker test).
 
+  verify_inbox.py device-log  --logs DIR --expect EV1,EV2 [--device SUBSTR] [--label PC-A]
+      (2.1, Ph11a; used from Ph11b) a phone/TV shipped its log: some device folder under the PC's logs folder
+      (`<data>/logs/<name> (<id>)/app-log.txt`, name containing SUBSTR when given) has lines with every event.
+  (2.1, CP110: the PC request log for `uploads --log` is `<data>/logs/ferry-log.txt`.)
+
 Prints one line per check; exit 1 on failure.
 """
 import argparse
@@ -129,9 +134,36 @@ def check_names(inbox, prefix, expect):
     return got == want, "%s* files: %s (expected %s)" % (prefix, got, want)
 
 
+def event_name(line):
+    """Event of a 2.1 phone/TV log line: `<date> <time> #<seq> s=<sid> <event> k=v…` (plan §2.2)."""
+    parts = line.split(" ", 5)
+    if len(parts) >= 5 and parts[2].startswith("#") and parts[3].startswith("s="):
+        return parts[4].rstrip("\n")
+    return None
+
+
+def check_device_log(logs_dir, expect, device=None):
+    if not os.path.isdir(logs_dir):
+        return False, "no logs folder %s" % logs_dir
+    found = {}
+    for d in sorted(os.listdir(logs_dir)):
+        p = os.path.join(logs_dir, d, ferry.DEVICE_LOG_NAME)
+        if not os.path.isfile(p) or (device and device not in d):
+            continue
+        with open(p, encoding="utf-8", errors="replace") as f:
+            events = {event_name(line) for line in f}
+        found[d] = sorted(e for e in expect if e in events)
+        if len(found[d]) == len(expect):
+            return True, "device log %r has %s" % (d, ", ".join(expect))
+    return False, "no device log with all of %s (found: %s)" % (expect, found or "no device folders")
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser()
-    ap.add_argument("mode", choices=["identical", "redacted", "no-partials", "uploads", "pattern", "size", "names"])
+    ap.add_argument("mode", choices=["identical", "redacted", "no-partials", "uploads", "pattern", "size", "names",
+                                     "device-log"])
+    ap.add_argument("--logs")
+    ap.add_argument("--device")
     ap.add_argument("--prefix")
     ap.add_argument("--inbox")
     ap.add_argument("--name")
@@ -153,6 +185,8 @@ def main(argv=None):
         ok, text = check_pattern(a.inbox, a.name, a.index, a.size)
     elif a.mode == "names":
         ok, text = check_names(a.inbox, a.prefix, [e for e in a.expect.split(",") if e])
+    elif a.mode == "device-log":
+        ok, text = check_device_log(a.logs, [e for e in a.expect.split(",") if e], a.device)
     elif a.mode == "size":
         ok, text = check_size(a.inbox, a.name, a.size)
     else:

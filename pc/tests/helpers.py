@@ -32,9 +32,10 @@ class Srv:
         cfg = ferry.Config(port=0, inbox=str(self.inbox), outbox=str(self.outbox),
                            inbox_label="Downloads/Phone", outbox_label="Desktop/Ferry outbox")
         self.console = ferry.Console(stream=self.out)
-        self.reqlog = ferry.RequestLog(str(self.data), self.console.note) if reqlog else None
+        self.logs = self.data / ferry.LOGS_DIR_NAME          # 2.1: the request log lives in <data>/logs [CP110]
+        self.reqlog = ferry.RequestLog(str(self.logs), self.console.note) if reqlog else None
         self.app = ferry.make_app(cfg, self.console, "127.0.0.1", is_win=is_win, app_dir=str(self.app_dir),
-                                  free_override=free_override, reqlog=self.reqlog)
+                                  free_override=free_override, reqlog=self.reqlog, logs_dir=str(self.logs))
         self.app.outbox.start_scan()
         self.server = ferry.FerryServer(("127.0.0.1", 0), ferry.FerryHandler, app=self.app, exclusive=False)
         self.port = self.server.server_address[1]
@@ -47,7 +48,7 @@ class Srv:
 
     @property
     def log_path(self):
-        return str(self.data / ferry.LOG_NAME)
+        return str(self.data / ferry.LOGS_DIR_NAME / ferry.LOG_NAME)
 
     def req(self, method, path, body=None, headers=None):
         c = http.client.HTTPConnection("127.0.0.1", self.port, timeout=10)
@@ -174,7 +175,7 @@ class FerryProcess:
 
     @property
     def log_path(self):
-        return str(self.data / ferry.LOG_NAME)
+        return str(self.data / ferry.LOGS_DIR_NAME / ferry.LOG_NAME)
 
     def req(self, method, path, body=None, headers=None):
         c = http.client.HTTPConnection("127.0.0.1", self.port, timeout=10)
