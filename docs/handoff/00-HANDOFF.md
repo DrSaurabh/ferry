@@ -12,7 +12,8 @@ _Last updated: 2026-11-25 ~00:40 IST (evening run 24 Nov: A6 coding, Ph11a/Ph11b
 ## 0a. A6 coding routine (from 2026-11-24)
 - One **phase agent per phase** (Agent tool, model opus, foreground), in plan order Ph11a → Ph11b → Ph12 → Ph13 → Ph14 → Ph15 → Ph16 → Ph17a → Ph17b → Ph18 → Ph19. Prompt: "Implement phase <id> of docs/v2.1-04-code-plan.md following docs/agents/phase-brief.md exactly; stop by <UTC time> at a clean, pushed point; record progress in docs/v2.1-progress.md and docs/v2.1-06-build-log.md as you go; final reply: status (done / stopped at step N), branch, last green run id."
 - Give the agent a hard stop time ≥ 30 min before the slot ends. If a phase is unfinished at the end of a run, the next run resumes the same phase on its branch (read `docs/v2.1-progress.md`).
-- After each phase: coordinator checks the main run is green (`gh api repos/DrSaurabh/ferry/actions/runs?branch=main&per_page=3`), updates status + Morning summary.
+- After each phase: coordinator checks the main run is green (`gh api repos/DrSaurabh/ferry/actions/runs?branch=main&per_page=3`), then **at once** updates status + Morning summary, commits/uploads them and updates the progress page (db_write) — not only at the end of the run. (Night run 25 Nov hit the weekly usage limit at ~05:12 IST right after Ph13 and left no records; a day session filled them in.)
+- Usage limits: the user's weekly budget can run out mid-run (`ROUTINE_RUN_FAILURE_REASON_USAGE_LIMIT_REACHED`). Keep coordinator context small: phase agents do the work; the coordinator reads only their final reports and `docs/v2.1-progress.md` tails.
 - **Git tags cannot be pushed** through the proxy: snapshots are branches `snapshot/<name>`.
 
 ## 1. What Stage A is (agreed scope)
