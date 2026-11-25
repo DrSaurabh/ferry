@@ -8,7 +8,7 @@ _Updated: 2026-11-25 ~08:00 IST (day session 6 resumed after a usage-limit stop;
 - **Ph13 (night run)**: a **← Back** button and **⋮** menu at the top of every phone screen; the picker's Back now goes back one level (asks before throwing away a selection); setup asks for all permissions in 4 steps; "Your phone stopped the send" card only when the phone really did; the phone looks for the PC less often when it can't find it (battery).
 Latest test build: **Ferry-2.1.126** (not for you yet). Decisions so far: about **95** (H51–H101, B101–B144). Newest worth a look: H100 if photo access is refused the picker still opens with a "Fix" banner; H101 the stop card shows on Home and the transfer screen.
 **Note:** the night run ran out of usage at ~05:12 IST just after finishing Ph13 (the work itself was saved and green; only these notes were missing, now written).
-Next: **Ph14** (send originals from Gallery Share, transfer screen, video preview). Nothing needs you.
+**PAUSED (25 Nov, ~08:15 IST, user's request): weekly usage limit is close; work resumes after it refreshes on Sunday (29 Nov). The user is pausing the scheduled "Ferry hands-free work runs" himself.** Next when resumed: **Ph14** (send originals from Gallery Share, transfer screen, video preview) — not started, no ph14 branch.
 
 **Progress page** (Refresh button): artifact slug `78744174-8d8c-4112-8868-011037b3874b` (https://claude.ai/artifact/FshmiE6KVBbzWJcAmwkZVU). The page reads db doc `progress/current`; update it with ONE `db_write` (merge, ifVersion from `db_get`) as the last action of each run — see handoff §0.3. Never use publish/edit/declare artifact tools in a run (they wait for approval).
 
